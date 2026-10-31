@@ -43,8 +43,10 @@ jobs:
       - name: 收集产物
         run: |
           mkdir -p dist
-          find app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \;
-          find app/build/outputs/bundle -name '*.aab' -exec cp {} dist/ \;
+          find app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
+          find app/build/outputs/bundle -name '*.aab' -exec cp {} dist/ \; 2>/dev/null || true
+          ls -la dist/
+          test -n "$(ls dist/*.apk 2>/dev/null)"
 
       - name: 发布 GitHub Release
         uses: softprops/action-gh-release@v2
