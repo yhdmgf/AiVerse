@@ -34,6 +34,9 @@ jobs:
           printf 'storeFile=AiVerse.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > app/keystore.properties
 
+      - name: 迁移对账
+        run: python3 scripts/check_migrations.py
+
       - name: 构建 release
         run: ./gradlew assembleRelease
 
