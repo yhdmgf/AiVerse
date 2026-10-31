@@ -31,6 +31,7 @@ import javax.inject.Singleton
 class ToolPermissionPolicyEngine @Inject constructor(
     private val rulesRepo: PermissionRulesRepository,
     private val toolSafetySettings: ToolSafetySettingsRepository,
+    private val fileWhitelistPolicy: FileWhitelistPolicy,
     @param:ApplicationContext private val appContext: Context
 ) {
     private companion object {
@@ -131,6 +132,11 @@ class ToolPermissionPolicyEngine @Inject constructor(
             return EvalResult(Verdict.DENY, emptyList(), denyReason = appContext.getString(R.string.tool_plan_mode_denied))
         }
 
+        // 文件写入白名单（配置强制）：writeFile/editFile 等写工作区工具，目标路径越界一律拒绝，任何模式都不例外。
+        if (isFileWriteTool(toolName, capabilities) && !isPathAllowedByWhitelist(args)) {
+            return EvalResult(Verdict.DENY, emptyList(), denyReason = appContext.getString(R.string.tool_whitelist_denied))
+        }
+
         if (mode == com.aiverse.feature.agent.domain.model.AgentMode.AUTO) {
             // AUTO 模式放行所有权限；灾难性 rm 防护（根目录/系统目录删除）默认保留，
             // 可在「工具授权」设置中关闭（禁用安全拦截）。遭遇拦截时仍可凭 elevate 参数提权重试。
@@ -150,6 +156,15 @@ class ToolPermissionPolicyEngine @Inject constructor(
             // Shizuku 直接操作宿主系统，AUTO 下也不自动放行，仍需逐次确认（除非已开启「禁用安全拦截」）。
             if (toolName == SHIZUKU_TOOL && !safetyDisabled) {
                 return EvalResult(Verdict.ASK, emptyList(), rememberDisabledReason = appContext.getString(R.string.tool_shizuku_confirmation_reason))
+            }
+            // 文件写操作（写入/编辑）永远需用户确认：AUTO 模式也不会自动放行。
+            // 越界写已在上面被白名单 DENY；走到这里的都是白名单内或未启用白名单。
+            if (isFileWriteTool(toolName, capabilities)) {
+                return EvalResult(
+                    Verdict.ASK,
+                    listOf(PermissionRule.WHOLE_TOOL),
+                    rememberDisabledReason = appContext.getString(R.string.tool_write_always_confirm_reason)
+                )
             }
             return EvalResult(Verdict.ALLOW, emptyList())
         }
@@ -221,6 +236,17 @@ class ToolPermissionPolicyEngine @Inject constructor(
             return action !in BROWSER_READ_ONLY_ACTIONS
         }
         return false
+    }
+
+    /** 是否文件写工具：writeFile/editFile，或携带写工作区能力的工具。 */
+    private fun isFileWriteTool(toolName: String, capabilities: Set<ToolCapability>): Boolean =
+        toolName == "writeFile" || toolName == "editFile" || ToolCapability.WRITE_WORKSPACE in capabilities
+
+    /** 白名单是否允许该调用的目标路径写入（无 path 参数时交给后续校验，不在此拦截）。 */
+    private fun isPathAllowedByWhitelist(args: Map<String, JsonElement>): Boolean {
+        val path = (args["path"] as? JsonPrimitive)?.content?.trim().orEmpty()
+        if (path.isEmpty()) return true
+        return fileWhitelistPolicy.isWriteAllowed(path)
     }
 
     /** 是否按 shell 命令前缀匹配：[SHELL_TOOLS] 中的工具，或终端工具的 start/send 动作。 */

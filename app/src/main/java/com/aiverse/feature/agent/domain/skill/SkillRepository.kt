@@ -74,7 +74,8 @@ class SkillRepository @Inject constructor(
             name = name,
             description = form.description,
             requiredTools = form.requiredTools,
-            instructions = form.instructions
+            instructions = form.instructions,
+            fileWhitelist = form.fileWhitelist
         )
 
         val provider = fileAccess

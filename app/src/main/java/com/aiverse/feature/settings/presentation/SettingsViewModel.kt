@@ -289,7 +289,9 @@ data class SkillUiEntry(
     val disabled: Boolean,
     val instructions: String,
     /** 手写技能里的 `required_tools`，编辑页不展示，保存时原样写回。 */
-    val requiredTools: List<String> = emptyList()
+    val requiredTools: List<String> = emptyList(),
+    /** 手写技能里的 `file_whitelist`，编辑页不展示，保存时原样写回。 */
+    val fileWhitelist: List<String> = emptyList()
 )
 
 /** 子代理列表页的 UI 状态：定义内容 + 来源作用域 + 启停状态。 */
@@ -1520,7 +1522,8 @@ class SettingsViewModel @Inject constructor(
                         scope = entry.scope,
                         disabled = entry.skill.name.lowercase() in disabled,
                         instructions = entry.skill.instructions,
-                        requiredTools = entry.skill.requiredTools
+                        requiredTools = entry.skill.requiredTools,
+                        fileWhitelist = entry.skill.fileWhitelist
                     )
                 }
             }

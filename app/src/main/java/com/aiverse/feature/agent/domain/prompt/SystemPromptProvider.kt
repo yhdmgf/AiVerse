@@ -67,7 +67,15 @@ class SystemPromptProvider @Inject constructor(
                 return null
             }
 
-            val list = skills.joinToString("\n") { "- ${it.name}: ${it.description.ifBlank { "（无描述）" } }" }
+            // 技能描述后附上文件写入白名单：让 AI 明确知道哪些路径可写、越界会被拒绝（配置强制的提示侧）。
+            val list = skills.joinToString("\n") { skill ->
+                val line = "- ${skill.name}: ${skill.description.ifBlank { "（无描述）" }}"
+                if (skill.fileWhitelist.isNotEmpty()) {
+                    "$line｜文件写入白名单：${skill.fileWhitelist.joinToString("、")}"
+                } else {
+                    line
+                }
+            }
             val content = list
             cachedByKey[key] = content
             trimIfNeeded()

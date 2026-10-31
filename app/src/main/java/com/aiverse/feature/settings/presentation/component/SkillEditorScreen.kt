@@ -108,7 +108,8 @@ internal fun SkillEditorScreen(
                                     name = name.trim(),
                                     description = description.trim(),
                                     instructions = instructions.trim(),
-                                    requiredTools = initial?.requiredTools ?: emptyList()
+                                    requiredTools = initial?.requiredTools ?: emptyList(),
+                                    fileWhitelist = initial?.fileWhitelist ?: emptyList()
                                 ),
                                 scope
                             )

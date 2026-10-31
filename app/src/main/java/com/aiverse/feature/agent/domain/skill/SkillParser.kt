@@ -54,10 +54,19 @@ object SkillParser {
             emptyList()
         }
 
+        val fileWhitelist = try {
+            val raw = frontmatter["file_whitelist"]
+            if (raw is List<*>) raw.filterIsInstance<String>() else emptyList()
+        } catch (e: Exception) {
+            FileLogger.w(TAG, "解析 file_whitelist 失败", e)
+            emptyList()
+        }
+
         return Skill(
             name = name,
             description = description,
             requiredTools = requiredTools,
+            fileWhitelist = fileWhitelist,
             dirPath = null,
             instructions = body.trim()
         )
@@ -100,12 +109,14 @@ object SkillParser {
         name: String,
         description: String,
         requiredTools: List<String>,
-        instructions: String
+        instructions: String,
+        fileWhitelist: List<String> = emptyList()
     ): String = buildString {
         appendLine("---")
         appendLine("name: ${quote(name)}")
         appendLine("description: ${quote(description)}")
         if (requiredTools.isNotEmpty()) appendLine("required_tools: [${requiredTools.joinToString(", ")}]")
+        if (fileWhitelist.isNotEmpty()) appendLine("file_whitelist: [${fileWhitelist.joinToString(", ") { quote(it) }}]")
         appendLine("---")
         appendLine(instructions.trim())
     }
