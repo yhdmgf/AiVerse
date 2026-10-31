@@ -43,8 +43,10 @@ jobs:
       - name: 收集产物
         run: |
           mkdir -p dist
-          find app/build/outputs/apk -name '*.apk' -exec cp {} dist/ \; 2>/dev/null || true
-          find app/build/outputs/bundle -name '*.aab' -exec cp {} dist/ \; 2>/dev/null || true
+          VER="${GITHUB_REF_NAME}"
+          cp app/build/outputs/apk/universal/release/app-universal-release.apk "dist/AiVerse-universal-${VER}.apk" || true
+          cp app/build/outputs/apk/armsolo/release/app-armsolo-release.apk "dist/AiVerse-arm64-${VER}.apk" || true
+          cp app/build/outputs/apk/x86solo/release/app-x86solo-release.apk "dist/AiVerse-x86_64-${VER}.apk" || true
           ls -la dist/
           test -n "$(ls dist/*.apk 2>/dev/null)"
 
