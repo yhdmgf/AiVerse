@@ -1,0 +1,45 @@
+# Built outputs
+.gradle/
+build/
+app/build/
+
+# IDE
+.idea/
+*.iml
+
+# Local config
+local.properties
+
+# Signing (release keystore + passwords — never commit)
+*.jks
+*.keystore
+keystore.properties
+
+# Debug / profiling
+*.hprof
+
+# Claude
+.claude/
+/.kotlin/
+/.agents/
+/.aiverse/
+
+# 临时调试文件
+/*.log
+log-*.txt
+*.apk
+/test
+
+# Python（模型数据更新脚本）
+__pycache__/
+*.pyc
+
+# 容器镜像目录：由 scripts/sync-container-images.py 生成，CI 发布到 data 分支；
+# 内置兜底快照另存于 app/src/main/assets/container-images.json
+/data/container-images.json
+
+# 非本项目内容：他人项目副本 / 临时调试文件 / AI 配置，不推送
+/kazumi_compare/
+/AIVERSE_TASK_HANDOFF.md
+/mutedm.rule.json
+/.aicode/
