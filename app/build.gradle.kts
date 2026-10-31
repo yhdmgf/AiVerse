@@ -28,7 +28,7 @@ if (keystorePropertiesFile.exists()) {
 // 直接 fork 会让缓存条目被丢弃（external process started）。
 val gitDescribeOutput = providers.exec {
     workingDir = rootProject.projectDir
-    commandLine("git", "describe", "--tags", "--always", "--dirty")
+    commandLine("git", "describe", "--tags", "--always")
     isIgnoreExitValue = true
 }.standardOutput.asText
 
@@ -85,7 +85,7 @@ fun versionCodeFromVersionName(name: String): Int {
     val minor = m.groupValues[2].toInt()
     val patch = m.groupValues[3].toInt()
     val base = major * 1_000_000 + minor * 10_000 + patch * 100
-    val isPre = Regex("""[-.]?(dev|rc|pre|beta|alpha|snapshot)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+    val isPre = Regex("""[-.]?(dev|rc|pre|beta|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
     return if (isPre) base else base + 50
 }
 
