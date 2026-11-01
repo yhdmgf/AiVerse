@@ -43,3 +43,7 @@ __pycache__/
 /AIVERSE_TASK_HANDOFF.md
 /mutedm.rule.json
 /.aicode/
+
+# 本地无关文件：不上传（保留在本地，不删除）
+/chouchiu-kazumi.zip
+/scripts/release-tag.sh
