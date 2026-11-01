@@ -245,6 +245,28 @@ class RemoteSshConnection @Inject constructor(
         }
     }
 
+    /**
+     * 用**独立** SSH 连接执行一条远程命令（远程探索工具的 sudo 通道用）：SFTP 无法 sudo，
+     * 需要提权（如访问 /root）时改走 exec 通道执行 `sudo -n ...`（前提：服务器已给登录用户配免密 sudo）。
+     * 独立 transport 用完即关，不干扰共享连接状态。返回标准输出/错误与退出码。
+     */
+    suspend fun withIsolatedExec(config: RemoteConnectionConfig, command: String): ExecResult {
+        val client = withContext(Dispatchers.IO) { newSshClient(config) }
+        try {
+            val session = client.startSession()
+            val cmd = session.exec(command)
+            runCatching { cmd.outputStream.close() }
+            val stdout = java.io.BufferedReader(java.io.InputStreamReader(cmd.inputStream)).readText()
+            val stderr = java.io.BufferedReader(java.io.InputStreamReader(cmd.errorStream)).readText()
+            cmd.join()
+            val exit = cmd.exitStatus ?: 0
+            session.close()
+            return ExecResult(stdout, stderr, exit)
+        } finally {
+            runCatching { client.disconnect() }
+        }
+    }
+
     /** 若已配置但未连接，立即尝试重连一次。返回是否最终连通。供 App 回到前台时主动触发。 */
     suspend fun tryReconnectIfDisconnected(): Boolean {
         val cfg = config ?: return false
@@ -524,6 +546,11 @@ fun friendlySshError(e: Throwable): String {
             "无法连接到 SSH 服务器（未知主机），请检查主机地址"
         "Auth fail" in msg || "authentication" in msg ->
             "SSH 认证失败，请检查用户名和密码"
+        // SFTP 访问无权限目录（如 root 家目录）也会抛 Permission denied，但这不是认证失败——
+        // 认证失败已由上方 UserAuthException / Auth fail 分支覆盖，这里只可能是目录/文件权限问题。
+        "Permission denied" in msg ->
+            "远程目录无访问权限（Permission denied）：服务器用户对该路径没有读权限。" +
+                "常见于访问 root 家目录（/root，普通用户无权访问）；请改用该用户可读的目录（如 /home/ubuntu 或 /）"
         "Network is unreachable" in msg ->
             "网络不可达，请检查网络连接"
         "SocketTimeout" in msg || "timed out" in msg ->
@@ -542,4 +569,11 @@ data class RemoteConnectionConfig(
     val auth: RemoteAuth,
     /** 远程服务器上的工作区根路径（AI 的 ~/workspace 映射到此路径）。 */
     val remoteWorkspacePath: String
+)
+
+/** 远程 exec 命令结果（独立连接）。 */
+data class ExecResult(
+    val stdout: String,
+    val stderr: String,
+    val exitCode: Int
 )

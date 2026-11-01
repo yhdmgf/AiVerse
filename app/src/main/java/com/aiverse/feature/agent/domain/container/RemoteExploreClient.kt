@@ -37,6 +37,12 @@ class RemoteExploreClient @Inject constructor(
         return connection.withIsolatedSftp(configOf(entity), block)
     }
 
+    /** 用独立连接执行一条远程命令（sudo 通道用，SFTP 无法提权）。 */
+    suspend fun exec(server: String?, command: String): ExecResult {
+        val entity = resolve(server)
+        return connection.withIsolatedExec(configOf(entity), command)
+    }
+
     /** 按名称或 id 解析目标服务器；缺省取第一个。 */
     private suspend fun resolve(server: String?): RemoteConnectionEntity {
         val servers = availableServers()
