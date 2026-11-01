@@ -160,6 +160,9 @@ class ApkDownloader @Inject constructor(
             }.awaitAll()
         }
 
+        // 全部片就位：合并前强制进度 100%（合并阶段不再走分片回调，避免进度停在低值就被判完成）
+        onProgress(total, total)
+
         // 全部片就位后合并，边写边算 sha256
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -236,6 +239,8 @@ class ApkDownloader @Inject constructor(
                     val body = response.body ?: throw IOException("响应体为空")
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     var written = 0L
+                    // 节流窗口内累计字节（不是最后一块），避免漏报导致进度虚低/速度失真
+                    var windowBytes = 0L
                     var lastNotify = 0L
                     body.byteStream().use { input ->
                         partFile.outputStream().use { output ->
@@ -244,14 +249,17 @@ class ApkDownloader @Inject constructor(
                                 if (n < 0) break
                                 output.write(buffer, 0, n)
                                 written += n
+                                windowBytes += n
                                 val now = System.currentTimeMillis()
                                 if (now - lastNotify >= PROGRESS_INTERVAL_MS) {
                                     lastNotify = now
-                                    onProgress(n.toLong())
+                                    onProgress(windowBytes)
+                                    windowBytes = 0L
                                 }
                             }
                         }
                     }
+                    if (windowBytes > 0) onProgress(windowBytes)
                     if (written != need) {
                         throw IOException("分片大小不符（$written/$need）")
                     }
