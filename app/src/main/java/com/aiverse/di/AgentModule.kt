@@ -39,6 +39,8 @@ import com.aiverse.feature.agent.domain.tool.container.ExecuteCommandTool
 import com.aiverse.feature.agent.domain.tool.container.TerminalSessionTool
 import com.aiverse.feature.agent.domain.tool.explorer.ListFilesTool
 import com.aiverse.feature.agent.domain.tool.explorer.SearchCodeTool
+import com.aiverse.feature.agent.domain.tool.remote.SshListTool
+import com.aiverse.feature.agent.domain.tool.remote.SshReadTool
 import com.aiverse.feature.agent.domain.tool.shizuku.ShizukuTool
 import com.aiverse.feature.agent.domain.tool.skill.LoadSkillTool
 import com.aiverse.feature.agent.domain.tool.question.AskUserQuestionTool
@@ -365,6 +367,8 @@ object AgentModule {
         terminalSessionTool: TerminalSessionTool,
         listFilesTool: ListFilesTool,
         searchCodeTool: SearchCodeTool,
+        sshListTool: SshListTool,
+        sshReadTool: SshReadTool,
         loadSkillTool: LoadSkillTool,
         askUserQuestionTool: AskUserQuestionTool,
         manageMcpTool: ManageMcpTool,
@@ -390,6 +394,8 @@ object AgentModule {
             register("terminal", terminalSessionTool)
             register("list", listFilesTool)
             register("search", searchCodeTool)
+            register("sshList", sshListTool)
+            register("sshRead", sshReadTool)
             register("loadSkill", loadSkillTool)
             register("askUserQuestion", askUserQuestionTool)
             register("manageMcp", manageMcpTool)

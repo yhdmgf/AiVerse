@@ -217,6 +217,34 @@ class RemoteSshConnection @Inject constructor(
     /** 丢弃当前 SFTP 通道（通道异常后调用），下次 [sftp] 会重建。 */
     suspend fun invalidateSftp() = sftpLock.withLock { closeSftpInternal() }
 
+    /**
+     * 用**独立** SSH 连接执行一次 SFTP 操作（远程探索工具用）：任何对话中直接访问已配置服务器，
+     * 不依赖当前激活镜像与共享连接。独立 transport 用完即关，不干扰共享连接状态与其它会话。
+     *
+     * [block] 收到可用的 [SFTPClient] 与远程真实 `$HOME`（查不到为 null），执行完由本方法关闭连接。
+     * 连接建立或认证失败时抛 [Exception]，调用方可用 [friendlySshError] 翻译。
+     */
+    suspend fun <T> withIsolatedSftp(
+        config: RemoteConnectionConfig,
+        block: suspend (SFTPClient, String?) -> T
+    ): T {
+        val client = withContext(Dispatchers.IO) { newSshClient(config) }
+        var home: String? = null
+        try {
+            runCatching {
+                val s = client.startSession()
+                val cmd = s.exec("echo \$HOME")
+                home = java.io.BufferedReader(java.io.InputStreamReader(cmd.inputStream))
+                    .readText().trim().ifEmpty { null }
+                s.close()
+            }
+            val sftp = withContext(Dispatchers.IO) { client.newSFTPClient() }
+            return block(sftp, home)
+        } finally {
+            runCatching { client.disconnect() }
+        }
+    }
+
     /** 若已配置但未连接，立即尝试重连一次。返回是否最终连通。供 App 回到前台时主动触发。 */
     suspend fun tryReconnectIfDisconnected(): Boolean {
         val cfg = config ?: return false
