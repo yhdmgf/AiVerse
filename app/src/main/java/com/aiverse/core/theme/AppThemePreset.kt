@@ -53,7 +53,8 @@ data class AppThemePreset(
     }
 
     companion object {
-        /** 品牌蓝：历史默认配色，颜色值逐个手调，不走推导。 */
+        /** 品牌蓝：历史默认配色，颜色值逐个手调，不走推导。
+         *  不再作为应用默认（默认已切换为 [COFFEE]），仍保留供用户手动选择。 */
         val DEFAULT = AppThemePreset(
             id = "default",
             nameRes = R.string.theme_preset_default,
@@ -61,7 +62,7 @@ data class AppThemePreset(
             dark = AppThemeColors(DarkColorScheme, DarkSemanticColors)
         )
 
-        /** 咖啡：暖赤陶 + 米白纸感，取自 Anthropic 品牌色。 */
+        /** 咖啡：暖赤陶 + 米白纸感，取自 Anthropic 品牌色。应用默认主题。 */
         val COFFEE = fromSeeds(
             id = "coffee",
             nameRes = R.string.theme_preset_coffee,
@@ -151,10 +152,11 @@ data class AppThemePreset(
             )
         )
 
-        val ALL_PRESETS = listOf(DEFAULT, COFFEE, GRAPHITE, FOREST)
+        /** 咖啡默认排第一（应用默认主题），品牌蓝退居第二，其后石墨、森林。 */
+        val ALL_PRESETS = listOf(COFFEE, DEFAULT, GRAPHITE, FOREST)
 
         fun findById(id: String?): AppThemePreset =
-            ALL_PRESETS.firstOrNull { it.id == id } ?: DEFAULT
+            ALL_PRESETS.firstOrNull { it.id == id } ?: COFFEE
 
         private fun fromSeeds(
             id: String,
