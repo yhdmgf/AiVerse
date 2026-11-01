@@ -89,6 +89,12 @@ fun versionCodeFromVersionName(name: String): Int {
     return if (isPre) base else base + 50
 }
 
+// 版本号覆盖（CI 手动构建）：-PversionNameOverride=2.0.0 用输入版本号覆盖内置 git 派生，
+// 满足「构建时选 2.0.0，产物 versionName 就是 2.0.0」。未设置时回退 git tag 派生。
+val versionNameOverride = providers.gradleProperty("versionNameOverride").orNull?.trim().orEmpty()
+
+fun effectiveVersionName(): String = if (versionNameOverride.isNotEmpty()) versionNameOverride else gitVersionName()
+
 // AI 内置文档（~/.aiverse/docs）的源在仓库根的 docs-site/docs：同一份 Markdown 既构建 VitePress
 // 文档站，也在这里复制进 assets/docs 打进 APK，保证「站上看到的」与「AI 读到的」永远一致。
 // 用纯 Gradle Copy 实现，APK 构建不依赖 Node —— CI 与 F-Droid 只装 JDK+Gradle 即可。
@@ -132,8 +138,8 @@ android {
         targetSdk = 28
         // versionCode 由 versionName 派生，保证与版本号单调（见 versionCodeFromVersionName），
         // 避免提交数极少时 versionCode 无法随版本递增导致更新误判。
-        versionCode = versionCodeFromVersionName(gitVersionName())
-        versionName = gitVersionName()
+        versionCode = versionCodeFromVersionName(effectiveVersionName())
+        versionName = effectiveVersionName()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

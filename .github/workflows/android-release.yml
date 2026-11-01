@@ -1,10 +1,20 @@
 name: Android Release
 
+# 纯手动触发：推送 main 或 v* tag 都不会自动构建。
+# 由用户手动输入版本号（第一框）+ 测试版 RC 数字（第二框，留空=正式版）触发构建。
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 1.0.0；构建时覆盖 App 内置版本号）'
+        required: true
+        default: '1.0.0'
+        type: string
+      rc:
+        description: '测试版 RC 数字（留空=正式版；如 1 → 版本号-rc1）'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -15,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -37,21 +49,56 @@ jobs:
       - name: 迁移对账
         run: python3 scripts/check_migrations.py
 
-      - name: 构建 release
-        run: ./gradlew assembleRelease
+      - name: 解析版本号
+        id: version
+        run: |
+          BASE="${{ github.event.inputs.version }}"
+          RC="${{ github.event.inputs.rc }}"
+          if [ -n "$RC" ]; then
+            FULL="${BASE}-rc${RC}"
+          else
+            FULL="$BASE"
+          fi
+          echo "full=$FULL" >> "$GITHUB_OUTPUT"
+          echo "构建版本: $FULL"
+
+      - name: 构建 release（用输入版本号覆盖 App 内置版本号）
+        run: ./gradlew assembleRelease -PversionNameOverride=${{ steps.version.outputs.full }}
 
       - name: 收集产物
         run: |
           mkdir -p dist
-          VER="${GITHUB_REF_NAME}"
+          VER="${{ steps.version.outputs.full }}"
           cp app/build/outputs/apk/universal/release/app-universal-release.apk "dist/AiVerse-universal-${VER}.apk" || true
           cp app/build/outputs/apk/armsolo/release/app-armsolo-release.apk "dist/AiVerse-arm64-${VER}.apk" || true
           cp app/build/outputs/apk/x86solo/release/app-x86solo-release.apk "dist/AiVerse-x86_64-${VER}.apk" || true
           ls -la dist/
           test -n "$(ls dist/*.apk 2>/dev/null)"
 
+      - name: 输出版本号到运行摘要（versionName + versionCode）
+        run: |
+          FULL="${{ steps.version.outputs.full }}"
+          major=$(echo "$FULL" | cut -d. -f1)
+          minor=$(echo "$FULL" | cut -d. -f2)
+          patch=$(echo "$FULL" | cut -d. -f3)
+          base=$((major*1000000 + minor*10000 + patch*100))
+          if echo "$FULL" | grep -qiE '[-.](dev|rc|pre|beta|alpha|snapshot|dirty)'; then
+            VC=$base
+          else
+            VC=$((base+50))
+          fi
+          {
+            echo "## 构建版本号"
+            echo ""
+            echo "- versionName: $FULL"
+            echo "- versionCode: $VC"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "versionName=$FULL versionCode=$VC"
+
       - name: 发布 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+          name: "v${{ steps.version.outputs.full }}"
+          tag_name: "v${{ steps.version.outputs.full }}"
