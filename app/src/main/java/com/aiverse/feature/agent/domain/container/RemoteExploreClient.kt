@@ -56,7 +56,8 @@ class RemoteExploreClient @Inject constructor(
             withContext(Dispatchers.IO) {
                 val parent = remotePath.substringBeforeLast('/')
                 if (parent.isNotBlank()) sftp.mkdirs(parent)
-                sftp.put(localFile, remotePath)
+                // sshj 的 put 本地源接受路径字符串或 LocalSourceFile，不接受 java.io.File。
+                sftp.put(localFile.absolutePath, remotePath)
             }
         }
     }

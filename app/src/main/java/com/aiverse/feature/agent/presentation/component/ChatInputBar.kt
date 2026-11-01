@@ -1,6 +1,7 @@
 package com.aiverse.feature.agent.presentation.component
 
 import android.content.ClipData
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -65,6 +66,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -568,6 +570,7 @@ internal fun ChatInputBar(
                             AgentMode.AUTO -> MaterialTheme.colorScheme.onError
                             AgentMode.BUILD -> MaterialTheme.semanticColors.onSuccess
                         }
+                        val modeContext = LocalContext.current
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = modeColor,
@@ -579,6 +582,12 @@ internal fun ChatInputBar(
                                         AgentMode.AUTO -> AgentMode.BUILD
                                     }
                                     onToggleMode(nextMode)
+                                    // 切换后提示当前模式状态，避免用户不知道切到了什么。
+                                    Toast.makeText(
+                                        modeContext,
+                                        modeContext.getString(nextMode.switchMessageRes),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                         ) {
                             Box(
@@ -588,7 +597,7 @@ internal fun ChatInputBar(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = currentMode.name,
+                                    text = stringResource(currentMode.labelRes),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = modeTextColor

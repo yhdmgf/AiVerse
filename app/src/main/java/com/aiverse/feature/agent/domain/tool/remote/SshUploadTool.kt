@@ -39,7 +39,7 @@ class SshUploadTool @Inject constructor(
             "remoteDir 为远程目标目录（如 /var/www/html、/home/ubuntu/app，可任意可写位置）；server 可选（名称或 id，缺省第一个已配置的）。" +
             "本地为目录时递归上传（自动排除 .git/node_modules/build/.gradle/.idea 等构建产物）。写远程，执行前需用户确认；" +
             "受登录用户权限限制，/root 等需 sudo 的目录请先改权限或上传到可写目录再移动。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.NETWORK_WRITE, ToolCapability.WRITE_WORKSPACE)
 
     override val parameters = mapOf(

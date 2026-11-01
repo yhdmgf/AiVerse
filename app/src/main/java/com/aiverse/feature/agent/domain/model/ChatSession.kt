@@ -1,5 +1,7 @@
 package com.aiverse.feature.agent.domain.model
 
+import com.aiverse.R
+
 /**
  * Agent 的工作模式。
  */
@@ -7,6 +9,22 @@ enum class AgentMode {
     BUILD, // 默认模式，允许所有授权操作
     PLAN,  // 计划模式，拦截修改类操作，只读/探索为主
     AUTO;  // 自动模式，放行所有权限（不弹窗），仅用户手动可切换；AI 无法通过 planMode 进入
+
+    /** 中文模式名（UI 模式按钮）。 */
+    val labelRes: Int
+        get() = when (this) {
+            BUILD -> R.string.mode_build
+            PLAN -> R.string.mode_plan
+            AUTO -> R.string.mode_auto
+        }
+
+    /** 切换到该模式时的状态提示文案（Toast）。 */
+    val switchMessageRes: Int
+        get() = when (this) {
+            BUILD -> R.string.mode_switch_build
+            PLAN -> R.string.mode_switch_plan
+            AUTO -> R.string.mode_switch_auto
+        }
 
     /** 权限宽松度：数值越大越宽。用于把子会话的权限压到不超过父会话。 */
     val permissiveness: Int

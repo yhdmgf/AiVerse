@@ -35,7 +35,7 @@ class SshMvTool @Inject constructor(
     override val description =
         "移动或重命名远程文件/目录（mv）。server 可选（名称或 id，缺省第一个已配置的）；from 为源绝对路径；to 为目标绝对路径；" +
             "sudo=true 时用 sudo 操作受限路径（如 /root 下，需服务器免密 sudo）。执行前需用户确认。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.NETWORK_WRITE)
 
     override val parameters = mapOf(

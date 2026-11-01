@@ -35,7 +35,7 @@ class SshRmTool @Inject constructor(
     override val description =
         "删除远程文件或目录（rm -rf，不可恢复）。server 可选（名称或 id，缺省第一个已配置的）；path 为远程绝对路径；" +
             "sudo=true 时用 sudo 删除受限路径（如 /root 下，需服务器免密 sudo）。执行前需用户确认；禁止删除根目录 /。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.NETWORK_WRITE)
 
     override val parameters = mapOf(

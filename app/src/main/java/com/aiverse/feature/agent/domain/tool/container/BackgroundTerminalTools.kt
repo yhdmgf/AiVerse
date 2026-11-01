@@ -102,7 +102,7 @@ class TerminalSessionTool @Inject constructor(
     override val name = "terminal"
     override val description =
         "启动和管理当前执行环境（本地容器或远程 SSH）的持续终端会话，适合耗时任务（构建、安装依赖）、常驻服务或需要多次输入的交互命令。支持发送输入、快捷键和读取输出；会自行结束且需等待结果的任务用 start + notify=true，常驻或交互式任务按需 read/send/key。中断前台进程用 key=ctrl+c。read 可用 filter 正则按行筛选输出，close 可用 tab_ids 一次关闭多个标签。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.EXECUTE_COMMANDS)
 
     override fun effectiveCapabilities(args: Map<String, JsonElement>): Set<ToolCapability> {

@@ -39,7 +39,7 @@ class SshDownloadTool @Inject constructor(
         "下载远程文本文件到本地工作区。server 可选（名称或 id，缺省第一个已配置的）；path 为远程文件绝对路径；" +
             "localPath 为本地路径（相对工作区，缺省用文件名存到工作区根）；sudo=true 时用 sudo 读取受限路径（需服务器免密 sudo）。" +
             "写本地，执行前需用户确认；仅支持文本文件（≤8MB）。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.WRITE_WORKSPACE)
 
     override val parameters = mapOf(

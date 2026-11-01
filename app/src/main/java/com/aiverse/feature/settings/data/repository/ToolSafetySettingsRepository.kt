@@ -30,6 +30,7 @@ class ToolSafetySettingsRepository @Inject constructor(
 ) {
     private companion object {
         val DISABLED_KEY = booleanPreferencesKey("disable_safety_interception")
+        val GLOBAL_ALLOW_KEY = booleanPreferencesKey("global_auto_approve")
     }
 
     /** 当前开关流；未设置时回退到 false（默认保留安全拦截）。 */
@@ -42,4 +43,15 @@ class ToolSafetySettingsRepository @Inject constructor(
 
     /** 读取一次当前值（权限评估时用）。 */
     suspend fun isSafetyInterceptionDisabled(): Boolean = disableSafetyInterceptionFlow.first()
+
+    /** 「一键允许所有工具」开关流；未设置时回退到 false（默认需确认）。 */
+    val globalAutoApproveFlow: Flow<Boolean> =
+        context.toolSafetyDataStore.data.map { it[GLOBAL_ALLOW_KEY] ?: false }
+
+    suspend fun setGlobalAutoApprove(enabled: Boolean) {
+        context.toolSafetyDataStore.edit { it[GLOBAL_ALLOW_KEY] = enabled }
+    }
+
+    /** 读取一次当前值（权限评估时用）：开启后所有工具默认放行，不再逐次索要确认。 */
+    suspend fun isGlobalAutoApprove(): Boolean = globalAutoApproveFlow.first()
 }

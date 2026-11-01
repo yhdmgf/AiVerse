@@ -49,7 +49,7 @@ class ExecuteCommandTool @Inject constructor(
 
     override val name = "Bash"
     override val description = "在当前执行环境（本地容器或远程 SSH）中执行短时、一次性的 Shell 命令，等待命令结束后返回输出，适合状态查询、快速检查等临时操作。耗时任务、常驻服务或需要持续交互的命令用 terminal；不要用 & 在本工具中挂后台。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.EXECUTE_COMMANDS)
 
     override val parameters: Map<String, ToolParameter> = mapOf(

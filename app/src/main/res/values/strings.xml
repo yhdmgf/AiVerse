@@ -88,6 +88,12 @@
     <string name="settings_startup_session_new_desc">复用尚未发送过消息的空会话，否则新建</string>
     <string name="settings_startup_session_recent">打开最近会话</string>
     <string name="settings_startup_session_recent_desc">直接进入最近更新的会话</string>
+    <string name="mode_build">构建</string>
+    <string name="mode_plan">计划</string>
+    <string name="mode_auto">自动</string>
+    <string name="mode_switch_build">已切换到构建模式：AI 直接执行，允许写文件与命令</string>
+    <string name="mode_switch_plan">已切换到计划模式：只读规划，修改类操作会被拦截</string>
+    <string name="mode_switch_auto">已切换到自动模式：AI 自动执行工具，不再逐次询问</string>
     <string name="settings_delete_external_workspace_sessions">删除外部工作区聊天记录</string>
     <string name="settings_delete_external_workspace_sessions_desc">移除外部本地工作区时，一并删除该工作区的聊天记录</string>
     <string name="settings_general_network">网络</string>
@@ -1477,6 +1483,10 @@
     <string name="perm_safety_confirm_message">禁用后，AUTO 模式下连灾难性删除也不再拦截，Shizuku 工具也不再逐次确认。请谨慎操作。</string>
     <string name="perm_safety_confirm_action">确认（%1$d）</string>
     <string name="perm_safety_confirm_action_ready">确认</string>
+    <string name="perm_global_auto_approve">一键允许所有工具</string>
+    <string name="perm_global_auto_approve_desc">开启后所有会话不再逐次索要权限，直接执行；灾难性删除与 Shizuku 仍拦截</string>
+    <string name="perm_global_auto_confirm_title">确认一键允许所有工具？</string>
+    <string name="perm_global_auto_confirm_message">开启后，AI 调用工具（终端、服务器、MCP、文件等）不再逐次向你确认，直接执行。仅灾难性删除与 Shizuku 宿主系统操作仍会拦截。请谨慎操作。</string>
 
     <!-- Provider Editor -->
     <string name="provider_section_basic">基本信息</string>

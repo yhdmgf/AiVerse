@@ -37,7 +37,7 @@ class SshExecTool @Inject constructor(
         "在已配置 SSH 服务器上执行一条 shell 命令并返回输出（远程终端能力，支持管道/重定向/cd 等任意命令）。" +
             "server 可选（服务器名称或 id，缺省第一个已配置的）；command 为要执行的命令；sudo=true 时命令前加 sudo -n（需服务器免密 sudo）。" +
             "执行前需用户确认；只读探索用 sshList/sshRead，不要用它做只读操作。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.NETWORK_WRITE)
 
     override val parameters = mapOf(

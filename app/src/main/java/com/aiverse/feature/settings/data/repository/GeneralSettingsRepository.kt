@@ -32,7 +32,7 @@ enum class StartupSessionMode {
  * 「偏好设置」里的用户偏好。
  *
  * 目前八项：拉取模型成功后是否自动移除远端已不存在的本地模型（默认开启）、
- * 启动时进入新会话还是最近会话（默认新开会话）、首字 / 数据块间隔超时（秒）、
+ * 启动时进入新会话还是最近会话（默认打开最近会话）、首字 / 数据块间隔超时（秒）、
  * 网络请求的最大重试次数（默认 6）、回车发送、自动压缩阈值、
  * sendFile 单个文件大小上限（默认 100MB），
  * 以及移除外部本地工作区时是否一并删除其聊天记录（默认关闭）。
@@ -87,11 +87,11 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[AUTO_REMOVE_STALE_MODELS_KEY] = enabled }
     }
 
-    /** 启动时会话偏好流；未设置或值无法识别时回退到 [StartupSessionMode.NEW_SESSION]。 */
+    /** 启动时会话偏好流；未设置或值无法识别时回退到 [StartupSessionMode.RECENT_SESSION]。 */
     val startupSessionModeFlow: Flow<StartupSessionMode> = context.generalDataStore.data.map { prefs ->
         when (prefs[STARTUP_SESSION_MODE_KEY]) {
-            StartupSessionMode.RECENT_SESSION.name -> StartupSessionMode.RECENT_SESSION
-            else -> StartupSessionMode.NEW_SESSION
+            StartupSessionMode.NEW_SESSION.name -> StartupSessionMode.NEW_SESSION
+            else -> StartupSessionMode.RECENT_SESSION
         }
     }
 
@@ -111,10 +111,10 @@ class GeneralSettingsRepository @Inject constructor(
     /** 从备份还原自动对齐开关。 */
     suspend fun restoreAutoRemoveStaleModels(enabled: Boolean) = setAutoRemoveStaleModels(enabled)
 
-    /** 从备份还原启动时会话偏好；旧备份无此字段（null）或值无法识别时回退新开会话。 */
+    /** 从备份还原启动时会话偏好；旧备份无此字段（null）或值无法识别时回退打开最近会话。 */
     suspend fun restoreStartupSessionMode(mode: String?) {
         setStartupSessionMode(
-            StartupSessionMode.entries.firstOrNull { it.name == mode } ?: StartupSessionMode.NEW_SESSION
+            StartupSessionMode.entries.firstOrNull { it.name == mode } ?: StartupSessionMode.RECENT_SESSION
         )
     }
 

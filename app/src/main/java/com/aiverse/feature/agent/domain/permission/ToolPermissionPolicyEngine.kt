@@ -137,6 +137,22 @@ class ToolPermissionPolicyEngine @Inject constructor(
             return EvalResult(Verdict.DENY, emptyList(), denyReason = appContext.getString(R.string.tool_whitelist_denied))
         }
 
+        // 「一键允许所有工具」（全局）开启后默认放行，不再逐次索要确认。
+        // 安全底线仍保留：灾难性 rm（根目录/系统目录删除）与 Shizuku 宿主系统操作仍拦截。
+        if (toolSafetySettings.isGlobalAutoApprove()) {
+            if (isShellTool(toolName, args)) {
+                val command = ((args["command"] ?: args["input"]) as? JsonPrimitive)?.content
+                if (command != null) {
+                    val analysis = ShellCommandParser.analyze(command)
+                    checkCatastrophicRm(analysis.segments)?.let { return elevationOrDeny(it, args) }
+                }
+            }
+            if (toolName == SHIZUKU_TOOL) {
+                return EvalResult(Verdict.ASK, emptyList(), rememberDisabledReason = appContext.getString(R.string.tool_shizuku_confirmation_reason))
+            }
+            return EvalResult(Verdict.ALLOW, emptyList())
+        }
+
         if (mode == com.aiverse.feature.agent.domain.model.AgentMode.AUTO) {
             // AUTO 模式放行所有权限；灾难性 rm 防护（根目录/系统目录删除）默认保留，
             // 可在「工具授权」设置中关闭（禁用安全拦截）。遭遇拦截时仍可凭 elevate 参数提权重试。

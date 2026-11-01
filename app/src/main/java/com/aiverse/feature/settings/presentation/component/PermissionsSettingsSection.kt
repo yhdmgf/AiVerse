@@ -61,6 +61,8 @@ internal fun PermissionsSection(
     globalRules: List<PermissionRule>,
     disableSafetyInterception: Boolean,
     onToggleSafetyInterception: (Boolean) -> Unit,
+    globalAutoApprove: Boolean,
+    onToggleGlobalAutoApprove: (Boolean) -> Unit,
     onDeleteProject: (PermissionRule) -> Unit,
     onPromote: (PermissionRule) -> Unit,
     onDeleteGlobal: (PermissionRule) -> Unit
@@ -69,6 +71,8 @@ internal fun PermissionsSection(
     var globalExpanded by rememberSaveable { mutableStateOf(true) }
     // 开启「禁用安全拦截」前先弹强制确认框（确认按钮 5 秒倒计时）；关闭无需确认。
     var showSafetyConfirm by remember { mutableStateOf(false) }
+    // 开启「一键允许所有工具」前先弹强制确认框（确认按钮 3 秒倒计时）；关闭无需确认。
+    var showGlobalAutoConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -90,6 +94,21 @@ internal fun PermissionsSection(
                         onCheckedChange = { enabled ->
                             if (enabled) showSafetyConfirm = true
                             else onToggleSafetyInterception(false)
+                        }
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.CheckCircle,
+                title = stringResource(R.string.perm_global_auto_approve),
+                subtitle = stringResource(R.string.perm_global_auto_approve_desc),
+                trailing = {
+                    AppSwitch(
+                        checked = globalAutoApprove,
+                        onCheckedChange = { enabled ->
+                            if (enabled) showGlobalAutoConfirm = true
+                            else onToggleGlobalAutoApprove(false)
                         }
                     )
                 }
@@ -149,6 +168,9 @@ internal fun PermissionsSection(
 
     if (showSafetyConfirm) {
         SafetyConfirmDialog(
+            title = stringResource(R.string.perm_safety_confirm_title),
+            message = stringResource(R.string.perm_safety_confirm_message),
+            seconds = SAFETY_CONFIRM_COUNTDOWN_SECONDS,
             onConfirm = {
                 onToggleSafetyInterception(true)
                 showSafetyConfirm = false
@@ -156,18 +178,36 @@ internal fun PermissionsSection(
             onDismiss = { showSafetyConfirm = false }
         )
     }
+    if (showGlobalAutoConfirm) {
+        SafetyConfirmDialog(
+            title = stringResource(R.string.perm_global_auto_confirm_title),
+            message = stringResource(R.string.perm_global_auto_confirm_message),
+            seconds = GLOBAL_AUTO_CONFIRM_COUNTDOWN_SECONDS,
+            onConfirm = {
+                onToggleGlobalAutoApprove(true)
+                showGlobalAutoConfirm = false
+            },
+            onDismiss = { showGlobalAutoConfirm = false }
+        )
+    }
 }
 
 /** 「禁用安全拦截」确认框的倒计时秒数。 */
 private const val SAFETY_CONFIRM_COUNTDOWN_SECONDS = 5
 
-/** 开启「禁用安全拦截」前的强制确认框：确认按钮带 5 秒倒计时，倒计时结束前不可点。 */
+/** 「一键允许所有工具」确认框的倒计时秒数。 */
+private const val GLOBAL_AUTO_CONFIRM_COUNTDOWN_SECONDS = 3
+
+/** 开启开关前的强制确认框：确认按钮带倒计时，倒计时结束前不可点。 */
 @Composable
 private fun SafetyConfirmDialog(
+    title: String,
+    message: String,
+    seconds: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var secondsLeft by remember { mutableIntStateOf(SAFETY_CONFIRM_COUNTDOWN_SECONDS) }
+    var secondsLeft by remember { mutableIntStateOf(seconds) }
     LaunchedEffect(Unit) {
         while (secondsLeft > 0) {
             delay(1_000)
@@ -176,8 +216,8 @@ private fun SafetyConfirmDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.perm_safety_confirm_title)) },
-        text = { Text(stringResource(R.string.perm_safety_confirm_message)) },
+        title = { Text(title) },
+        text = { Text(message) },
         confirmButton = {
             TextButton(
                 onClick = onConfirm,

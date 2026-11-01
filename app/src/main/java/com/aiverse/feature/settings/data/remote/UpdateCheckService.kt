@@ -90,7 +90,7 @@ class UpdateCheckService @Inject constructor(
                     }
 
                     val updates = releases
-                        .filter { if (channel == UpdateChannel.STABLE) !it.prerelease else true }
+                        .filter { if (channel == UpdateChannel.STABLE) !it.prerelease && !it.rawTag.contains("-rc", ignoreCase = true) else true }
                         .filter { compareVersions(it.version, currentVersion) > 0 }
                         .sortedWith { a, b -> compareVersions(b.version, a.version) }
 

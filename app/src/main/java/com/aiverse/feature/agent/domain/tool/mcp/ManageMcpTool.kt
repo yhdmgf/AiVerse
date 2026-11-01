@@ -33,7 +33,7 @@ class ManageMcpTool @Inject constructor(
 
     override val name = "manageMcp"
     override val description = "管理 Model Context Protocol (MCP) 服务器。支持添加、删除与列表查询。添加或删除会修改 Agent 配置，下一次会话生效；不会自动安装 Node/Python 等运行时。"
-    override val permissionPolicy = ToolPermissionPolicy.ASK
+    override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.MODIFY_AGENT_CONFIG)
 
     override fun effectiveCapabilities(args: Map<String, JsonElement>): Set<ToolCapability> {

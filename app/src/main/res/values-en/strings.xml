@@ -88,6 +88,12 @@
     <string name="settings_startup_session_new_desc">Reuse an empty session, otherwise start a new one</string>
     <string name="settings_startup_session_recent">Recent session</string>
     <string name="settings_startup_session_recent_desc">Open the most recently updated session</string>
+    <string name="mode_build">Build</string>
+    <string name="mode_plan">Plan</string>
+    <string name="mode_auto">Auto</string>
+    <string name="mode_switch_build">Switched to Build: AI executes directly, file writes and commands allowed</string>
+    <string name="mode_switch_plan">Switched to Plan: read-only planning, modifications blocked</string>
+    <string name="mode_switch_auto">Switched to Auto: AI auto-executes tools without asking</string>
     <string name="settings_delete_external_workspace_sessions">Delete external workspace chats</string>
     <string name="settings_delete_external_workspace_sessions_desc">Also delete a workspace\'s chats when an external local workspace is removed</string>
     <string name="settings_general_network">Network</string>
@@ -1470,6 +1476,10 @@
     <string name="perm_safety_confirm_message">Once disabled, AUTO mode no longer blocks catastrophic deletes and no longer prompts for the Shizuku tool. Proceed with caution.</string>
     <string name="perm_safety_confirm_action">Confirm (%1$d)</string>
     <string name="perm_safety_confirm_action_ready">Confirm</string>
+    <string name="perm_global_auto_approve">Allow all tools in one tap</string>
+    <string name="perm_global_auto_approve_desc">All sessions no longer ask for permission each time; catastrophic deletes and Shizuku still intercepted</string>
+    <string name="perm_global_auto_confirm_title">Enable allow-all tools?</string>
+    <string name="perm_global_auto_confirm_message">After enabling, AI tool calls (terminal, server, MCP, files, etc.) run directly without asking. Only catastrophic deletes and Shizuku host operations are still intercepted. Please proceed with caution.</string>
 
     <!-- Provider Editor -->
     <string name="provider_section_basic">General</string>

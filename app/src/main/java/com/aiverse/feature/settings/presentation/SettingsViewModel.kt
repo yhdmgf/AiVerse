@@ -583,7 +583,7 @@ class SettingsViewModel @Inject constructor(
     private val _autoRemoveStaleModels = MutableStateFlow(true)
     val autoRemoveStaleModels: StateFlow<Boolean> = _autoRemoveStaleModels.asStateFlow()
 
-    private val _startupSessionMode = MutableStateFlow(StartupSessionMode.NEW_SESSION)
+    private val _startupSessionMode = MutableStateFlow(StartupSessionMode.RECENT_SESSION)
     val startupSessionMode: StateFlow<StartupSessionMode> = _startupSessionMode.asStateFlow()
 
     private val _firstByteTimeoutSec = MutableStateFlow(300)
@@ -711,6 +711,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _disableSafetyInterception = MutableStateFlow(false)
     val disableSafetyInterception: StateFlow<Boolean> = _disableSafetyInterception.asStateFlow()
+
+    private val _globalAutoApprove = MutableStateFlow(false)
+    val globalAutoApprove: StateFlow<Boolean> = _globalAutoApprove.asStateFlow()
 
     private val _activeProfileId = MutableStateFlow(ContainerProfile.BUILTIN_ID)
     val activeProfileId: StateFlow<String> = _activeProfileId.asStateFlow()
@@ -1154,6 +1157,12 @@ class SettingsViewModel @Inject constructor(
             launch {
                 toolSafetySettingsRepository.disableSafetyInterceptionFlow.collectLatest {
                     _disableSafetyInterception.value = it
+                }
+            }
+
+            launch {
+                toolSafetySettingsRepository.globalAutoApproveFlow.collectLatest {
+                    _globalAutoApprove.value = it
                 }
             }
 
@@ -2998,6 +3007,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setDisableSafetyInterception(disabled: Boolean) {
         viewModelScope.launch { toolSafetySettingsRepository.setDisableSafetyInterception(disabled) }
+    }
+
+    fun setGlobalAutoApprove(enabled: Boolean) {
+        viewModelScope.launch { toolSafetySettingsRepository.setGlobalAutoApprove(enabled) }
     }
 }
 
