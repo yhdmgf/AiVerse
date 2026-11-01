@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import net.schmizz.sshj.sftp.FileMode
 import javax.inject.Inject
 
 private const val TAG = "SshListTool"
@@ -59,7 +60,7 @@ class SshListTool @Inject constructor(
                 remote.withSftp(server) { sftp, _ ->
                     val info = sftp.statExistence(path)
                         ?: return@withSftp ToolResult.Error("远程路径不存在：$path", "FILE_NOT_FOUND")
-                    if (!info.isDirectory) {
+                    if (info.type != FileMode.Type.DIRECTORY) {
                         return@withSftp ToolResult.Error("不是目录：$path", "NOT_DIRECTORY")
                     }
                     val children = sftp.ls(path)

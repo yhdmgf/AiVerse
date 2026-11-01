@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.SFTPClient
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -66,7 +67,7 @@ class SshReadTool @Inject constructor(
                 remote.withSftp(server) { sftp, _ ->
                     val info = sftp.statExistence(path)
                         ?: return@withSftp ToolResult.Error("远程路径不存在：$path", "FILE_NOT_FOUND")
-                    if (info.isDirectory) {
+                    if (info.type == FileMode.Type.DIRECTORY) {
                         return@withSftp ToolResult.Error("是目录，无法按文件读取：$path", "IS_DIRECTORY")
                     }
                     if (info.size > MAX_READ_BYTES) {
