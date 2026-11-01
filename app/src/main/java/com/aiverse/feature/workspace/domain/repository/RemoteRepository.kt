@@ -460,8 +460,9 @@ class RemoteRepository @Inject constructor(
         }
     }
 
-    /** 解析连接的认证方式：密钥口令优先取密钥条目上的设置，回退到连接自身的存量口令。 */
-    private fun resolveAuth(connEntity: RemoteConnectionEntity): RemoteAuth =
+    /** 解析连接的认证方式：密钥口令优先取密钥条目上的设置，回退到连接自身的存量口令。
+     *  internal 供远程探索工具（sshList/sshRead）复用，保证与测试连通/挂载/远程镜像完全同一套凭据解析。 */
+    internal fun resolveAuth(connEntity: RemoteConnectionEntity): RemoteAuth =
         if (connEntity.authType == "PASSWORD") {
             RemoteAuth.Password(KeystoreCipher.decryptString(connEntity.authData))
         } else {
