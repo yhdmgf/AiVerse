@@ -39,8 +39,12 @@ import com.aiverse.feature.agent.domain.tool.container.ExecuteCommandTool
 import com.aiverse.feature.agent.domain.tool.container.TerminalSessionTool
 import com.aiverse.feature.agent.domain.tool.explorer.ListFilesTool
 import com.aiverse.feature.agent.domain.tool.explorer.SearchCodeTool
+import com.aiverse.feature.agent.domain.tool.remote.SshDownloadTool
+import com.aiverse.feature.agent.domain.tool.remote.SshExecTool
 import com.aiverse.feature.agent.domain.tool.remote.SshListTool
+import com.aiverse.feature.agent.domain.tool.remote.SshMvTool
 import com.aiverse.feature.agent.domain.tool.remote.SshReadTool
+import com.aiverse.feature.agent.domain.tool.remote.SshRmTool
 import com.aiverse.feature.agent.domain.tool.shizuku.ShizukuTool
 import com.aiverse.feature.agent.domain.tool.skill.LoadSkillTool
 import com.aiverse.feature.agent.domain.tool.question.AskUserQuestionTool
@@ -369,6 +373,10 @@ object AgentModule {
         searchCodeTool: SearchCodeTool,
         sshListTool: SshListTool,
         sshReadTool: SshReadTool,
+        sshExecTool: SshExecTool,
+        sshRmTool: SshRmTool,
+        sshMvTool: SshMvTool,
+        sshDownloadTool: SshDownloadTool,
         loadSkillTool: LoadSkillTool,
         askUserQuestionTool: AskUserQuestionTool,
         manageMcpTool: ManageMcpTool,
@@ -396,6 +404,10 @@ object AgentModule {
             register("search", searchCodeTool)
             register("sshList", sshListTool)
             register("sshRead", sshReadTool)
+            register("sshExec", sshExecTool)
+            register("sshRm", sshRmTool)
+            register("sshMv", sshMvTool)
+            register("sshDownload", sshDownloadTool)
             register("loadSkill", loadSkillTool)
             register("askUserQuestion", askUserQuestionTool)
             register("manageMcp", manageMcpTool)
