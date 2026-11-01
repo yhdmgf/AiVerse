@@ -4,6 +4,9 @@ import com.aiverse.feature.workspace.data.local.dao.RemoteConnectionDao
 import com.aiverse.feature.workspace.data.local.entity.RemoteConnectionEntity
 import com.aiverse.feature.workspace.domain.model.RemoteProtocol
 import com.aiverse.feature.workspace.domain.repository.RemoteRepository
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.SFTPClient
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -41,6 +44,21 @@ class RemoteExploreClient @Inject constructor(
     suspend fun exec(server: String?, command: String): ExecResult {
         val entity = resolve(server)
         return connection.withIsolatedExec(configOf(entity), command)
+    }
+
+    /**
+     * 用独立连接上传一个本地文件到远程路径（SFTP put，覆盖已存在）。
+     * 自动创建远程父目录；SFTP 受登录用户权限限制（无法提权），/root 等受限目录需先改权限或由 sudo 侧接管。
+     */
+    suspend fun upload(server: String?, localFile: File, remotePath: String) {
+        val entity = resolve(server)
+        connection.withIsolatedSftp(configOf(entity)) { sftp, _ ->
+            withContext(Dispatchers.IO) {
+                val parent = remotePath.substringBeforeLast('/')
+                if (parent.isNotBlank()) sftp.mkdirs(parent)
+                sftp.put(localFile, remotePath)
+            }
+        }
     }
 
     /** 按名称或 id 解析目标服务器；缺省取第一个。 */

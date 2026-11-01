@@ -45,6 +45,8 @@ import com.aiverse.feature.agent.domain.tool.remote.SshListTool
 import com.aiverse.feature.agent.domain.tool.remote.SshMvTool
 import com.aiverse.feature.agent.domain.tool.remote.SshReadTool
 import com.aiverse.feature.agent.domain.tool.remote.SshRmTool
+import com.aiverse.feature.agent.domain.tool.remote.SshTailTool
+import com.aiverse.feature.agent.domain.tool.remote.SshUploadTool
 import com.aiverse.feature.agent.domain.tool.shizuku.ShizukuTool
 import com.aiverse.feature.agent.domain.tool.skill.LoadSkillTool
 import com.aiverse.feature.agent.domain.tool.question.AskUserQuestionTool
@@ -377,6 +379,8 @@ object AgentModule {
         sshRmTool: SshRmTool,
         sshMvTool: SshMvTool,
         sshDownloadTool: SshDownloadTool,
+        sshTailTool: SshTailTool,
+        sshUploadTool: SshUploadTool,
         loadSkillTool: LoadSkillTool,
         askUserQuestionTool: AskUserQuestionTool,
         manageMcpTool: ManageMcpTool,
@@ -408,6 +412,8 @@ object AgentModule {
             register("sshRm", sshRmTool)
             register("sshMv", sshMvTool)
             register("sshDownload", sshDownloadTool)
+            register("sshTail", sshTailTool)
+            register("sshUpload", sshUploadTool)
             register("loadSkill", loadSkillTool)
             register("askUserQuestion", askUserQuestionTool)
             register("manageMcp", manageMcpTool)
