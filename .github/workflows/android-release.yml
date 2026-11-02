@@ -82,7 +82,11 @@ jobs:
           minor=$(echo "$FULL" | cut -d. -f2)
           patch=$(echo "$FULL" | cut -d. -f3)
           base=$((major*1000000 + minor*10000 + patch*100))
-          if echo "$FULL" | grep -qiE '[-.](dev|rc|pre|beta|alpha|snapshot|dirty)'; then
+          rcnum=$(echo "$FULL" | sed -n 's/.*-rc\([0-9]*\)$/\1/p')
+          if [ -n "$rcnum" ]; then
+            rc=$((rcnum<49 ? rcnum : 49))
+            VC=$((base+rc))
+          elif echo "$FULL" | grep -qiE '[-.](dev|pre|beta|alpha|snapshot|dirty)'; then
             VC=$base
           else
             VC=$((base+50))

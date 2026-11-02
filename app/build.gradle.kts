@@ -85,7 +85,12 @@ fun versionCodeFromVersionName(name: String): Int {
     val minor = m.groupValues[2].toInt()
     val patch = m.groupValues[3].toInt()
     val base = major * 1_000_000 + minor * 10_000 + patch * 100
-    val isPre = Regex("""[-.]?(dev|rc|pre|beta|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+    // 预发布 rcN：base + rc 数字（rc1 < rc2 < rc3 ...），上限 49，保证仍低于正式版（base+50）。
+    val rcMatch = Regex("""-rc(\d+)$""", RegexOption.IGNORE_CASE).find(name)
+    if (rcMatch != null) {
+        return base + rcMatch.groupValues[1].toInt().coerceAtMost(49)
+    }
+    val isPre = Regex("""[-.]?(dev|pre|beta|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
     return if (isPre) base else base + 50
 }
 

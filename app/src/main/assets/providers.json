@@ -88,15 +88,5 @@
     "badge": null,
     "websiteUrl": null,
     "tags": []
-  },
-  {
-    "id": "xiaomi",
-    "name": "MiMo",
-    "type": "OPENAI",
-    "baseUrl": "https://api.xiaomimimo.com/v1",
-    "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
   }
 ]
