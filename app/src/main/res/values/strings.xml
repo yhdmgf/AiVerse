@@ -2034,4 +2034,8 @@
     <string name="browser_ua_custom_dialog_title">自定义 User-Agent</string>
     <string name="browser_ua_custom_input_hint">输入完整的 User-Agent 字符串</string>
     <string name="browser_ua_applied_toast">已切换浏览器标识并刷新页面</string>
+    <string name="sig_invalid_title">签名校验失败</string>
+    <string name="sig_invalid_message">签名不对，请在正规平台下载</string>
+    <string name="sig_invalid_button">前往官网</string>
+    <string name="sig_invalid_repo_url">https://github.com/yhdmgf/AiVerse</string>
 </resources>

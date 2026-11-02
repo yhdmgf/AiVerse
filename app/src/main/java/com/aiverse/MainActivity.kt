@@ -1,5 +1,7 @@
 package com.aiverse
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -16,6 +18,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,8 +55,10 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import com.aiverse.core.security.SignatureGuard
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -248,6 +253,29 @@ class MainActivity : ComponentActivity() {
         // （setContent 的 lambda receiver 可能遮蔽 this，直接用成员函数会 unresolved）。
         val isContainerReady: () -> Boolean = { isContainerProvisioned() }
         setContent {
+            // 启动签名校验：构建期从 keystore 注入的随机分片（BuildConfig）合并出期望指纹，
+            // 与当前 APK 签名证书比对，不一致说明包被替换/篡改，弹窗提示去正规平台下载。
+            val signatureInvalid = remember { !SignatureGuard.verify(this@MainActivity) }
+            if (signatureInvalid) {
+                AlertDialog(
+                    onDismissRequest = {},
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val ctx = this@MainActivity
+                            ctx.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(ctx.getString(R.string.sig_invalid_repo_url)))
+                            )
+                        }) { Text(stringResource(R.string.sig_invalid_button)) }
+                    },
+                    title = { Text(stringResource(R.string.sig_invalid_title)) },
+                    text = {
+                        Column {
+                            Text(stringResource(R.string.sig_invalid_message))
+                            Text(stringResource(R.string.sig_invalid_repo_url))
+                        }
+                    }
+                )
+            }
             val themeMode by themeSettings.themeModeFlow.collectAsStateWithLifecycle(initialValue = AppThemeMode.AUTO)
             val themePresetId by themeSettings.themePresetIdFlow.collectAsStateWithLifecycle(initialValue = null)
             val dynamicColor by themeSettings.dynamicColorFlow.collectAsStateWithLifecycle(initialValue = false)

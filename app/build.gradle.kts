@@ -1,4 +1,7 @@
 import java.io.FileInputStream
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.util.Collections
 import java.util.Properties
 
 plugins {
@@ -17,6 +20,31 @@ val keystorePropertiesFile = file("keystore.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+// 签名校验：构建期从 keystore 读证书，算 MD5 + SHA-256 指纹，随机拆 16 段（含原索引）注入 BuildConfig。
+// 每版本分片随机（shuffled），源码/BuildConfig 中不出现完整哈希；合并时按索引还原（见 SignatureGuard）。
+fun signatureSegments(): Pair<List<String>, List<String>>? {
+    if (!keystorePropertiesFile.exists()) return null
+    return try {
+        val ksFile = file(keystoreProperties["storeFile"] as String)
+        val storePass = keystoreProperties["storePassword"] as String
+        val alias = keystoreProperties["keyAlias"] as String
+        val ks = KeyStore.getInstance("JKS")
+        ks.load(ksFile.inputStream(), storePass.toCharArray())
+        val der = ks.getCertificate(alias)?.encoded ?: return null
+        val toHex = { bytes: ByteArray -> bytes.joinToString("") { "%02x".format(it) } }
+        val md5 = toHex(MessageDigest.getInstance("MD5").digest(der))
+        val sha256 = toHex(MessageDigest.getInstance("SHA-256").digest(der))
+        // 每段 "原索引:段值"，合并时按索引还原——随机打乱每版本不同，源码无完整哈希
+        val md5Segs = md5.chunked(2).mapIndexed { i, s -> "$i:$s" }.toMutableList()
+        val shaSegs = sha256.chunked(4).mapIndexed { i, s -> "$i:$s" }.toMutableList()
+        Collections.shuffle(md5Segs)
+        Collections.shuffle(shaSegs)
+        md5Segs to shaSegs
+    } catch (e: Exception) {
+        null
+    }
 }
 
 // gitVersionName 从 git tag 动态解析，彻底解决“发版时手改 build.gradle.kts 与 tag 双向不同步”问题。
@@ -126,6 +154,8 @@ android {
                 storePassword = keystoreProperties["storePassword"] as String
                 keyAlias = keystoreProperties["keyAlias"] as String
                 keyPassword = keystoreProperties["keyPassword"] as String
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }
@@ -145,6 +175,11 @@ android {
         // 避免提交数极少时 versionCode 无法随版本递增导致更新误判。
         versionCode = versionCodeFromVersionName(effectiveVersionName())
         versionName = effectiveVersionName()
+
+        // 签名校验分片注入（keystore 存在时算 MD5+SHA-256 随机 16 段；否则空数组，运行期跳过校验）
+        val sigSegs = signatureSegments()
+        buildConfigField("String[]", "SIG_MD5_SEGMENTS", "{" + (sigSegs?.first ?: emptyList()).joinToString(",") { "\"$it\"" } + "}")
+        buildConfigField("String[]", "SIG_SHA256_SEGMENTS", "{" + (sigSegs?.second ?: emptyList()).joinToString(",") { "\"$it\"" } + "}")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -244,6 +279,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
         // UserService 走 AIDL 跨进程接口（app/src/main/aidl），显式开启以免依赖 AGP 默认值。
         aidl = true
     }
