@@ -69,9 +69,9 @@ jobs:
         run: |
           mkdir -p dist
           VER="${{ steps.version.outputs.full }}"
-          cp app/build/outputs/apk/universal/release/app-universal-release.apk "dist/AiVerse-universal-${VER}.apk" || true
-          cp app/build/outputs/apk/armsolo/release/app-armsolo-release.apk "dist/AiVerse-arm64-${VER}.apk" || true
-          cp app/build/outputs/apk/x86solo/release/app-x86solo-release.apk "dist/AiVerse-x86_64-${VER}.apk" || true
+          cp app/build/outputs/apk/universal/release/app-universal-release.apk "dist/AiVerse-universal-v${VER}.apk" || true
+          cp app/build/outputs/apk/armsolo/release/app-armsolo-release.apk "dist/AiVerse-arm64-v${VER}.apk" || true
+          cp app/build/outputs/apk/x86solo/release/app-x86solo-release.apk "dist/AiVerse-x86_64-v${VER}.apk" || true
           ls -la dist/
           test -n "$(ls dist/*.apk 2>/dev/null)"
 
@@ -96,8 +96,23 @@ jobs:
             echo ""
             echo "- versionName: $FULL"
             echo "- versionCode: $VC"
+            echo ""
+            echo "## APK 说明"
+            echo ""
+            echo "| 包名 | ABI | 适用设备 |"
+            echo "|---|---|---|"
+            echo "| AiVerse-arm64-v$FULL.apk | arm64-v8a | 新手机（推荐） |"
+            echo "| AiVerse-x86_64-v$FULL.apk | x86_64 | 模拟器 / x86 设备 |"
+            echo "| AiVerse-universal-v$FULL.apk | arm64-v8a + x86_64 | 通用（体积大） |"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "versionName=$FULL versionCode=$VC"
+
+      - name: 清理旧 Release（避免重复累积）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.full }}"
+          gh release delete "$TAG" --repo yhdmgf/AiVerse --yes --cleanup-tag || true
 
       - name: 发布 GitHub Release
         uses: softprops/action-gh-release@v2
