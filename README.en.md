@@ -86,6 +86,7 @@ There is nothing to set up beforehand: install the app, configure a model under 
 |------|-------------|
 | System requirements | Android 8.0+ (API 26), arm64-v8a / x86_64 |
 | Download | **[Official site](https://aivapp.cn/download)** (recommended, primary): latest stable & archived releases<br>[GitHub Releases](https://github.com/yhdmgf/AiVerse/releases/latest): pick `armsolo` for real devices, `x86solo` for emulators, `universal` for both |
+| Beta builds | Built automatically from the latest `main` on a schedule and published to [aiverse-beta Releases](https://github.com/yhdmgf/aiverse-beta/releases) with auto-incrementing versions; if a commit hasn't been built yet, trigger `Nightly Build` manually from [Actions](https://github.com/yhdmgf/AiVerse/actions/workflows/nightly-build.yml) to get a build immediately, or wait for the next scheduled run (00:00 / 06:00 / 12:00 / 18:00 Beijing time) |
 | Quick start | Settings → AI Vendors to add a model → Container & Images to pick local or SSH → new session and chat |
 | Changelog | [Releases](https://github.com/yhdmgf/AiVerse/releases) (all versions & notes) |
 | User guide | [Online docs](https://aivapp.cn): quick start, user manual and advanced guides (same content as the in-app docs) |
