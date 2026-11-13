@@ -1,7 +1,8 @@
 name: Nightly Build
 
-# 每小时（北京时间）自动构建最新 main 的 beta 测试包（三架构）并上传到 Actions artifact。
-# 目的：测试的人随时能拿到最新构建，且能尽早发现编译挂了。只传 artifact，不发 GitHub Release。
+# 每天（北京时间）自动构建最新 main 的 beta 测试包（三架构）并发布到测试版仓库 Release。
+# 目的：测试的人随时能拿到最新构建，且能尽早发现编译挂了。
+# 产物发到独立测试版仓库 yhdmgf/aiverse-beta 的 Releases（版本号自动递增），不再作为 Actions artifact。
 # beta = 继承 release 的正式签名 + R8，包名 com.aiverse.beta（与正式版同机共存、互不覆盖）；
 # 签名校验生效，但测试包不参与检查更新（见 SettingsViewModel.isTestPackage），不会把测试机导向正式包。
 on:
@@ -116,11 +117,44 @@ jobs:
           echo "- 测试包不参与检查更新（无应用内升级，避免导向正式包）" >> "$GITHUB_STEP_SUMMARY"
           echo "- 下载: 下方 artifact（AiVerse-beta），内含三架构 APK 与 -使用守则.txt" >> "$GITHUB_STEP_SUMMARY"
 
-      # 三架构 APK + 测试版说明 txt 直接作为 artifact 内容上传，GitHub 打包的一层即唯一压缩层。
-      - name: 上传 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AiVerse-beta
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 14
+      # 三架构 APK + 测试版说明 txt 打成一个 zip，作为测试版仓库 Release 的资产。
+      - name: 发布到测试版仓库 Releases
+        env:
+          GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
+          TARGET_REPO: yhdmgf/aiverse-beta
+        run: |
+          set -e
+          SHA=$(git rev-parse --short HEAD)
+
+          # 取测试版仓库最新 release tag，按 1.0.x 递增（patch 满 99 进位到 2.0.0）
+          PREV=$(gh release view --repo "$TARGET_REPO" --json tagName -q .tagName 2>/dev/null || echo "")
+          echo "上一个版本: ${PREV:-无（首次发布）}"
+          if [ -z "$PREV" ]; then
+            MAJOR=1; MINOR=0; PATCH=0
+          else
+            BASE=${PREV#v}; BASE=${BASE%%-*}
+            IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
+            MAJOR=${MAJOR:-1}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
+          fi
+          PATCH=$((PATCH + 1))
+          # patch 到 99 为一轮上限，下一版直接进位到下一个 major（如 1.0.99 -> 2.0.0）
+          if [ "$PATCH" -ge 100 ]; then PATCH=0; MINOR=0; MAJOR=$((MAJOR + 1)); fi
+          VER="${MAJOR}.${MINOR}.${PATCH}"
+          echo "本次发布版本: $VER"
+
+          # 打包三架构 APK + 使用守则
+          ZIP="AiVerse-beta-${VER}.zip"
+          (cd dist && zip -q -r "../$ZIP" .)
+
+          gh release create "$VER" \
+            --repo "$TARGET_REPO" \
+            --title "AiVerse 测试版 $VER" \
+            --notes "测试版构建（commit $SHA）。三架构 APK 见下方 zip 资产。测试版不代表最终版本，请勿二传。" \
+            --prerelease \
+            "$ZIP"
+
+          echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 版本: `$VER`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: `$SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 发布: [yhdmgf/aiverse-beta Releases](https://github.com/yhdmgf/aiverse-beta/releases)" >> "$GITHUB_STEP_SUMMARY"
