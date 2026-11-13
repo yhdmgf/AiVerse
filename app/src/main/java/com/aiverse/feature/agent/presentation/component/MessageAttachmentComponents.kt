@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,10 +35,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.aiverse.R
 import com.aiverse.core.theme.Brand
-import com.aiverse.core.theme.Radius
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.LocalImageViewer
+import com.aiverse.core.ui.LocalMediaViewer
+import com.aiverse.core.ui.MediaKind
 import com.aiverse.core.ui.ThumbnailCache
+import com.aiverse.core.ui.VoiceMessageBar
+import com.aiverse.core.ui.mediaKindOf
 import com.aiverse.core.util.ApkInstaller
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.workspace.domain.FileAccessProvider
@@ -45,6 +50,8 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.FileText
 import compose.icons.feathericons.Image
+import compose.icons.feathericons.Music
+import compose.icons.feathericons.Video
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,21 +92,27 @@ private fun MessageAttachmentRow(
     onClick: ((AgentAttachment) -> Unit)? = null
 ) {
     val viewer = LocalImageViewer.current
-    val handler: (() -> Unit)? = if (attachment.isImage) {
-        { viewer.show(attachment.toViewerRequest()) }
-    } else if (onClick != null) {
-        // 非图片（含 md/html）：统一交给调用方的「系统 app 打开」
-        { onClick(attachment) }
-    } else {
-        null
+    val mediaViewer = LocalMediaViewer.current
+    val t = LocalUIDensityTokens.current
+    // 附件媒体类型：音频改内联语音条（不弹播放器），视频仍走应用内播放器（issue #91）。
+    val mediaKind = mediaKindOf(attachment.fileName, attachment.mimeType)
+    val isAudio = mediaKind == MediaKind.AUDIO
+    val isVideo = mediaKind == MediaKind.VIDEO
+    // 图片走内置全屏查看器；视频走应用内播放器；其余非图片交给调用方的「系统 app 打开」。
+    // 音频不再设整行 handler（不弹播放器），由下方内联语音条自处理点击。
+    val handler: (() -> Unit)? = when {
+        attachment.isImage -> ({ viewer.show(attachment.toViewerRequest()) })
+        isVideo -> ({ mediaViewer.show(attachment.toMediaRequest()) })
+        onClick != null -> ({ onClick(attachment) })
+        else -> null
     }
     val fallbackName = stringResource(R.string.common_file)
     val name = attachment.fileName.ifBlank { fallbackName }
-    // 读屏与长按提示用：图片是「预览」，其它是「打开」，两者落到的地方不一样。
-    val actionLabel = if (attachment.isImage) {
-        stringResource(R.string.chat_attachment_preview, name)
-    } else {
-        stringResource(R.string.chat_attachment_open, name)
+    // 读屏与长按提示用：图片是「预览」、音视频是「播放」、其余是「打开」，三者落到的地方不一样。
+    val actionLabel = when {
+        attachment.isImage -> stringResource(R.string.chat_attachment_preview, name)
+        isVideo -> stringResource(R.string.chat_attachment_play, name)
+        else -> stringResource(R.string.chat_attachment_open, name)
     }
     // 次要信息：大小 + 容器路径。路径对「AI 发过来的文件」是关键信息（能直接在终端/编辑器里找到），
     // 整行放不下时靠省略号截断，不换行。
@@ -108,13 +121,27 @@ private fun MessageAttachmentRow(
             .filter { it.isNotBlank() }
             .joinToString(" · ")
     }
+    if (isAudio) {
+        // 音频：内联语音条，替代原「缩略图 + 文件名 + 大小·路径」行，不再弹应用内播放器。
+        VoiceMessageBar(
+            file = remember(attachment.localPath) {
+                attachment.localPath.takeIf { it.isNotBlank() }?.let(::File)
+            },
+            title = name,
+            sizeText = formatBytes(attachment.sizeBytes),
+            pathText = attachment.containerPath.ifBlank { attachment.fileName },
+            containerColor = chatMutedSurfaceColor(),
+            cornerRadius = t.imageCorner
+        )
+        return
+    }
     Surface(
-        shape = RoundedCornerShape(Radius.md),
+        shape = RoundedCornerShape(t.imageCorner),
         color = chatMutedSurfaceColor(),
         modifier = Modifier
             .fillMaxWidth()
             // 先裁圆角再挂 clickable：涟漪才会被裁在圆角内，不会溢出成直角方块
-            .clip(RoundedCornerShape(Radius.md))
+            .clip(RoundedCornerShape(t.imageCorner))
             .then(
                 if (handler != null) {
                     Modifier.clickable(onClickLabel = actionLabel, onClick = handler)
@@ -162,8 +189,9 @@ private fun MessageAttachmentRow(
 
 @Composable
 private fun AttachmentThumb(attachment: AgentAttachment) {
+    val t = LocalUIDensityTokens.current
     Surface(
-        shape = RoundedCornerShape(Radius.sm),
+        shape = RoundedCornerShape(t.imageCorner / 2),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.size(AttachmentThumbSize)
     ) {
@@ -172,7 +200,7 @@ private fun AttachmentThumb(attachment: AgentAttachment) {
         } else {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Icon(
-                    FeatherIcons.FileText,
+                    attachmentFileIcon(attachment),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
@@ -281,6 +309,14 @@ internal suspend fun openSentAttachment(
         Toast.makeText(context, context.getString(R.string.chat_open_file_no_app), Toast.LENGTH_SHORT).show()
     }
 }
+
+/** 非图片附件的缩略图标：音视频按类型给 Music/Video，其余通用文件图标。 */
+private fun attachmentFileIcon(attachment: AgentAttachment): ImageVector =
+    when (mediaKindOf(attachment.fileName, attachment.mimeType)) {
+        MediaKind.AUDIO -> FeatherIcons.Music
+        MediaKind.VIDEO -> FeatherIcons.Video
+        null -> FeatherIcons.FileText
+    }
 
 /** 卡片记录的宿主路径失效（远程临时副本被清、文件被删或移动）时，退回容器路径重取。 */
 private suspend fun resolveLocalFile(attachment: AgentAttachment, fileAccess: FileAccessProvider): File? {

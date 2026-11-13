@@ -1,6 +1,7 @@
 package com.aiverse.feature.settings.data.remote
 
 import android.content.Context
+import com.aiverse.R
 import com.aiverse.core.net.AppProxy
 import com.aiverse.feature.settings.data.repository.buildDownloadUrl
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -92,7 +93,7 @@ class ApkDownloader @Inject constructor(
                 downloadChunked(candidate, dir, dest, fileName, expectedSize, expectedSha256, onProgress)
             }
             result.getOrNull()?.let { return@withContext ApkDownloadResult.Success(dest, it) }
-            lastError = result.exceptionOrNull()?.message.orEmpty().ifBlank { UNKNOWN_ERROR }
+            lastError = result.exceptionOrNull()?.message.orEmpty().ifBlank { context.getString(R.string.apk_download_failed) }
             // 换下一个地址前清掉半成品分片与目标文件，避免混用两个源的片
             File(dir, "$fileName.parts").deleteRecursively()
             dest.delete()
@@ -175,7 +176,7 @@ class ApkDownloader @Inject constructor(
                 val need = end - start + 1
                 val partFile = File(partsDir, "part-$index")
                 if (partFile.length() != need) {
-                    throw IOException("分片 $index 不完整（${partFile.length()}/$need）")
+                    throw IOException(context.getString(R.string.apk_chunk_incomplete, index, partFile.length(), need))
                 }
                 partFile.inputStream().use { input ->
                     while (true) {
@@ -189,14 +190,14 @@ class ApkDownloader @Inject constructor(
             }
         }
         if (merged != total) {
-            throw IOException("安装包大小不符（$merged/$total）")
+            throw IOException(context.getString(R.string.apk_size_mismatch, merged, total))
         }
         if (expectedSize > 0 && merged != expectedSize) {
-            throw IOException("安装包大小不符（$merged/$expectedSize）")
+            throw IOException(context.getString(R.string.apk_size_mismatch, merged, expectedSize))
         }
         val sha = digest.digest().joinToString("") { "%02x".format(it) }
         if (!expectedSha256.isNullOrBlank() && !sha.equals(expectedSha256, ignoreCase = true)) {
-            throw IOException("安装包摘要校验未通过")
+            throw IOException(context.getString(R.string.apk_checksum_failed))
         }
         partsDir.deleteRecursively()
         return sha
@@ -235,9 +236,9 @@ class ApkDownloader @Inject constructor(
             override fun onResponse(call: Call, response: Response) {
                 try {
                     if (response.code != HTTP_PARTIAL_CONTENT) {
-                        throw IOException("Range 下载失败 HTTP ${response.code}")
+                        throw IOException(context.getString(R.string.apk_range_download_failed, response.code))
                     }
-                    val body = response.body ?: throw IOException("响应体为空")
+                    val body = response.body ?: throw IOException(context.getString(R.string.apk_empty_body))
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     var written = 0L
                     // 节流窗口内累计字节（不是最后一块），避免漏报导致进度虚低/速度失真
@@ -262,7 +263,7 @@ class ApkDownloader @Inject constructor(
                     }
                     if (windowBytes > 0) onProgress(windowBytes)
                     if (written != need) {
-                        throw IOException("分片大小不符（$written/$need）")
+                        throw IOException(context.getString(R.string.apk_chunk_size_mismatch, written, need))
                     }
                     onProgress(0) // 收尾上报（不新增字节，只触发一次进度刷新）
                     cont.resume(Unit)
@@ -294,7 +295,7 @@ class ApkDownloader @Inject constructor(
             override fun onResponse(call: Call, response: Response) {
                 try {
                     if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                    val body = response.body ?: throw IOException("响应体为空")
+                    val body = response.body ?: throw IOException(context.getString(R.string.apk_empty_body))
                     // 服务器可能不给 Content-Length，退回 API 报的大小用于进度显示
                     val total = body.contentLength().takeIf { it > 0 } ?: expectedSize
                     val digest = MessageDigest.getInstance("SHA-256")
@@ -319,11 +320,11 @@ class ApkDownloader @Inject constructor(
                     }
                     onProgress(read, total)
                     if (expectedSize > 0 && read != expectedSize) {
-                        throw IOException("安装包大小不符（$read/$expectedSize）")
+                        throw IOException(context.getString(R.string.apk_size_mismatch, read, expectedSize))
                     }
                     val sha = digest.digest().joinToString("") { "%02x".format(it) }
                     if (!expectedSha256.isNullOrBlank() && !sha.equals(expectedSha256, ignoreCase = true)) {
-                        throw IOException("安装包摘要校验未通过")
+                        throw IOException(context.getString(R.string.apk_checksum_failed))
                     }
                     cont.resume(sha)
                 } catch (e: Exception) {
@@ -356,7 +357,6 @@ class ApkDownloader @Inject constructor(
         const val CONNECT_TIMEOUT_SECONDS = 15L
         const val READ_TIMEOUT_SECONDS = 30L
         const val PROGRESS_INTERVAL_MS = 100L
-        const val UNKNOWN_ERROR = "下载失败"
         /** 固定备选镜像（与设置里的镜像源无关，仅当直连也失败时使用）。 */
         const val V6_MIRROR = "https://v6.gh-proxy.org/"
     }

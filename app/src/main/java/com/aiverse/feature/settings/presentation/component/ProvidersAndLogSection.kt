@@ -106,7 +106,7 @@ internal fun ProvidersSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .padding(horizontal = Spacing.lg),
+                .padding(horizontal = Spacing.md),
             contentPadding = PaddingValues(top = Spacing.sm, bottom = Spacing.xl + selectionActionBarHeight()),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {

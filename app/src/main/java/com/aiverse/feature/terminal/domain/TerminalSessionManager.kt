@@ -1,5 +1,6 @@
 package com.aiverse.feature.terminal.domain
 
+import com.aiverse.R
 import android.content.Context
 import android.content.Intent
 import com.aiverse.core.util.FileLogger
@@ -307,7 +308,7 @@ class TerminalSessionManager @Inject constructor(
         val startedAt = System.currentTimeMillis()
         containerEngine.ensureInstalled()
         if (!containerEngine.isContainerInstalled()) {
-            throw IllegalStateException("容器未安装（缺少 rootfs/proot）")
+            throw IllegalStateException(appContext.getString(R.string.terminal_container_not_installed))
         }
         FileLogger.i(TAG, "容器就绪（耗时 ${System.currentTimeMillis() - startedAt}ms）")
     }

@@ -1,5 +1,6 @@
 package com.aiverse.core.tts
 
+import com.aiverse.R
 import android.content.Context
 import android.media.MediaPlayer
 import kotlinx.coroutines.CancellationException
@@ -51,7 +52,7 @@ class OnlineTtsEngine(private val context: Context) {
             try {
                 for (segment in segments) {
                     ensureActive()
-                    val bytes = fetchAudio(segment, config) ?: run { onError("请求失败（HTTP 非 200，检查接口地址/API Key/模型）"); return@launch }
+                    val bytes = fetchAudio(segment, config) ?: run { onError(context.getString(R.string.tts_http_failed)); return@launch }
                     ensureActive()
                     playMp3Await(bytes)
                 }
@@ -59,7 +60,7 @@ class OnlineTtsEngine(private val context: Context) {
             } catch (_: CancellationException) {
                 // stopped
             } catch (e: Exception) {
-                onError(e.message ?: "网络异常")
+                onError(e.message ?: context.getString(R.string.tts_network_error))
             } finally {
                 player?.let { runCatching { it.release() } }
                 player = null

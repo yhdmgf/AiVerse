@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.ChatBubbleStyle
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.isDynamicColorSupported
 import com.aiverse.core.theme.semanticColors
@@ -201,6 +202,8 @@ internal enum class SettingsSection(@param:StringRes val titleRes: Int) {
     Backup(R.string.settings_backup),
     About(R.string.settings_about),
     Appearance(R.string.settings_appearance),
+    AppearanceDensity(R.string.settings_appearance_density_title),
+    AppearanceCorner(R.string.settings_appearance_corner_title),
     Plugins(R.string.settings_plugins),
     Tts(R.string.settings_tts),
     PluginRepo(R.string.plugins_repo_title),
@@ -232,7 +235,9 @@ private fun SettingsSection.depth(): Int = when (this) {
     SettingsSection.ContainerDownloads,
     SettingsSection.Log,
     SettingsSection.PluginRepo,
-    SettingsSection.SearchProvider -> 2
+    SettingsSection.SearchProvider,
+    SettingsSection.AppearanceDensity,
+    SettingsSection.AppearanceCorner -> 2
     SettingsSection.SearchProviderDetail -> 3
     SettingsSection.PhoneControl -> 2
     SettingsSection.PhoneControlAccessibilityGrant,
@@ -320,7 +325,18 @@ fun SettingsScreen(
     val inputFontSizeSp by viewModel.inputFontSizeSp.collectAsStateWithLifecycle()
     val uiFontScale by viewModel.uiFontScale.collectAsStateWithLifecycle()
     val uiDensity by viewModel.uiDensity.collectAsStateWithLifecycle()
+    val cardCorner by viewModel.cardCorner.collectAsStateWithLifecycle()
+    val buttonCorner by viewModel.buttonCorner.collectAsStateWithLifecycle()
+    val fieldCorner by viewModel.fieldCorner.collectAsStateWithLifecycle()
+    val bubbleCorner by viewModel.bubbleCorner.collectAsStateWithLifecycle()
+    val imageCorner by viewModel.imageCorner.collectAsStateWithLifecycle()
     val fileTreeDisplayPrefs by viewModel.fileTreeDisplayPrefs.collectAsStateWithLifecycle()
+    val codeFontSizeSp by viewModel.codeFontSizeSp.collectAsStateWithLifecycle()
+    val codeWrapEnabled by viewModel.codeWrapEnabled.collectAsStateWithLifecycle()
+    val codeAutoFoldEnabled by viewModel.codeAutoFoldEnabled.collectAsStateWithLifecycle()
+    val codeShowLineNumber by viewModel.codeShowLineNumber.collectAsStateWithLifecycle()
+    val userBubbleOpacity by viewModel.userBubbleOpacity.collectAsStateWithLifecycle()
+    val assistantBubbleOpacity by viewModel.assistantBubbleOpacity.collectAsStateWithLifecycle()
     val inputBarPrefs by viewModel.inputBarPrefs.collectAsStateWithLifecycle()
     val defaultSkillInstallScope by viewModel.defaultSkillInstallScope.collectAsStateWithLifecycle()
     val languageTag by viewModel.languageTag.collectAsStateWithLifecycle()
@@ -330,6 +346,8 @@ fun SettingsScreen(
     val compactionModel by viewModel.compactionModel.collectAsStateWithLifecycle()
     val titleProviderId by viewModel.titleProviderId.collectAsStateWithLifecycle()
     val titleModel by viewModel.titleModel.collectAsStateWithLifecycle()
+    val optimizeProviderId by viewModel.optimizeProviderId.collectAsStateWithLifecycle()
+    val optimizeModel by viewModel.optimizeModel.collectAsStateWithLifecycle()
     val subagentTierSelections by viewModel.subagentTierSelections.collectAsStateWithLifecycle()
     val imageGenProviderId by viewModel.imageGenProviderId.collectAsStateWithLifecycle()
     val imageGenModel by viewModel.imageGenModel.collectAsStateWithLifecycle()
@@ -414,6 +432,7 @@ fun SettingsScreen(
                 "mcp" -> SettingsSection.Mcp
                 "phoneControl" -> SettingsSection.PhoneControl
                 "search_provider" -> SettingsSection.SearchProvider
+                "default_models" -> SettingsSection.DefaultModels
                 else -> SettingsSection.Menu
             }
         )
@@ -576,6 +595,8 @@ fun SettingsScreen(
         SettingsSection.PluginRepo -> SettingsSection.Plugins
         SettingsSection.SearchProviderDetail -> SettingsSection.SearchProvider
         SettingsSection.PhoneControl -> if (expanded) null else SettingsSection.Menu
+        SettingsSection.AppearanceDensity -> SettingsSection.Appearance
+        SettingsSection.AppearanceCorner -> SettingsSection.Appearance
         SettingsSection.PhoneControlAccessibilityGrant -> phoneControlGrantReturn
         SettingsSection.PhoneControlUnlock -> SettingsSection.PhoneControl
         SettingsSection.PhoneControlAppRules -> SettingsSection.PhoneControl
@@ -1183,6 +1204,12 @@ fun SettingsScreen(
                     uiFontScale = uiFontScale,
                     uiDensity = uiDensity,
                     fileTreePrefs = fileTreeDisplayPrefs,
+                    codeFontSizeSp = codeFontSizeSp,
+                    codeWrapEnabled = codeWrapEnabled,
+                    codeAutoFoldEnabled = codeAutoFoldEnabled,
+                    codeShowLineNumber = codeShowLineNumber,
+                    userBubbleOpacity = userBubbleOpacity,
+                    assistantBubbleOpacity = assistantBubbleOpacity,
                     onSetFileNameDisplay = { viewModel.setFileNameDisplay(it) },
                     onSetShowHiddenFiles = { viewModel.setShowHiddenFiles(it) },
                     onSetFileIndentDensity = { viewModel.setFileIndentDensity(it) },
@@ -1196,6 +1223,14 @@ fun SettingsScreen(
                     onSetInputFontSizeSp = { viewModel.setInputFontSizeSp(it) },
                     onSetUiFontScale = { viewModel.setUiFontScale(it) },
                     onSetUiDensity = { viewModel.setUiDensity(it) },
+                    onOpenDensity = { section = SettingsSection.AppearanceDensity },
+                    onOpenCorner = { section = SettingsSection.AppearanceCorner },
+                    onSetCodeFontSizeSp = { viewModel.setCodeFontSizeSp(it) },
+                    onSetCodeWrapEnabled = { viewModel.setCodeWrapEnabled(it) },
+                    onSetCodeAutoFoldEnabled = { viewModel.setCodeAutoFoldEnabled(it) },
+                    onSetCodeShowLineNumber = { viewModel.setCodeShowLineNumber(it) },
+                    onSetUserBubbleOpacity = { viewModel.setUserBubbleOpacity(it) },
+                    onSetAssistantBubbleOpacity = { viewModel.setAssistantBubbleOpacity(it) },
                     onRestoreDefaults = { viewModel.restoreAppearanceDefaults() },
                     onExportRequest = { exportRequest++ },
                     exportedThemeJson = exportedThemeJson,
@@ -1212,6 +1247,22 @@ fun SettingsScreen(
                     inputBarPrefs = inputBarPrefs,
                     onInputBarPrefsChange = { viewModel.updateInputBarPrefs(it) },
                     welcomeEntries = welcomeEntries
+                )
+                SettingsSection.AppearanceDensity -> DensitySettingsSection(
+                    uiDensity = uiDensity,
+                    onSetUiDensity = { viewModel.setUiDensity(it) }
+                )
+                SettingsSection.AppearanceCorner -> CornerRadiusSettingsSection(
+                    cardCorner = cardCorner,
+                    buttonCorner = buttonCorner,
+                    fieldCorner = fieldCorner,
+                    bubbleCorner = bubbleCorner,
+                    imageCorner = imageCorner,
+                    onSetCardCorner = { viewModel.setCardCorner(it) },
+                    onSetButtonCorner = { viewModel.setButtonCorner(it) },
+                    onSetFieldCorner = { viewModel.setFieldCorner(it) },
+                    onSetBubbleCorner = { viewModel.setBubbleCorner(it) },
+                    onSetImageCorner = { viewModel.setImageCorner(it) }
                 )
                 SettingsSection.Providers -> ProvidersSection(
                     providers = providers,
@@ -1235,6 +1286,8 @@ fun SettingsScreen(
                     compactionModel = compactionModel,
                     titleProviderId = titleProviderId,
                     titleModel = titleModel,
+                    optimizeProviderId = optimizeProviderId,
+                    optimizeModel = optimizeModel,
                     imageGenProviderId = imageGenProviderId,
                     imageGenModel = imageGenModel,
                     subagentTierSelections = subagentTierSelections,
@@ -1246,6 +1299,8 @@ fun SettingsScreen(
                     onClearCompactionModel = { viewModel.clearCompactionModel() },
                     onSelectTitleModel = { pid, m -> viewModel.setTitleModel(pid, m) },
                     onClearTitleModel = { viewModel.clearTitleModel() },
+                    onSelectOptimizeModel = { pid, m -> viewModel.setOptimizeInputModel(pid, m) },
+                    onClearOptimizeModel = { viewModel.clearOptimizeInputModel() },
                     onSelectImageGenModel = { pid, m -> viewModel.setImageGenModel(pid, m) },
                     onClearImageGenModel = { viewModel.clearImageGenModel() },
                     onSelectSubagentTierModel = { tier, pid, m -> viewModel.setSubagentTierModel(tier, pid, m) },
@@ -1285,7 +1340,9 @@ fun SettingsScreen(
                         viewModel.setSkillsEnabled(targets.map { it.name to it.scope }, enabled)
                     },
                     onBatchShare = { targets -> shareSkillEntries(targets) },
-                    onBatchExport = { targets -> exportSkillEntries(targets) }
+                    onBatchExport = { targets -> exportSkillEntries(targets) },
+                    defaultSkillInstallScope = defaultSkillInstallScope,
+                    onSetDefaultSkillInstallScope = { viewModel.setDefaultSkillInstallScope(it) }
                 )
                 SettingsSection.Prompts -> {
                     val promptsViewModel: com.aiverse.feature.settings.presentation.PromptsViewModel =
@@ -1295,8 +1352,6 @@ fun SettingsScreen(
                     PromptsSection(
                         state = promptsState,
                         selection = selectionFor(SettingsSection.Prompts),
-                        defaultSkillInstallScope = defaultSkillInstallScope,
-                        onSetDefaultSkillInstallScope = { viewModel.setDefaultSkillInstallScope(it) },
                         onOpenFragment = { fragment ->
                             selectionFor(SettingsSection.Prompts).exit()
                             selectedPrompt = fragment
@@ -2064,13 +2119,14 @@ internal fun SettingsMenu(
     onRerunOnboarding: () -> Unit,
     onOpen: (SettingsSection) -> Unit
 ) {
+    val t = LocalUIDensityTokens.current
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = Spacing.lg)
+            .padding(horizontal = Spacing.md)
             .padding(bottom = Spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        verticalArrangement = Arrangement.spacedBy(t.sm)
     ) {
         // ── 通用设置 ──
         SettingsGroupHeader(text = stringResource(R.string.settings_category_general))

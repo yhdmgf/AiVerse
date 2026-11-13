@@ -1,5 +1,6 @@
 package com.aiverse.feature.settings.presentation.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,8 +43,10 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.R
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
-import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalIconColorful
+import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.core.theme.glassOr
+import com.aiverse.core.theme.glassBorderOr
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Search
@@ -119,18 +122,21 @@ internal fun SettingsGroupHeader(text: String) {
     )
 }
 
-/** 白色/深色分组圆角卡片容器：内部按行排布，行间用 [SettingsDivider] 分隔。 */
+/** 白色/深色分组圆角卡片容器：内部按行排布，行间用 [SettingsDivider] 分隔。
+ *  磨砂铺开：背景改为半透明玻璃表面色 + 1dp 玻璃描边 + 轻阴影，圆角统一读密度 token。 */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val hyperOS = LocalHyperOSStyle.current
+    val t = LocalUIDensityTokens.current
+    val semantic = MaterialTheme.semanticColors
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(if (hyperOS) 22.dp else 14.dp),
-        color = MaterialTheme.semanticColors.cardSurface,
-        shadowElevation = 0.dp
+        shape = t.cardShape,
+        color = glassOr(semantic.surfaceGlass, semantic.cardSurface),
+        border = BorderStroke(1.dp, glassBorderOr(semantic.surfaceGlassBorder)),
+        shadowElevation = t.elevationSm
     ) {
         Column(content = content)
     }
@@ -141,6 +147,8 @@ internal fun SettingsGroup(
  *
  * 技能 / 子代理这类列表条目数不可控（项目里可能有上百个），必须走 LazyColumn 逐项虚拟化，
  * 只组合可见行；卡片外观靠这里的首尾圆角拼出来，视觉与 [SettingsGroup] 一致。
+ * 磨砂铺开：背景改为半透明玻璃表面色 + 1dp 玻璃描边（圆角跟随首尾 shape）。
+ * 保守取舍：不逐项加阴影（LazyColumn 分段卡片阴影会与分隔线叠加、绘制成本高）。
  */
 @Composable
 internal fun LazyGroupItem(
@@ -149,17 +157,20 @@ internal fun LazyGroupItem(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val t = LocalUIDensityTokens.current
+    val corner = t.cardCorner
     val shape = RoundedCornerShape(
-        topStart = if (index == 0) 14.dp else 0.dp,
-        topEnd = if (index == 0) 14.dp else 0.dp,
-        bottomStart = if (index == lastIndex) 14.dp else 0.dp,
-        bottomEnd = if (index == lastIndex) 14.dp else 0.dp
+        topStart = if (index == 0) corner else 0.dp,
+        topEnd = if (index == 0) corner else 0.dp,
+        bottomStart = if (index == lastIndex) corner else 0.dp,
+        bottomEnd = if (index == lastIndex) corner else 0.dp
     )
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(MaterialTheme.semanticColors.cardSurface)
+            .background(glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface))
+            .border(1.dp, glassBorderOr(MaterialTheme.semanticColors.surfaceGlassBorder), shape)
     ) {
         content()
         if (index != lastIndex) SettingsDivider()
@@ -298,9 +309,10 @@ internal fun ModelSearchField(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val isLight = settingsLightMode()
+    val t = LocalUIDensityTokens.current
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(t.rPill),
         color = MaterialTheme.semanticColors.capsuleSurface
     ) {
         Row(

@@ -1,6 +1,7 @@
 package com.aiverse.feature.settings.presentation.component
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,10 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,12 +41,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.R
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.AppTextField
+import com.aiverse.core.ui.BatchDeleteConfirmDialog
+import com.aiverse.core.ui.ListSelectionState
 import com.aiverse.feature.agent.domain.memory.Memory
 import com.aiverse.feature.agent.domain.memory.MemoryScope
 import com.aiverse.feature.settings.presentation.MemoryViewModel
 import compose.icons.FeatherIcons
+import compose.icons.feathericons.CheckSquare
+import compose.icons.feathericons.ChevronRight
+import compose.icons.feathericons.Edit2
 import compose.icons.feathericons.FileText
 import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Trash2
+import compose.icons.feathericons.X
 
 /** 编辑目标：null 表示新建，非 null 为编辑既有记忆。 */
 private data class MemoryEditorTarget(
@@ -59,12 +71,21 @@ internal fun MemorySection(viewModel: MemoryViewModel) {
     val context = LocalContext.current
     var editorTarget by remember { mutableStateOf<MemoryEditorTarget?>(null) }
     var deleteTarget by remember { mutableStateOf<Memory?>(null) }
+    // 多选模式状态：铅笔进入 / 退出，勾选行切换选中。
+    val selection = remember { ListSelectionState() }
+    var deleteSelectedConfirm by remember { mutableStateOf(false) }
+    val allMemories = remember(state.global, state.project) { state.global + state.project }
     val savedText = stringResource(R.string.memory_saved)
     val saveFailedText = stringResource(R.string.memory_save_failed)
     val deletedText = stringResource(R.string.memory_deleted)
     val deleteFailedText = stringResource(R.string.memory_delete_failed)
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+    // 多选模式返回键退出；数据刷新后剔除已失效的选中项（被删除/消失的记忆）。
+    BackHandler(enabled = selection.isActive) { selection.exit() }
+    LaunchedEffect(state.global, state.project) {
+        selection.retainOnly(allMemories.map { memoryKey(it) }.toSet())
+    }
 
     Column(
         modifier = Modifier
@@ -73,13 +94,12 @@ internal fun MemorySection(viewModel: MemoryViewModel) {
             .padding(horizontal = Spacing.lg)
             .padding(bottom = Spacing.xl)
     ) {
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.Plus,
-                title = stringResource(R.string.memory_add),
-                onClick = { editorTarget = MemoryEditorTarget(null) }
-            )
-        }
+        MemoryTopBar(
+            selection = selection,
+            allKeys = allMemories.map { memoryKey(it) },
+            onAddNew = { editorTarget = MemoryEditorTarget(null) },
+            onDeleteSelected = { deleteSelectedConfirm = true }
+        )
         Spacer(Modifier.height(Spacing.md))
         SettingsGroupHeader(text = stringResource(R.string.memory_global_title))
         SettingsGroup {
@@ -91,7 +111,9 @@ internal fun MemorySection(viewModel: MemoryViewModel) {
                     MemoryRow(
                         memory = memory,
                         badge = stringResource(R.string.memory_scope_global),
-                        onClick = { editorTarget = MemoryEditorTarget(memory) }
+                        onClick = { editorTarget = MemoryEditorTarget(memory) },
+                        selection = selection,
+                        selectionKey = memoryKey(memory)
                     )
                 }
             }
@@ -112,7 +134,9 @@ internal fun MemorySection(viewModel: MemoryViewModel) {
                     MemoryRow(
                         memory = memory,
                         badge = stringResource(R.string.memory_scope_project),
-                        onClick = { editorTarget = MemoryEditorTarget(memory) }
+                        onClick = { editorTarget = MemoryEditorTarget(memory) },
+                        selection = selection,
+                        selectionKey = memoryKey(memory)
                     )
                 }
             }
@@ -165,6 +189,26 @@ internal fun MemorySection(viewModel: MemoryViewModel) {
             }
         )
     }
+
+    if (deleteSelectedConfirm) {
+        val selectedMemories = allMemories.filter { selection.isSelected(memoryKey(it)) }
+        BatchDeleteConfirmDialog(
+            title = stringResource(R.string.memory_delete_selected_confirm_title),
+            message = stringResource(R.string.memory_delete_selected_confirm_message, selectedMemories.size),
+            onConfirm = {
+                deleteSelectedConfirm = false
+                viewModel.deleteMemories(selectedMemories) { ok ->
+                    selection.exit()
+                    Toast.makeText(
+                        context,
+                        if (ok) deletedText else deleteFailedText,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onDismiss = { deleteSelectedConfirm = false }
+        )
+    }
 }
 
 @Composable
@@ -183,28 +227,154 @@ private fun MemoryEmptyRow(text: String) {
     }
 }
 
+/**
+ * 记忆行：普通模式点击进编辑；多选模式（[selection] 非空）左侧出现勾选框，点击行切换选中。
+ */
 @Composable
-private fun MemoryRow(memory: Memory, badge: String, onClick: () -> Unit) {
-    SettingsRow(
-        icon = FeatherIcons.FileText,
-        title = memory.name,
-        subtitle = memory.description.takeIf { it.isNotBlank() },
-        onClick = onClick,
-        trailing = {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceVariant
+private fun MemoryRow(
+    memory: Memory,
+    badge: String,
+    onClick: () -> Unit,
+    selection: ListSelectionState? = null,
+    selectionKey: String? = null
+) {
+    if (selection == null || selectionKey == null) {
+        SettingsRow(
+            icon = FeatherIcons.FileText,
+            title = memory.name,
+            subtitle = memory.description.takeIf { it.isNotBlank() },
+            onClick = onClick,
+            trailing = { MemoryBadge(badge) }
+        )
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { selection.toggle(selectionKey) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = selection.isSelected(selectionKey),
+                onCheckedChange = { selection.toggle(selectionKey) }
+            )
+            SettingsRow(
+                icon = FeatherIcons.FileText,
+                title = memory.name,
+                subtitle = memory.description.takeIf { it.isNotBlank() },
+                onClick = null,
+                trailing = { MemoryBadge(badge) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemoryBadge(badge: String) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            text = badge,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+    }
+}
+
+/**
+ * 记忆页顶部操作栏：
+ * - 普通模式：左上角铅笔进入多选；右上角箭头（新建并展开）+ 加号（新建记忆）。
+ * - 多选模式：左侧显示已选数量，右侧为全选 / 删除 / 取消退出。
+ */
+@Composable
+private fun MemoryTopBar(
+    selection: ListSelectionState,
+    allKeys: List<String>,
+    onAddNew: () -> Unit,
+    onDeleteSelected: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (!selection.isActive) {
+            IconButton(onClick = { selection.enter() }) {
+                Icon(
+                    imageVector = FeatherIcons.Edit2,
+                    contentDescription = stringResource(R.string.common_select_mode),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onAddNew) {
+                Icon(
+                    imageVector = FeatherIcons.ChevronRight,
+                    contentDescription = stringResource(R.string.memory_add_expand),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            IconButton(onClick = onAddNew) {
+                Icon(
+                    imageVector = FeatherIcons.Plus,
+                    contentDescription = stringResource(R.string.memory_add),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        } else {
+            val allSelected = allKeys.isNotEmpty() && selection.selectedCount == allKeys.size
+            Text(
+                text = stringResource(R.string.common_selected_count, selection.selectedCount),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    if (allSelected) selection.clear() else selection.replaceAll(allKeys)
+                }
             ) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                Icon(
+                    imageVector = FeatherIcons.CheckSquare,
+                    contentDescription = stringResource(
+                        if (allSelected) R.string.common_deselect_all else R.string.common_select_all
+                    ),
+                    tint = if (allSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            IconButton(
+                onClick = onDeleteSelected,
+                enabled = selection.selectedCount > 0
+            ) {
+                Icon(
+                    imageVector = FeatherIcons.Trash2,
+                    contentDescription = stringResource(R.string.common_delete),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            IconButton(onClick = { selection.exit() }) {
+                Icon(
+                    imageVector = FeatherIcons.X,
+                    contentDescription = stringResource(R.string.common_cancel),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
-    )
+    }
 }
+
+/** 记忆的唯一多选键：同一作用域内名称唯一（对应文件名），组合避免全局/项目同名冲突。 */
+private fun memoryKey(memory: Memory): String = "${memory.scope.name}::${memory.name}"
 
 @Composable
 private fun MemoryEditorDialog(

@@ -394,6 +394,22 @@ class AIAgentViewModel @Inject constructor(
         editor.apply()
     }
 
+    /**
+     * 「优化输入」：把当前输入框草稿交给模型润色后回填（空草稿不发请求，失败保留原文本）。
+     * 配置了优化输入专用模型则用之，否则跟随当前聊天模型（见 AgentWorkflow.optimizeInput）。
+     */
+    fun optimizeInput() {
+        val id = _currentSessionId.value ?: return
+        val text = inputDraft.value
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            val optimized = agentWorkflow.optimizeInput(id, text)
+            if (!optimized.isNullOrBlank()) {
+                updateInputDraft(optimized)
+            }
+        }
+    }
+
     fun clearInputDraft() {
         val id = _currentSessionId.value ?: return
         _inputDrafts.value = _inputDrafts.value - id
@@ -2001,7 +2017,7 @@ class AIAgentViewModel @Inject constructor(
      */
     private fun enqueueSubAgentNotification(event: SubAgentEvent) {
         viewModelScope.launch {
-            val title = sessionUseCase.getSessionById(event.subSessionId)?.title ?: "子代理"
+            val title = sessionUseCase.getSessionById(event.subSessionId)?.title ?: context.getString(R.string.chat_subagent_title)
             // 摘要只在正常完成时提炼：失败/终止带的是错误原因（detail），再抽正文只会误导。
             // 读整段消息 + 解析 toolArgs 放 IO 线程：长会话的子代理消息量大，不该占主线程。
             val digest = if (event.type == SubAgentEventType.COMPLETED) {
@@ -2044,7 +2060,7 @@ class AIAgentViewModel @Inject constructor(
      * 与 [notifyParentSubAgentFinished] 同分发逻辑，方向相反。
      */
     private suspend fun deliverMessageToSubAgent(event: SubAgentEvent) {
-        val senderTitle = sessionUseCase.getSessionById(event.parentSessionId)?.title ?: "主会话"
+        val senderTitle = sessionUseCase.getSessionById(event.parentSessionId)?.title ?: context.getString(R.string.chat_main_session_title)
         deliverAgentMessage(
             recipientSessionId = event.subSessionId,
             senderSessionId = event.parentSessionId,
@@ -2056,7 +2072,7 @@ class AIAgentViewModel @Inject constructor(
 
     /** 子代理发给主会话的消息：同上，收件人为主会话。 */
     private suspend fun deliverMessageToParent(event: SubAgentEvent) {
-        val senderTitle = sessionUseCase.getSessionById(event.subSessionId)?.title ?: "子代理"
+        val senderTitle = sessionUseCase.getSessionById(event.subSessionId)?.title ?: context.getString(R.string.chat_subagent_title)
         deliverAgentMessage(
             recipientSessionId = event.parentSessionId,
             senderSessionId = event.subSessionId,
@@ -2076,7 +2092,7 @@ class AIAgentViewModel @Inject constructor(
             FileLogger.w("AIAgentViewModel", "peer 消息缺少目标 id，丢弃: from=${event.subSessionId} seq=${event.seq}")
             return
         }
-        val senderTitle = sessionUseCase.getSessionById(event.subSessionId)?.title ?: "专家"
+        val senderTitle = sessionUseCase.getSessionById(event.subSessionId)?.title ?: context.getString(R.string.chat_expert_title)
         deliverAgentMessage(
             recipientSessionId = target,
             senderSessionId = event.subSessionId,
@@ -2096,14 +2112,14 @@ class AIAgentViewModel @Inject constructor(
     private suspend fun notifyParentPeerSent(event: SubAgentEvent, senderTitle: String) {
         val parentId = event.parentSessionId
         if (parentId.isBlank()) return
-        val peerTitle = sessionUseCase.getSessionById(event.targetSubSessionId)?.title ?: "专家"
+        val peerTitle = sessionUseCase.getSessionById(event.targetSubSessionId)?.title ?: context.getString(R.string.chat_expert_title)
         val now = System.currentTimeMillis()
         agentMessageDao.insert(
             AgentMessageEntity(
                 id = UUID.randomUUID().toString(),
                 sessionId = parentId,
                 role = MessageRole.USER.name,
-                content = "$BACKGROUND_NOTIFICATION_PREFIX [专家对等通知] $senderTitle 已向 $peerTitle 直接发送消息（序号 ${event.seq}）：${event.detail.take(200)}。仅知情，无需转发或重复发送。",
+                content = "$BACKGROUND_NOTIFICATION_PREFIX" + context.getString(R.string.chat_peer_notice_content, senderTitle, peerTitle, event.seq, event.detail.take(200)),
                 timestamp = now
             )
         )
@@ -2971,7 +2987,7 @@ class AIAgentViewModel @Inject constructor(
                         subSessionId = sessionId,
                         title = sub.title,
                         outcome = NotificationOutcome.STOPPED,
-                        detail = "用户在界面上手动停止了这个子代理，任务未完成。"
+                        detail = context.getString(R.string.chat_subagent_stopped_detail)
                     )
                 }
             }
@@ -3238,13 +3254,13 @@ class AIAgentViewModel @Inject constructor(
             val today = loadUsageSummary(todayStart)
             val allTime = loadUsageSummary(0L)
             val table = buildString {
-                appendLine("| 项目 | 今日 | 累计 |")
+                appendLine(context.getString(R.string.chat_usage_header))
                 appendLine("|---|---|---|")
-                appendLine("| 调用次数 | ${today.calls} | ${allTime.calls} |")
-                appendLine("| 输入 tokens | ${formatTokenCount(today.inputTokens)} | ${formatTokenCount(allTime.inputTokens)} |")
-                appendLine("| 输出 tokens | ${formatTokenCount(today.outputTokens)} | ${formatTokenCount(allTime.outputTokens)} |")
-                appendLine("| 缓存命中 tokens | ${formatTokenCount(today.cachedInputTokens)} | ${formatTokenCount(allTime.cachedInputTokens)} |")
-                appendLine("| 预估费用 | ${formatCostUsd(today.costUsd)} | ${formatCostUsd(allTime.costUsd)} |")
+                appendLine(context.getString(R.string.chat_usage_calls, today.calls, allTime.calls))
+                appendLine(context.getString(R.string.chat_usage_input_tokens, formatTokenCount(today.inputTokens), formatTokenCount(allTime.inputTokens)))
+                appendLine(context.getString(R.string.chat_usage_output_tokens, formatTokenCount(today.outputTokens), formatTokenCount(allTime.outputTokens)))
+                appendLine(context.getString(R.string.chat_usage_cache_tokens, formatTokenCount(today.cachedInputTokens), formatTokenCount(allTime.cachedInputTokens)))
+                appendLine(context.getString(R.string.chat_usage_cost, formatCostUsd(today.costUsd), formatCostUsd(allTime.costUsd)))
             }
             sessionUseCase.touch(sid, messagePersistenceUseCase.nextTimestamp())
             messagePersistenceUseCase.persist(sid, MessageRole.ASSISTANT, table.trimEnd(), isContextExcluded = true)
@@ -3281,18 +3297,18 @@ class AIAgentViewModel @Inject constructor(
 
     private fun goalSummary(session: ChatSessionEntity): String {
         val goal = session.goal?.takeIf { it.isNotBlank() }
-            ?: return "当前会话未设定目标。用 `/goal <目标>` 设定后，AI 会自主循环推进直到达成、受阻或预算耗尽。"
+            ?: return context.getString(R.string.chat_goal_no_goal)
         val status = session.goalStatus
             ?.let { runCatching { GoalStatus.valueOf(it) }.getOrNull() }
             ?: GoalStatus.ACTIVE
         val statusLabel = when (status) {
-            GoalStatus.ACTIVE -> "进行中"
-            GoalStatus.PAUSED -> "已暂停"
-            GoalStatus.COMPLETED -> "已完成"
-            GoalStatus.BLOCKED -> "受阻"
-            GoalStatus.EXHAUSTED -> "预算耗尽"
+            GoalStatus.ACTIVE -> context.getString(R.string.chat_goal_status_active)
+            GoalStatus.PAUSED -> context.getString(R.string.chat_goal_status_paused)
+            GoalStatus.COMPLETED -> context.getString(R.string.chat_goal_status_completed)
+            GoalStatus.BLOCKED -> context.getString(R.string.chat_goal_status_blocked)
+            GoalStatus.EXHAUSTED -> context.getString(R.string.chat_goal_status_exhausted)
         }
-        return "当前目标（$statusLabel，已续跑 ${session.goalTurnCount} 轮）：\n$goal"
+        return context.getString(R.string.chat_goal_current, statusLabel, session.goalTurnCount, goal)
     }
 
     private suspend fun setGoalText(sid: String, session: ChatSessionEntity, text: String) {
@@ -3306,8 +3322,7 @@ class AIAgentViewModel @Inject constructor(
         }
         persistGoalNotice(
             sid,
-            "已设定目标：$goalText\nAI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、受阻或预算耗尽。" +
-                "可随时 `/goal pause` / `/goal resume` / `/goal clear`。"
+            context.getString(R.string.chat_goal_set, goalText)
         )
         enqueueGoalTurn(sid, session.workspacePath, buildGoalPrompt(goalText, 1))
     }
@@ -3315,28 +3330,28 @@ class AIAgentViewModel @Inject constructor(
     private suspend fun clearGoal(sid: String) {
         goalEmptyTurnCounts.remove(sid)
         sessionUseCase.setGoal(sid, null, 0, 0)
-        persistGoalNotice(sid, "已清除当前目标。")
+        persistGoalNotice(sid, context.getString(R.string.chat_goal_cleared))
     }
 
     private suspend fun pauseGoal(sid: String) {
         val session = sessionUseCase.getSessionById(sid) ?: return
         if (session.goal.isNullOrBlank()) {
-            persistGoalNotice(sid, "当前会话未设定目标。")
+            persistGoalNotice(sid, context.getString(R.string.chat_goal_none))
             return
         }
         sessionUseCase.updateGoalStatus(sid, GoalStatus.PAUSED)
-        persistGoalNotice(sid, "目标已暂停。用 `/goal resume` 继续。")
+        persistGoalNotice(sid, context.getString(R.string.chat_goal_paused))
     }
 
     private suspend fun resumeGoal(sid: String) {
         val session = sessionUseCase.getSessionById(sid) ?: return
         val goal = session.goal?.takeIf { it.isNotBlank() }
         if (goal == null) {
-            persistGoalNotice(sid, "当前会话未设定目标。")
+            persistGoalNotice(sid, context.getString(R.string.chat_goal_none))
             return
         }
         sessionUseCase.updateGoalStatus(sid, GoalStatus.ACTIVE)
-        persistGoalNotice(sid, "目标已恢复，继续自主循环。")
+        persistGoalNotice(sid, context.getString(R.string.chat_goal_resumed))
         enqueueGoalTurn(sid, session.workspacePath, buildGoalPrompt(goal, session.goalTurnCount + 1))
     }
 
@@ -3361,7 +3376,7 @@ class AIAgentViewModel @Inject constructor(
                     sessionUseCase.updateGoalStatus(sessionId, GoalStatus.BLOCKED)
                     persistGoalNotice(
                         sessionId,
-                        "目标自主循环连续 $MAX_GOAL_EMPTY_TURNS 轮无进展，已置为「受阻」并停止。可 `/goal resume` 继续或 `/goal clear` 清除。"
+                        context.getString(R.string.chat_goal_blocked_empty, MAX_GOAL_EMPTY_TURNS)
                     )
                     return
                 }
@@ -3376,8 +3391,7 @@ class AIAgentViewModel @Inject constructor(
             sessionUseCase.updateGoalStatus(sessionId, GoalStatus.EXHAUSTED)
             persistGoalNotice(
                 sessionId,
-                "目标自主循环已达预算上限（轮次上限 $maxTurns 轮 / token 预算 $maxTokens），已停止。" +
-                    "可 `/goal resume` 继续或 `/goal clear` 清除。"
+                context.getString(R.string.chat_goal_budget_exhausted, maxTurns, maxTokens)
             )
             return
         }
@@ -3577,7 +3591,7 @@ class AIAgentViewModel @Inject constructor(
                 subSessionId = sub.id,
                 title = sub.title,
                 outcome = NotificationOutcome.STOPPED,
-                detail = "用户删除了这个子代理会话，任务未完成，其对话记录已不可读取。"
+                detail = context.getString(R.string.chat_subagent_deleted_detail)
             )
         }
     }

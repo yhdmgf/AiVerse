@@ -54,6 +54,8 @@ data class UIDensityTokens(
     val fieldCorner: Dp,
     val bubbleCorner: Dp,
     val chipCorner: Dp,
+    /** 图片/附件圆角（dp）：独立于卡片/按钮/输入框，默认 12dp。 */
+    val imageCorner: Dp,
     /** M3 标准触控目标（48dp）按密度缩放，用作按钮/列表项基准高度。 */
     val touchTarget: Dp,
     /** 输入类控件（文本框/下拉）基准高度。 */
@@ -65,7 +67,16 @@ data class UIDensityTokens(
     /** 设置页列表 cell 行内垂直内边距（基准 11dp，对齐普通 SettingsRow）。 */
     val listCellPaddingVertical: Dp,
     /** 设置页列表 cell 卡片间距（基准 8dp）。 */
-    val listCellGap: Dp
+    val listCellGap: Dp,
+    /** 阴影档（按密度缩放）：小（胶囊/卡片浮起）、中（主要悬浮栏/抽屉）。 */
+    val elevationSm: Dp,
+    val elevationMd: Dp,
+    /** 阴影环境光 / 点光默认不透明度（浅色基准）。 */
+    val ambientAlpha: Float,
+    val spotAlpha: Float,
+    /** 阴影环境光 / 点光默认不透明度（深色基准，阴影更深）。 */
+    val ambientAlphaDark: Float,
+    val spotAlphaDark: Float
 ) {
     /** 按语义取卡片圆角 Shape。 */
     val cardShape get() = RoundedCornerShape(cardCorner)
@@ -96,7 +107,14 @@ data class UIDensityTokens(
         val Standard = forDensity(UIDensity.STANDARD)
 
         /** 按密度档换算全部令牌。 */
-        fun forDensity(density: UIDensity): UIDensityTokens {
+        fun forDensity(
+            density: UIDensity,
+            cardCornerOverride: Int? = null,
+            buttonCornerOverride: Int? = null,
+            fieldCornerOverride: Int? = null,
+            bubbleCornerOverride: Int? = null,
+            imageCornerOverride: Int? = null
+        ): UIDensityTokens {
             val s = density.scale
             return UIDensityTokens(
                 density = density,
@@ -112,17 +130,24 @@ data class UIDensityTokens(
                 rMdLarge = (Radius.mdLarge.value * s).dp,
                 rLg = (Radius.lg.value * s).dp,
                 rXl = (Radius.xl.value * s).dp,
-                cardCorner = (12 * s).dp,
-                buttonCorner = (10 * s).dp,
-                fieldCorner = (Radius.mdLarge.value * s).dp,
-                bubbleCorner = (18 * s).dp,
+                cardCorner = ((cardCornerOverride ?: 12) * s).dp,
+                buttonCorner = ((buttonCornerOverride ?: 10) * s).dp,
+                fieldCorner = ((fieldCornerOverride ?: Radius.mdLarge.value.toInt()) * s).dp,
+                bubbleCorner = ((bubbleCornerOverride ?: 10) * s).dp,
                 chipCorner = (8 * s).dp,
+                imageCorner = ((imageCornerOverride ?: 12) * s).dp,
                 touchTarget = (48 * s).dp,
                 fieldHeight = (52 * s).dp,
                 chipHeight = (32 * s).dp,
                 tabBarHeight = (68 * s).dp,
-                listCellPaddingVertical = (11 * s).dp,
-                listCellGap = (8 * s).dp
+                listCellPaddingVertical = 8.dp,
+                listCellGap = (8 * s).dp,
+                elevationSm = (3 * s).dp,
+                elevationMd = (8 * s).dp,
+                ambientAlpha = 0.08f,
+                spotAlpha = 0.14f,
+                ambientAlphaDark = 0.35f,
+                spotAlphaDark = 0.50f
             )
         }
     }

@@ -79,18 +79,30 @@ data class AIProviderConfig(
         get() = keySwitchStatusCodes.filter { it in 100..599 }.toSet()
             .ifEmpty { DEFAULT_KEY_SWITCH_STATUS_CODES }
 
-    /** 拉取模型列表 / 连通性测试等无会话上下文的请求用第一个可用 Key。 */
-    val firstUsableApiKey: String get() = effectiveApiKeys.firstOrNull()?.value ?: ""
+    /** 拉取模型列表 / 连通性测试 / 余额查询等无会话上下文的请求用第一个可用 Key。
+     *  多 Key 模式下优先取「参与调度」（权重 > 0）的 Key，跳过已被停用的，与调度器 ProviderKeyRotator.pick() 的 `weight > 0` 过滤一致（issue #88）；
+     *  全部被停用时才回退到列表首个（保持总能给出一个 Key，不因误设全 0 而拿空）。
+     *  单 Key 模式退回单 [apiKey]，行为不变。 */
+    val firstUsableApiKey: String
+        get() {
+            val candidates = effectiveApiKeys
+            if (multiKeyEnabled) {
+                candidates.firstOrNull { it.weight > 0 }?.let { return it.value }
+            }
+            return candidates.firstOrNull()?.value ?: ""
+        }
 }
 
 /**
- * 多 Key 模式下的一条候选 Key：值 + 调度权重。
+ * 多 Key 模式下的一条候选 Key：值 + 调度权重 + 可选自定义名称。
  *
  * [weight] 参与轮询调度：越大被分到的新会话越多；≤ 0 表示该 Key 暂不参与调度（保留但不选用）。
+ * [name] 用户自定义名称，空时界面回退显示「密钥 #N」；编码时过滤 `|` 与换行，保证三段存储不被破坏。
  */
 data class ProviderKey(
     val value: String,
-    val weight: Int = DEFAULT_KEY_WEIGHT
+    val weight: Int = DEFAULT_KEY_WEIGHT,
+    val name: String = ""
 )
 
 /** 调度权重默认值与上限。 */
@@ -113,7 +125,13 @@ fun AIProviderConfig.sanitized(): AIProviderConfig = copy(
     name = name.stripLineBreaks(),
     apiKey = apiKey.stripAllWhitespace(),
     apiKeys = apiKeys
-        .map { it.copy(value = it.value.stripAllWhitespace(), weight = it.weight.coerceIn(0, MAX_KEY_WEIGHT)) }
+        .map {
+            it.copy(
+                value = it.value.stripAllWhitespace(),
+                weight = it.weight.coerceIn(0, MAX_KEY_WEIGHT),
+                name = it.name.filterNot { c -> c == '|' || c == '\n' || c == '\r' }.trim()
+            )
+        }
         .filter { it.value.isNotEmpty() }
         .distinctBy { it.value },
     keySwitchStatusCodes = keySwitchStatusCodes.filter { it in 100..599 }.distinct(),

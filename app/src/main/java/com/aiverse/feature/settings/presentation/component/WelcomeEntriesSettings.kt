@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,22 +70,46 @@ import com.aiverse.feature.settings.domain.model.WelcomeEntryAction
 import com.aiverse.feature.settings.domain.model.WelcomeIconKind
 import com.aiverse.feature.settings.domain.model.VECTOR_ICON_ALERT_CIRCLE
 import com.aiverse.feature.settings.domain.model.VECTOR_ICON_CODE
+import com.aiverse.feature.settings.domain.model.VECTOR_ICON_DEFAULT
 import com.aiverse.feature.settings.domain.model.VECTOR_ICON_GIT_BRANCH
 import com.aiverse.feature.settings.domain.model.VECTOR_ICON_TERMINAL
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.AlertCircle
+import compose.icons.feathericons.Bookmark
+import compose.icons.feathericons.Calendar
 import compose.icons.feathericons.ChevronDown
 import compose.icons.feathericons.ChevronUp
+import compose.icons.feathericons.Clock
 import compose.icons.feathericons.Code
+import compose.icons.feathericons.Cpu
+import compose.icons.feathericons.Database
+import compose.icons.feathericons.Edit
+import compose.icons.feathericons.FileText
+import compose.icons.feathericons.Folder
 import compose.icons.feathericons.GitBranch
+import compose.icons.feathericons.Globe
+import compose.icons.feathericons.Layers
 import compose.icons.feathericons.MessageCircle
+import compose.icons.feathericons.MessageSquare
 import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Search
+import compose.icons.feathericons.Settings
+import compose.icons.feathericons.Share
+import compose.icons.feathericons.Star
+import compose.icons.feathericons.Tag
+import compose.icons.feathericons.Target
 import compose.icons.feathericons.Terminal
+import compose.icons.feathericons.Tool
 import compose.icons.feathericons.Upload
+import compose.icons.feathericons.User
+import compose.icons.feathericons.Zap
 import java.util.UUID
 
 /** 欢迎卡片（新对话入口）数量上限，与仓库侧保持一致（仓库私有常量）。 */
 internal const val WELCOME_ENTRIES_MAX = 6
+
+/** 矢量图标选择网格每行列数（图标槽位数量），保证排布整齐。 */
+private const val WELCOME_ICON_GRID_COLUMNS = 5
 
 /** 点击后行为 -> 分段控件标签资源。 */
 internal fun WelcomeEntryAction.labelRes(): Int = when (this) {
@@ -96,10 +118,36 @@ internal fun WelcomeEntryAction.labelRes(): Int = when (this) {
     WelcomeEntryAction.FILL_PROMPT -> R.string.settings_welcome_entry_action_fill
 }
 
-/** 常用 emoji 候选（图标选择弹层的 Emoji 网格）。 */
-private val WELCOME_ICON_EMOJIS = listOf(
-    "📝", "💻", "🐛", "🎨", "🌐", "⚙️", "📁", "🔍",
-    "✅", "🚀", "💡", "🧩", "🖥️", "🐙", "📊", "🔧"
+/**
+ * 可选矢量图标（Feather）简单名列表：图标选择弹层的矢量网格。
+ * 均为 compose.icons.feathericons.* 既有图标；预置入口的图标名也在其中。
+ */
+private val WELCOME_VECTOR_ICONS = listOf(
+    VECTOR_ICON_TERMINAL,
+    VECTOR_ICON_GIT_BRANCH,
+    VECTOR_ICON_CODE,
+    VECTOR_ICON_ALERT_CIRCLE,
+    VECTOR_ICON_DEFAULT,
+    "Search",
+    "FileText",
+    "Folder",
+    "Settings",
+    "Zap",
+    "Bookmark",
+    "Target",
+    "Cpu",
+    "Database",
+    "Tool",
+    "Globe",
+    "MessageSquare",
+    "Edit",
+    "Calendar",
+    "Clock",
+    "Star",
+    "User",
+    "Tag",
+    "Share",
+    "Layers"
 )
 
 /**
@@ -362,6 +410,27 @@ internal fun welcomeEntryVectorIcon(name: String): ImageVector = when (name) {
     VECTOR_ICON_GIT_BRANCH -> FeatherIcons.GitBranch
     VECTOR_ICON_CODE -> FeatherIcons.Code
     VECTOR_ICON_ALERT_CIRCLE -> FeatherIcons.AlertCircle
+    VECTOR_ICON_DEFAULT -> FeatherIcons.MessageCircle
+    "Search" -> FeatherIcons.Search
+    "FileText" -> FeatherIcons.FileText
+    "Folder" -> FeatherIcons.Folder
+    "Settings" -> FeatherIcons.Settings
+    "Zap" -> FeatherIcons.Zap
+    "Bookmark" -> FeatherIcons.Bookmark
+    "Target" -> FeatherIcons.Target
+    "Cpu" -> FeatherIcons.Cpu
+    "Database" -> FeatherIcons.Database
+    "Tool" -> FeatherIcons.Tool
+    "Globe" -> FeatherIcons.Globe
+    "MessageSquare" -> FeatherIcons.MessageSquare
+    "Edit" -> FeatherIcons.Edit
+    "Calendar" -> FeatherIcons.Calendar
+    "Clock" -> FeatherIcons.Clock
+    "Star" -> FeatherIcons.Star
+    "User" -> FeatherIcons.User
+    "Tag" -> FeatherIcons.Tag
+    "Share" -> FeatherIcons.Share
+    "Layers" -> FeatherIcons.Layers
     else -> FeatherIcons.MessageCircle
 }
 
@@ -384,8 +453,8 @@ internal fun WelcomeEntryEditSheet(
     var subtitle by remember { mutableStateOf(initial?.subtitle ?: "") }
     var action by remember { mutableStateOf(initial?.action ?: WelcomeEntryAction.FILL_PROMPT) }
     var promptText by remember { mutableStateOf(initial?.promptText ?: "") }
-    var iconKind by remember { mutableStateOf(initial?.iconKind ?: WelcomeIconKind.EMOJI) }
-    var iconValue by remember { mutableStateOf(initial?.iconValue ?: "") }
+    var iconKind by remember { mutableStateOf(initial?.iconKind ?: WelcomeIconKind.VECTOR) }
+    var iconValue by remember { mutableStateOf(initial?.iconValue ?: VECTOR_ICON_DEFAULT) }
     var showIconPicker by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var titleError by remember { mutableStateOf(false) }
@@ -618,7 +687,7 @@ private fun WelcomeEntryPreviewCard(
 }
 
 /**
- * 图标选择弹层：Emoji（网格 + 自定义 ≤2 字符）/ 文字（≤3 字）/ 上传图片（保存到本地路径）。
+ * 图标选择弹层：矢量图标（Feather 网格）/ 文字（≤3 字）/ 上传图片（保存到本地路径）。
  * 点「完成」回传所选 [WelcomeIconKind] 与值。
  *
  * @param initialKind 当前图标类型（决定初始分段）。
@@ -636,14 +705,15 @@ internal fun WelcomeIconPickerSheet(
     onDismiss: () -> Unit
 ) {
     val initialTab = when (initialKind) {
-        // VECTOR 仅供预置项使用，不进图标选择弹层；此处仅为编译兜底。
+        // EMOJI 为旧数据兼容，加载时已迁移为 VECTOR，此处并入矢量分段兜底。
         WelcomeIconKind.VECTOR, WelcomeIconKind.EMOJI -> 0
         WelcomeIconKind.TEXT -> 1
         WelcomeIconKind.IMAGE -> 2
     }
     var selectedTab by remember { mutableIntStateOf(initialTab) }
-    var emoji by remember { mutableStateOf(if (initialKind == WelcomeIconKind.EMOJI) initialValue else "") }
-    var customEmoji by remember { mutableStateOf("") }
+    var vectorIcon by remember {
+        mutableStateOf(if (initialKind == WelcomeIconKind.VECTOR) initialValue.ifBlank { VECTOR_ICON_DEFAULT } else "")
+    }
     var text by remember { mutableStateOf(if (initialKind == WelcomeIconKind.TEXT) initialValue else "") }
     var imagePath by remember { mutableStateOf(if (initialKind == WelcomeIconKind.IMAGE) initialValue else "") }
     var uploading by remember { mutableStateOf(false) }
@@ -671,7 +741,7 @@ internal fun WelcomeIconPickerSheet(
 
     // 「完成」是否可用：当前分段下已有合法选择（上传中或为空时禁用）。
     val canDone = when (selectedTab) {
-        0 -> emoji.isNotBlank() || customEmoji.isNotBlank()
+        0 -> vectorIcon.isNotBlank()
         1 -> text.isNotBlank()
         else -> imagePath.isNotBlank() && !uploading
     }
@@ -698,7 +768,7 @@ internal fun WelcomeIconPickerSheet(
             SegmentedTabs(
                 selected = selectedTab,
                 labels = listOf(
-                    stringResource(R.string.settings_welcome_icon_emoji),
+                    stringResource(R.string.settings_welcome_icon_vector),
                     stringResource(R.string.settings_welcome_icon_text),
                     stringResource(R.string.settings_welcome_icon_image)
                 ),
@@ -706,19 +776,9 @@ internal fun WelcomeIconPickerSheet(
             )
 
             when (selectedTab) {
-                0 -> EmojiPickerSection(
-                    selected = emoji,
-                    custom = customEmoji,
-                    onSelect = {
-                        emoji = it
-                        customEmoji = ""
-                    },
-                    onCustomChange = {
-                        if (it.length <= 2) {
-                            customEmoji = it
-                            emoji = ""
-                        }
-                    }
+                0 -> VectorIconPickerSection(
+                    selected = vectorIcon,
+                    onSelect = { vectorIcon = it }
                 )
                 1 -> AppTextField(
                     value = text,
@@ -742,7 +802,7 @@ internal fun WelcomeIconPickerSheet(
             Button(
                 onClick = {
                     val (kind, value) = when (selectedTab) {
-                        0 -> WelcomeIconKind.EMOJI to (if (emoji.isNotBlank()) emoji else customEmoji)
+                        0 -> WelcomeIconKind.VECTOR to vectorIcon
                         1 -> WelcomeIconKind.TEXT to text
                         else -> WelcomeIconKind.IMAGE to imagePath
                     }
@@ -757,63 +817,59 @@ internal fun WelcomeIconPickerSheet(
     }
 }
 
-/** Emoji 分段内容：常用网格点选 + 自定义输入（≤2 字符）。 */
-@OptIn(ExperimentalLayoutApi::class)
+/** 矢量图标分段内容：Feather 图标整齐网格点选（每行 5 个圆角槽位，选中高亮）。 */
 @Composable
-private fun EmojiPickerSection(
+private fun VectorIconPickerSection(
     selected: String,
-    custom: String,
-    onSelect: (String) -> Unit,
-    onCustomChange: (String) -> Unit
+    onSelect: (String) -> Unit
 ) {
-    FlowRow(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        WELCOME_ICON_EMOJIS.forEach { emoji ->
-            val isSelected = emoji == selected
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .background(
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        } else {
-                            MaterialTheme.semanticColors.mutedSurface
-                        }
-                    )
-                    .then(
-                        if (isSelected) {
-                            Modifier.border(
-                                1.dp,
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(Radius.sm)
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .clickable { onSelect(emoji) },
-                contentAlignment = Alignment.Center
+        WELCOME_VECTOR_ICONS.chunked(WELCOME_ICON_GRID_COLUMNS).forEach { rowIcons ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.CenterHorizontally)
             ) {
-                Text(
-                    text = emoji,
-                    style = MaterialTheme.typography.titleLarge
-                )
+                rowIcons.forEach { iconName ->
+                    val isSelected = iconName == selected
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(Radius.md))
+                            .background(
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.semanticColors.mutedSurface
+                                }
+                            )
+                            .then(
+                                if (isSelected) {
+                                    Modifier.border(
+                                        2.dp,
+                                        MaterialTheme.colorScheme.primary,
+                                        RoundedCornerShape(Radius.md)
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable { onSelect(iconName) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = welcomeEntryVectorIcon(iconName),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
     }
-    Spacer(Modifier.height(Spacing.sm))
-    AppTextField(
-        value = custom,
-        onValueChange = onCustomChange,
-        label = stringResource(R.string.settings_welcome_icon_emoji_custom),
-        placeholder = stringResource(R.string.settings_welcome_icon_emoji_custom_hint),
-        singleLine = true,
-        colors = dialogTextFieldColors()
-    )
 }
 
 /** 上传图片分段内容：当前图标预览 + 选择图片按钮（含保存中状态）。 */
@@ -860,7 +916,8 @@ private fun ImagePickerSection(
 }
 
 /**
- * 欢迎卡片图标视图：VECTOR 用 Feather 矢量图标，EMOJI/TEXT 用文本渲染，IMAGE 用 coil 异步加载（圆角裁切）。
+ * 欢迎卡片图标视图：VECTOR 用 Feather 矢量图标，TEXT 用文本渲染，IMAGE 用 coil 异步加载（圆角裁切），
+ * EMOJI 为旧数据兼容回退（渲染默认矢量图标）。
  * 图标槽统一 40dp 底色卡片，供管理列表/编辑预览/图标选择共用。
  */
 @Composable
@@ -905,12 +962,13 @@ internal fun WelcomeEntryIconView(
                     maxLines = 1
                 )
             }
+            // EMOJI：旧数据兼容兜底；加载时已迁移为 VECTOR，此处仅渲染默认矢量图标。
             else -> {
-                Text(
-                    text = iconValue,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                Icon(
+                    imageVector = welcomeEntryVectorIcon(VECTOR_ICON_DEFAULT),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(size * 0.6f)
                 )
             }
         }

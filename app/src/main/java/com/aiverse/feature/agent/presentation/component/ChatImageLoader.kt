@@ -3,7 +3,11 @@ package com.aiverse.feature.agent.presentation.component
 import androidx.compose.ui.graphics.ImageBitmap
 import com.aiverse.core.ui.ImageSource
 import com.aiverse.core.ui.ImageViewerRequest
+import com.aiverse.core.ui.MediaKind
+import com.aiverse.core.ui.MediaSource
+import com.aiverse.core.ui.MediaViewerRequest
 import com.aiverse.core.ui.decodeSampledBitmap
+import com.aiverse.core.ui.mediaKindOf
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.workspace.domain.FileAccessProvider
@@ -113,3 +117,48 @@ internal fun markdownViewerRequest(link: String): ImageViewerRequest = ImageView
     sources = listOf(ImageSource.ContainerPath(link)),
     title = link.trimEnd('/').substringAfterLast('/')
 )
+
+/** 已发送附件是否为应用内可播放的音视频（按文件名 + MIME 判定）。 */
+internal val AgentAttachment.isMedia: Boolean
+    get() = mediaKindOf(fileName, mimeType) != null
+
+/** 已发送附件的播放请求：localPath 优先、containerPath 兜底（远程临时副本可能被清）。 */
+internal fun AgentAttachment.toMediaRequest(): MediaViewerRequest = MediaViewerRequest(
+    sources = listOfNotNull(
+        localPath.takeIf { it.isNotBlank() }?.let { MediaSource.LocalFile(it) },
+        containerPath.takeIf { it.isNotBlank() }?.let { MediaSource.ContainerPath(it) }
+    ),
+    title = fileName,
+    kind = mediaKindOf(fileName, mimeType) ?: MediaKind.AUDIO
+)
+
+/** 待发送附件是否为应用内可播放的音视频。 */
+internal val PendingUploadAttachment.isMedia: Boolean
+    get() = mediaKindOf(fileName, mimeType) != null
+
+/** 待发送附件的播放请求：localPath（已落宿主）优先、containerPath 兜底。 */
+internal fun PendingUploadAttachment.toMediaRequest(): MediaViewerRequest = MediaViewerRequest(
+    sources = listOfNotNull(
+        localPath.takeIf { it.isNotBlank() }?.let { MediaSource.LocalFile(it) },
+        containerPath.takeIf { it.isNotBlank() }?.let { MediaSource.ContainerPath(it) }
+    ),
+    title = fileName,
+    kind = mediaKindOf(fileName, mimeType) ?: MediaKind.AUDIO
+)
+
+/**
+ * 应用内媒体播放器的取源解析器：把 [MediaSource] 落成宿主 [File]。
+ *
+ * [MediaSource.ContainerPath] 经 [FileAccessProvider.copyToLocal] —— 本地 PRoot 模式只是路径映射、
+ * 不产生拷贝；远程 SSH 模式整份下载到临时文件。本地路径失效或空文件一律返回 null（播放器显示失败占位）。
+ */
+internal fun mediaFileResolver(fileAccess: FileAccessProvider): suspend (MediaSource) -> File? = { source ->
+    withContext(Dispatchers.IO) {
+        runCatching {
+            when (source) {
+                is MediaSource.LocalFile -> File(source.path)
+                is MediaSource.ContainerPath -> fileAccess.copyToLocal(source.path)
+            }
+        }.getOrNull()?.takeIf { it.isFile && it.length() > 0L }
+    }
+}

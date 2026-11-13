@@ -85,6 +85,7 @@ import com.aiverse.feature.settings.data.repository.DownloadedImageRecord
 import com.aiverse.feature.settings.data.repository.effectiveVersion
 import com.aiverse.feature.settings.data.repository.ExecutionMode
 import com.aiverse.feature.settings.data.repository.CompactionModelSettingsRepository
+import com.aiverse.feature.settings.data.repository.OptimizeInputModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.DefaultModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.TitleModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.SubagentTierSettingsRepository
@@ -418,6 +419,7 @@ class SettingsViewModel @Inject constructor(
     private val imageGenModelSettingsRepository: ImageGenModelSettingsRepository,
     private val compactionModelSettingsRepository: CompactionModelSettingsRepository,
     private val titleModelSettingsRepository: TitleModelSettingsRepository,
+    private val optimizeInputModelSettingsRepository: OptimizeInputModelSettingsRepository,
     private val subagentTierSettingsRepository: SubagentTierSettingsRepository,
     private val defaultModelSettingsRepository: DefaultModelSettingsRepository,
     private val containerSettingsRepository: ContainerSettingsRepository,
@@ -626,6 +628,13 @@ class SettingsViewModel @Inject constructor(
     private val _titleModel = MutableStateFlow("")
     val titleModel: StateFlow<String> = _titleModel.asStateFlow()
 
+    /** 优化输入专用模型选择：providerId 为空即「跟随当前聊天模型」。 */
+    private val _optimizeProviderId = MutableStateFlow("")
+    val optimizeProviderId: StateFlow<String> = _optimizeProviderId.asStateFlow()
+
+    private val _optimizeModel = MutableStateFlow("")
+    val optimizeModel: StateFlow<String> = _optimizeModel.asStateFlow()
+
     /**
      * 子代理模型档位：三档各一对 (providerId, model)，空串即该档未配置。
      * 映射始终包含全部档位，UI 直接按档位取用，不必判空。
@@ -772,12 +781,59 @@ class SettingsViewModel @Inject constructor(
     private val _uiDensity = MutableStateFlow(UIDensity.STANDARD)
     val uiDensity: StateFlow<UIDensity> = _uiDensity.asStateFlow()
 
+    /** 卡片圆角（dp），默认 12。 */
+    private val _cardCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CARD_CORNER)
+    val cardCorner: StateFlow<Int> = _cardCorner.asStateFlow()
+
+    /** 按钮圆角（dp），默认 10。 */
+    private val _buttonCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUTTON_CORNER)
+    val buttonCorner: StateFlow<Int> = _buttonCorner.asStateFlow()
+
+    /** 输入框圆角（dp），默认 12。 */
+    private val _fieldCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_FIELD_CORNER)
+    val fieldCorner: StateFlow<Int> = _fieldCorner.asStateFlow()
+
+    /** 聊天气泡圆角（dp），默认 10。 */
+    private val _bubbleCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_CORNER)
+    val bubbleCorner: StateFlow<Int> = _bubbleCorner.asStateFlow()
+
+    /** 图片/附件圆角（dp），默认 12。 */
+    private val _imageCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_IMAGE_CORNER)
+    val imageCorner: StateFlow<Int> = _imageCorner.asStateFlow()
+
     /** 侧边栏文件树显示偏好（文件名显示/隐藏文件/缩进密度/弱化着色），默认与历史行为一致。 */
     private val _fileTreeDisplayPrefs = MutableStateFlow(FileTreeDisplayPrefs.Default)
     val fileTreeDisplayPrefs: StateFlow<FileTreeDisplayPrefs> = _fileTreeDisplayPrefs.asStateFlow()
 
+    /** 代码块字体大小（sp），与聊天字号分开调，默认跟随现有代码块字号 13sp。 */
+    private val _codeFontSizeSp = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CODE_FONT_SIZE_SP)
+    val codeFontSizeSp: StateFlow<Int> = _codeFontSizeSp.asStateFlow()
+
+    /** 代码块自动换行（默认关）。 */
+    private val _codeWrapEnabled = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CODE_WRAP_ENABLED)
+    val codeWrapEnabled: StateFlow<Boolean> = _codeWrapEnabled.asStateFlow()
+
+    /** 代码块自动折叠（默认开）。 */
+    private val _codeAutoFoldEnabled = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CODE_AUTO_FOLD_ENABLED)
+    val codeAutoFoldEnabled: StateFlow<Boolean> = _codeAutoFoldEnabled.asStateFlow()
+
+    /** 代码块显示行号（默认开）。 */
+    private val _codeShowLineNumber = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CODE_SHOW_LINE_NUMBER)
+    val codeShowLineNumber: StateFlow<Boolean> = _codeShowLineNumber.asStateFlow()
+
+    /** 用户气泡底色透明度（10~100%），默认 100。 */
+    private val _userBubbleOpacity = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
+    val userBubbleOpacity: StateFlow<Int> = _userBubbleOpacity.asStateFlow()
+
+    /** AI 回复气泡底色透明度（10~100%），默认 100。 */
+    private val _assistantBubbleOpacity = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
+    val assistantBubbleOpacity: StateFlow<Int> = _assistantBubbleOpacity.asStateFlow()
+
     /** 三档字号落盘的节流 job（滑块拖动防积压），见 [setChatFontSizeSp] 等。 */
     private var fontWriteJob: Job? = null
+
+    /** 气泡透明度落盘的节流 job（与字号 job 解耦，避免被字号/缩放写入 cancel 导致透明度不落库）。 */
+    private var bubbleOpacityWriteJob: Job? = null
 
     /** 技能默认安装作用域（默认项目级），由系统提示词注入指引 AI。 */
     private val _defaultSkillInstallScope = MutableStateFlow(SkillInstallSettingsRepository.DEFAULT_SCOPE)
@@ -1075,6 +1131,18 @@ class SettingsViewModel @Inject constructor(
                 }
             }
 
+            launch {
+                optimizeInputModelSettingsRepository.providerIdFlow.collectLatest {
+                    _optimizeProviderId.value = it
+                }
+            }
+
+            launch {
+                optimizeInputModelSettingsRepository.modelFlow.collectLatest {
+                    _optimizeModel.value = it
+                }
+            }
+
             // 三档子代理模型：任一档变化即刷新快照，UI 按档位渲染。
             SubagentModelTier.entries.forEach { tier ->
                 launch {
@@ -1285,8 +1353,74 @@ class SettingsViewModel @Inject constructor(
             }
 
             launch {
+                appearanceSettingsRepository.cardCornerFlow.collectLatest {
+                    _cardCorner.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.buttonCornerFlow.collectLatest {
+                    _buttonCorner.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.fieldCornerFlow.collectLatest {
+                    _fieldCorner.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.bubbleCornerFlow.collectLatest {
+                    _bubbleCorner.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.imageCornerFlow.collectLatest {
+                    _imageCorner.value = it
+                }
+            }
+
+            launch {
                 appearanceSettingsRepository.fileTreeDisplayPrefsFlow.collectLatest {
                     _fileTreeDisplayPrefs.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.codeFontSizeSpFlow.collectLatest {
+                    _codeFontSizeSp.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.codeWrapEnabledFlow.collectLatest {
+                    _codeWrapEnabled.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.codeAutoFoldEnabledFlow.collectLatest {
+                    _codeAutoFoldEnabled.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.codeShowLineNumberFlow.collectLatest {
+                    _codeShowLineNumber.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.userBubbleOpacityFlow.collectLatest {
+                    _userBubbleOpacity.value = it
+                }
+            }
+
+            launch {
+                appearanceSettingsRepository.assistantBubbleOpacityFlow.collectLatest {
+                    _assistantBubbleOpacity.value = it
                 }
             }
 
@@ -1495,7 +1629,10 @@ class SettingsViewModel @Inject constructor(
                             filterModel = filterModel,
                             availableProviders = availableProviders,
                             availableModels = availableModels,
-                            providerKeyCounts = keyCounts
+                            providerKeyCounts = keyCounts,
+                            // 保留已收集到的启动次数：本管线每次发射会用全新状态整体覆盖 _tokenStats，
+                            // 若不复用当前值，launchCountFlow 写入的值会被冲回默认 0，导致启动次数卡片不更新。
+                            launchCount = _tokenStats.value.launchCount
                         )
                     }
                 }.collectLatest { _tokenStats.value = it }
@@ -2647,6 +2784,41 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** 设置卡片圆角（dp）。 */
+    fun setCardCorner(corner: Int) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setCardCorner(corner)
+        }
+    }
+
+    /** 设置按钮圆角（dp）。 */
+    fun setButtonCorner(corner: Int) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setButtonCorner(corner)
+        }
+    }
+
+    /** 设置输入框圆角（dp）。 */
+    fun setFieldCorner(corner: Int) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setFieldCorner(corner)
+        }
+    }
+
+    /** 设置聊天气泡圆角（dp）。 */
+    fun setBubbleCorner(corner: Int) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setBubbleCorner(corner)
+        }
+    }
+
+    /** 设置图片/附件圆角（dp）。 */
+    fun setImageCorner(corner: Int) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setImageCorner(corner)
+        }
+    }
+
     /** 设置文件树文件名显示方式。 */
     fun setFileNameDisplay(display: FileNameDisplay) {
         viewModelScope.launch {
@@ -2675,10 +2847,59 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** 恢复外观为默认值（清空三档字号、密度档与文件树显示偏好，回到仓库默认）。 */
+    /** 设置代码块字体大小（sp）。 */
+    fun setCodeFontSizeSp(sizeSp: Int) {
+        fontWriteJob?.cancel()
+        fontWriteJob = viewModelScope.launch {
+            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
+            appearanceSettingsRepository.setCodeFontSizeSp(sizeSp)
+        }
+    }
+
+    /** 设置代码块自动换行。 */
+    fun setCodeWrapEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setCodeWrapEnabled(enabled)
+        }
+    }
+
+    /** 设置代码块自动折叠。 */
+    fun setCodeAutoFoldEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setCodeAutoFoldEnabled(enabled)
+        }
+    }
+
+    /** 设置代码块显示行号。 */
+    fun setCodeShowLineNumber(enabled: Boolean) {
+        viewModelScope.launch {
+            appearanceSettingsRepository.setCodeShowLineNumber(enabled)
+        }
+    }
+
+    /** 设置用户气泡透明度（10~100%）。 */
+    fun setUserBubbleOpacity(opacity: Int) {
+        bubbleOpacityWriteJob?.cancel()
+        bubbleOpacityWriteJob = viewModelScope.launch {
+            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
+            appearanceSettingsRepository.setUserBubbleOpacity(opacity)
+        }
+    }
+
+    /** 设置 AI 回复气泡透明度（10~100%）。 */
+    fun setAssistantBubbleOpacity(opacity: Int) {
+        bubbleOpacityWriteJob?.cancel()
+        bubbleOpacityWriteJob = viewModelScope.launch {
+            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
+            appearanceSettingsRepository.setAssistantBubbleOpacity(opacity)
+        }
+    }
+
+    /** 恢复外观为默认值（清空三档字号、密度档、代码显示、气泡透明度与文件树显示偏好，回到仓库默认）。 */
     fun restoreAppearanceDefaults() {
         viewModelScope.launch {
             appearanceSettingsRepository.restoreFontSizes(null, null, null, null)
+            appearanceSettingsRepository.restoreCodeDisplay(null, null, null, null, null, null)
             appearanceSettingsRepository.restoreFileTreeDisplay()
         }
     }
@@ -3025,6 +3246,20 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** 设置优化输入专用模型；providerId 留空等同 [clearOptimizeInputModel]（跟随聊天模型）。 */
+    fun setOptimizeInputModel(providerId: String, model: String) {
+        viewModelScope.launch {
+            optimizeInputModelSettingsRepository.setOptimizeInputModel(providerId, model)
+        }
+    }
+
+    /** 清空优化输入专用模型——回退到跟随当前聊天模型。 */
+    fun clearOptimizeInputModel() {
+        viewModelScope.launch {
+            optimizeInputModelSettingsRepository.clear()
+        }
+    }
+
     /** 设置某子代理模型档位绑定的模型；两个参数都留空等同 [clearSubagentTier]。 */
     fun setSubagentTierModel(tier: SubagentModelTier, providerId: String, model: String) {
         viewModelScope.launch {
@@ -3208,6 +3443,11 @@ class SettingsViewModel @Inject constructor(
             titleModelSettingsRepository.getTitleModel() in removed
         ) {
             titleModelSettingsRepository.clear()
+        }
+        if (optimizeInputModelSettingsRepository.getOptimizeInputProviderId() == provider.id &&
+            optimizeInputModelSettingsRepository.getOptimizeInputModel() in removed
+        ) {
+            optimizeInputModelSettingsRepository.clear()
         }
         // 档位绑定的是 provider + model，提供商整个被删时按 provider 直接清档。
         subagentTierSettingsRepository.clearTiersUsingProvider(provider.id)

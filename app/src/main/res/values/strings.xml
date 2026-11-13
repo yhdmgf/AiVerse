@@ -144,12 +144,10 @@
     <string name="settings_welcome_entry_icon_select">选择图标</string>
     <string name="settings_welcome_icon_upload_failed">图片保存失败，请重试</string>
     <string name="settings_welcome_icon_title">选择图标</string>
-    <string name="settings_welcome_icon_emoji">Emoji</string>
+    <string name="settings_welcome_icon_vector">图标</string>
     <string name="settings_welcome_icon_text">文字</string>
     <string name="settings_welcome_icon_image">上传图片</string>
     <string name="settings_welcome_icon_text_hint">最多 3 个字</string>
-    <string name="settings_welcome_icon_emoji_custom">自定义 Emoji</string>
-    <string name="settings_welcome_icon_emoji_custom_hint">最多 2 个字符</string>
     <string name="settings_welcome_icon_uploading">正在保存图片…</string>
     <string name="settings_welcome_icon_image_pick">选择图片</string>
     <string name="settings_appearance_input_bar">输入框快捷栏</string>
@@ -157,21 +155,37 @@
     <string name="settings_inputbar_thinking">思考强度快捷按钮</string>
     <string name="settings_inputbar_folder">切换文件夹快捷按钮</string>
     <string name="settings_inputbar_model">切换模型快捷按钮</string>
-    <string name="settings_inputbar_clear">清空当前对话</string>
     <string name="settings_inputbar_web_search">联网搜索开关</string>
+    <string name="settings_inputbar_optimize">优化输入快捷按钮</string>
+    <string name="settings_inputbar_plus">加号快捷按钮</string>
     <string name="inputbar_action_model">切换模型</string>
     <string name="inputbar_action_thinking">思考强度</string>
     <string name="inputbar_action_web_search">联网搜索</string>
     <string name="inputbar_action_folder">文件夹</string>
     <string name="inputbar_action_mcp">MCP</string>
-    <string name="inputbar_action_clear">清空</string>
     <string name="settings_appearance_chat_font">聊天字体大小</string>
     <string name="settings_appearance_input_font">输入框字体大小</string>
+    <string name="settings_appearance_code_font">代码块字体大小</string>
+    <string name="settings_appearance_code_display">代码显示</string>
+    <string name="settings_appearance_code_wrap">自动换行</string>
+    <string name="settings_appearance_code_auto_fold">代码块自动折叠</string>
+    <string name="settings_appearance_code_line_number">显示行号</string>
+    <string name="settings_appearance_user_bubble_opacity">用户气泡透明度</string>
+    <string name="settings_appearance_assistant_bubble_opacity">AI 气泡透明度</string>
+    <string name="chat_code_expand">展开全部</string>
     <string name="settings_appearance_ui_scale">界面缩放</string>
     <string name="settings_appearance_density">界面密度</string>
+    <string name="settings_appearance_density_title">界面密度</string>
     <string name="density_compact">紧凑</string>
     <string name="density_standard">标准</string>
     <string name="density_comfortable">舒适</string>
+    <string name="settings_appearance_corner">圆角</string>
+    <string name="settings_appearance_corner_title">圆角</string>
+    <string name="corner_card">卡片圆角</string>
+    <string name="corner_button">按钮圆角</string>
+    <string name="corner_input">输入框圆角</string>
+    <string name="corner_bubble">气泡圆角</string>
+    <string name="corner_image">图片圆角</string>
     <string name="settings_appearance_files">文件</string>
     <string name="file_tree_filename_display">文件名显示</string>
     <string name="file_name_display_scroll">单行横向滚动</string>
@@ -247,6 +261,8 @@
     <string name="settings_goal_max_tokens_input_hint">填不小于 1000 的整数</string>
     <string name="settings_vision_model">识图模型</string>
     <string name="settings_compaction_model">压缩模型</string>
+    <string name="settings_optimize_input_model">优化输入模型</string>
+    <string name="settings_optimize_input_follow_chat">跟随当前聊天模型</string>
     <string name="settings_title_model">标题总结模型</string>
     <string name="settings_image_gen_model">生图模型</string>
     <string name="settings_mcp">MCP 服务器</string>
@@ -356,6 +372,12 @@
     <string name="plugins_install">安装插件</string>
     <string name="plugins_scripts_docs">查看脚本插件使用文档</string>
     <string name="plugins_more_actions">更多操作</string>
+    <string name="plugins_share">分享</string>
+    <string name="plugins_export">导出</string>
+    <string name="plugins_share_chooser">分享插件</string>
+    <string name="plugins_share_failed">分享失败，无法读取插件文件</string>
+    <string name="plugins_export_failed">导出失败</string>
+    <string name="plugins_export_success">插件已导出</string>
     <string name="plugins_empty">尚未安装脚本插件，点击右上角安装 zip 插件包</string>
     <string name="plugins_uninstall">卸载</string>
     <string name="plugins_cancel">取消</string>
@@ -490,6 +512,7 @@
     <string name="theme_preset_section">配色方案</string>
     <string name="theme_preset_default">蓝色</string>
     <string name="theme_preset_hyperos">HyperOS（默认）</string>
+    <string name="theme_preset_hyperos_glass">HyperOS 玻璃</string>
     <string name="theme_preset_coffee">咖啡</string>
     <string name="theme_preset_graphite">石墨</string>
     <string name="theme_preset_forest">森林</string>
@@ -674,6 +697,9 @@
     <string name="common_name">名称</string>
     <string name="common_image_preview">图片预览</string>
     <string name="common_image_load_failed">图片加载失败，文件可能已被移动或删除</string>
+    <string name="common_play">播放</string>
+    <string name="common_pause">暂停</string>
+    <string name="common_media_load_failed">无法播放该文件，文件可能已被移动或删除</string>
     <string name="common_expand">展开</string>
     <string name="common_workspace">工作区</string>
     <string name="common_tool">工具</string>
@@ -744,7 +770,7 @@
     <string name="chat_new_session_btn">新会话</string>
     <string name="chat_open_sidebar">打开侧边栏</string>
     <string name="chat_add_attachment">添加附件</string>
-    <string name="chat_clear_chat">清空当前对话</string>
+    <string name="chat_optimize_input">优化输入</string>
     <string name="chat_web_search_toggle">联网搜索</string>
     <string name="chat_more_tools">更多工具</string>
     <string name="chat_balance_icon">余额</string>
@@ -786,6 +812,7 @@
     <string name="chat_open_apk_permission">安装应用需要授权，请在跳转的设置中允许来自此来源的应用</string>
     <string name="chat_attachment_preview">预览 %1$s</string>
     <string name="chat_attachment_open">打开 %1$s</string>
+    <string name="chat_attachment_play">播放 %1$s</string>
     <string name="attachment_open_preview">预览</string>
     <string name="attachment_open_external">用其他应用打开</string>
     <string name="chat_no_model_selected">未选择模型</string>
@@ -872,6 +899,9 @@
     <string name="about_update_install_failed">没有可用的安装程序</string>
 
     <string name="agreement_title">欢迎使用 AiVerse</string>
+    <string name="agreement_test_title">测试说明</string>
+    <string name="agreement_test_notice">测试版不代表最终版本，切勿二传。</string>
+    <string name="agreement_test_download">下载正式版</string>
     <string name="agreement_terms">用户协议</string>
     <string name="agreement_privacy">隐私政策</string>
     <string name="agreement_notice_prefix">使用前，请阅读并同意</string>
@@ -883,6 +913,7 @@
     <string name="agreement_decline">不同意</string>
     <string name="agreement_terms_url">https://aivapp.cn/terms</string>
     <string name="agreement_privacy_url">https://aivapp.cn/privacy</string>
+    <string name="agreement_test_download_url">https://aivapp.cn/download</string>
 
     <!-- Ask User Question -->
     <string name="ask_confirm_title">AI 需要你的确认</string>
@@ -917,6 +948,7 @@
     <string name="backup_data_memories">记忆</string>
     <string name="backup_data_favorites">消息收藏</string>
     <string name="backup_data_skills">技能</string>
+    <string name="backup_data_plugins">脚本插件</string>
     <string name="backup_workspace_git_hint">工作区文件建议通过 Git 提交备份，导出备份仅作备用</string>
     <string name="backup_password_label">口令（可选）</string>
     <string name="backup_processing">处理中</string>
@@ -934,6 +966,7 @@
     <string name="backup_stat_memories">· 记忆 %1$s 条</string>
     <string name="backup_stat_favorites">· 消息收藏 %1$s 条</string>
     <string name="backup_stat_skills">· 技能 %1$s 个</string>
+    <string name="backup_stat_plugins">· 脚本插件 %1$s 个</string>
     <string name="backup_settings_covered">主题、保活、日志、识图、同步偏好已覆盖</string>
     <string name="backup_restore_workspaces_title">恢复工作区</string>
     <string name="backup_restore_workspaces_warning">将直接覆盖本地同名工作区中的文件，且无法撤销，请谨慎勾选</string>
@@ -1383,6 +1416,12 @@
     <string name="git_issue_bulk_close_partial">批量关闭完成：%1$d 成功，%2$d 失败</string>
     <string name="git_issue_bulk_label_success">已批量添加标签</string>
     <string name="git_issue_bulk_label_partial">批量加标签完成：%1$d 成功，%2$d 失败</string>
+    <string name="git_issue_bulk_assign">分配</string>
+    <string name="git_issue_bulk_assign_hint">分配受理人</string>
+    <string name="git_issue_bulk_assign_label">用户 login（逗号分隔）</string>
+    <string name="git_issue_bulk_assign_confirm">分配</string>
+    <string name="git_issue_bulk_assign_success">已批量分配受理人</string>
+    <string name="git_issue_bulk_assign_partial">批量分配完成：%1$d 成功，%2$d 失败</string>
     <string name="git_issue_action_close">关闭</string>
     <string name="git_issue_close_reason_completed">已完成</string>
     <string name="git_issue_close_reason_not_planned">未在计划列表</string>
@@ -2180,6 +2219,7 @@
     <!-- Compaction Model -->
     <string name="compaction_no_models">暂无可用模型。请在「AI 供应商」中添加并配置模型后再选压缩专用模型。</string>
     <string name="title_no_models">暂无可用模型。请在「AI 供应商」中添加并配置模型后再选标题总结专用模型。</string>
+    <string name="optimize_input_no_models">暂无可用模型。请在「AI 供应商」中添加并配置模型后再选优化输入专用模型。</string>
 
     <!-- Image Generation Model -->
     <string name="image_gen_no_models">暂无可用模型。请在「AI 供应商」添加并配置支持图片输出的模型后再选生图。</string>
@@ -2314,8 +2354,11 @@
     <string name="provider_multi_key_item">密钥 #%1$d</string>
     <string name="provider_multi_key_empty">点此添加第一个 Key</string>
     <string name="provider_multi_key_add">添加 Key</string>
+    <string name="provider_multi_key_name">名称</string>
     <string name="provider_multi_key_weight">调度权重</string>
     <string name="provider_multi_key_weight_hint">默认 1 · ≤ 0 时不参与 · 最大 1,000,000</string>
+    <string name="provider_multi_key_disabled">已停用</string>
+    <string name="provider_multi_key_weight_value">· 权重 %1$d</string>
     <string name="provider_multi_key_strategy">取用策略</string>
     <string name="provider_multi_key_strategy_sequential">顺序</string>
     <string name="provider_multi_key_strategy_sequential_desc">始终用靠前的 Key，失败达阈值才切下一个</string>
@@ -2484,6 +2527,9 @@
     <string name="memory_delete_failed">删除失败</string>
     <string name="memory_delete_confirm_title">删除记忆</string>
     <string name="memory_delete_confirm_message">确定删除「%1$s」吗？</string>
+    <string name="memory_add_expand">新建记忆并展开</string>
+    <string name="memory_delete_selected_confirm_title">删除所选记忆</string>
+    <string name="memory_delete_selected_confirm_message">确定删除已选的 %1$d 项记忆吗？此操作不可撤销。</string>
     <!-- 顶栏内存胶囊 -->
     <string name="memory_chip_label">内存 %1$d%%</string>
     <string name="memory_chip_used_total">已用 %1$s / 共 %2$s</string>
@@ -2601,4 +2647,91 @@
     <string name="a11y_grant_allow_action">允许授权</string>
     <string name="a11y_grant_allow_desc">已授予系统写入权限后，一键开启无障碍服务</string>
     <string name="welcome_entry_card_desc">快捷入口：%1$s</string>
+    <string name="chat_subagent_title">子代理</string>
+    <string name="chat_main_session_title">主会话</string>
+    <string name="chat_expert_title">专家</string>
+    <string name="chat_peer_notice_content">[专家对等通知] %1$s 已向 %2$s 直接发送消息（序号 %3$d）：%4$s。仅知情，无需转发或重复发送。</string>
+    <string name="chat_subagent_stopped_detail">用户在界面上手动停止了这个子代理，任务未完成。</string>
+    <string name="chat_subagent_deleted_detail">用户删除了这个子代理会话，任务未完成，其对话记录已不可读取。</string>
+    <string name="chat_usage_header">| 项目 | 今日 | 累计 |</string>
+    <string name="chat_usage_calls">| 调用次数 | %1$d | %2$d |</string>
+    <string name="chat_usage_input_tokens">| 输入 tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_output_tokens">| 输出 tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_cache_tokens">| 缓存命中 tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_cost">| 预估费用 | %1$s | %2$s |</string>
+    <string name="chat_goal_no_goal">当前会话未设定目标。用 `/goal &lt;目标&gt;` 设定后，AI 会自主循环推进直到达成、受阻或预算耗尽。</string>
+    <string name="chat_goal_current">当前目标（%1$s，已续跑 %2$d 轮）：
+%3$s</string>
+    <string name="chat_goal_set">已设定目标：%1$s
+AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、受阻或预算耗尽。
+可随时 `/goal pause` / `/goal resume` / `/goal clear`。</string>
+    <string name="chat_goal_cleared">已清除当前目标。</string>
+    <string name="chat_goal_none">当前会话未设定目标。</string>
+    <string name="chat_goal_paused">目标已暂停。用 `/goal resume` 继续。</string>
+    <string name="chat_goal_resumed">目标已恢复，继续自主循环。</string>
+    <string name="chat_goal_blocked_empty">目标自主循环连续 %1$d 轮无进展，已置为「受阻」并停止。可 `/goal resume` 继续或 `/goal clear` 清除。</string>
+    <string name="chat_goal_budget_exhausted">目标自主循环已达预算上限（轮次上限 %1$d 轮 / token 预算 %2$d），已停止。可 `/goal resume` 继续或 `/goal clear` 清除。</string>
+    <string name="chat_rewind_more">…另有 %1$d 个</string>
+    <string name="tts_system_unavailable">系统 TTS 不可用：未安装语音引擎或初始化失败</string>
+    <string name="tts_online_failed">在线 TTS 失败：%1$s</string>
+    <string name="tts_http_failed">请求失败（HTTP 非 200，检查接口地址/API Key/模型）</string>
+    <string name="tts_network_error">网络异常</string>
+    <string name="backup_unknown_exception">未知异常</string>
+    <string name="ftp_start_failed_port_occupied">启动失败，可能端口被占用</string>
+    <string name="terminal_container_not_installed">容器未安装（缺少 rootfs/proot）</string>
+    <string name="terminal_not_remote_or_ssh_disconnected">非远程模式或 SSH 未连接</string>
+    <string name="plugin_permission_request_title">插件请求权限：%1$s</string>
+    <string name="plugin_permission_request_summary">「%1$s」需要权限：%2$s</string>
+    <string name="plugin_permission_request_details">授权后插件可调用该能力；「始终允许」会记住（等同在 plugin.json 声明），「仅本次」临时放行。</string>
+    <string name="plugin_notify_permission_off">通知权限未开启：%1$s</string>
+    <string name="plugin_notify_failed">通知失败：%1$s</string>
+    <string name="plugin_no_permission">无权限</string>
+    <string name="plugin_notification_channel_name">插件通知</string>
+    <string name="plugin_notification_channel_desc">脚本插件发送的通知</string>
+    <string name="plugin_err_all_files_permission">需要「所有文件访问」权限，请在系统设置中开启</string>
+    <string name="plugin_err_is_directory">是目录，请指定文件路径: %1$s</string>
+    <string name="plugin_err_file_not_found">文件不存在: %1$s</string>
+    <string name="plugin_err_read_failed">读取失败（非文本或编码不支持）: %1$s</string>
+    <string name="plugin_err_write_failed">保存失败: %1$s</string>
+    <string name="plugin_err_tool_system_unavailable">工具系统不可用</string>
+    <string name="plugin_err_tool_not_found">工具不存在: %1$s</string>
+    <string name="plugin_err_tool_needs_auth">工具需要授权，插件不能直接调用: %1$s</string>
+    <string name="plugin_err_arg_parse_failed">参数解析失败: %1$s</string>
+    <string name="plugin_err_exec_failed">执行失败: %1$s</string>
+    <string name="plugin_install_no_plugin_json">压缩包中未找到 plugin.json</string>
+    <string name="plugin_install_missing_package">plugin.json 缺少 package 字段</string>
+    <string name="plugin_install_missing_name">plugin.json 缺少 name 字段</string>
+    <string name="plugin_install_missing_main">plugin.json 缺少 main 字段</string>
+    <string name="plugin_install_bad_dir">plugin.json 所在目录异常</string>
+    <string name="apk_download_failed">下载失败</string>
+    <string name="apk_chunk_incomplete">分片 %1$d 不完整（%2$d/%3$d）</string>
+    <string name="apk_size_mismatch">安装包大小不符（%1$d/%2$d）</string>
+    <string name="apk_checksum_failed">安装包摘要校验未通过</string>
+    <string name="apk_range_download_failed">Range 下载失败 HTTP %1$d</string>
+    <string name="apk_empty_body">响应体为空</string>
+    <string name="apk_chunk_size_mismatch">分片大小不符（%1$d/%2$d）</string>
+    <string name="phone_control_enabled">已开启手机控制</string>
+    <string name="phone_control_disabled">已关闭手机控制</string>
+    <string name="phone_rule_applied">应用规则：%1$s → %2$s</string>
+    <string name="phone_unlock_detail">解除权限：系统=%1$s 密码=%2$s 应用=%3$s</string>
+    <string name="phone_shizuku_enabled">已用 Shizuku 开启无障碍</string>
+    <string name="phone_shizuku_failed">Shizuku 授权失败</string>
+    <string name="phone_root_enabled">已用 Root 开启无障碍</string>
+    <string name="phone_root_failed">Root 授权失败</string>
+    <string name="phone_a11y_enabled">已开启无障碍服务</string>
+    <string name="phone_a11y_failed">开启无障碍失败（缺系统写入权限）</string>
+    <string name="phone_screen_read">已读取当前屏幕（%1$d 字）</string>
+    <string name="phone_a11y_not_enabled">无障碍服务未开启</string>
+    <string name="phone_reading_screen">正在读屏</string>
+    <string name="phone_overlay_channel_name">手机控制灵动岛</string>
+    <string name="phone_overlay_notification_title">AI 正在操作手机</string>
+    <string name="phone_overlay_notification_text">点开顶部灵动岛查看 AI 思考过程</string>
+    <string name="phone_overlay_collapse">收起</string>
+    <string name="phone_overlay_stop">停止</string>
+    <string name="phone_overlay_recent_action">最近操作</string>
+    <string name="phone_node_editable">输入框</string>
+    <string name="phone_node_scrollable">列表</string>
+    <string name="phone_node_clickable">按钮</string>
+    <string name="phone_node_default">节点</string>
+    <string name="plugin_saved_path">已保存: %1$s</string>
 </resources>

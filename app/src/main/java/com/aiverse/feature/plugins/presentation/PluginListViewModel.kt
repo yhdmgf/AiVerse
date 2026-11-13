@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aiverse.R
+import com.aiverse.core.util.buildZip
 import com.aiverse.feature.plugins.data.InstalledPlugin
 import com.aiverse.feature.plugins.data.PluginRepository
 import com.aiverse.feature.plugins.data.remote.PluginRepoClient
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
@@ -144,6 +146,21 @@ class PluginListViewModel @Inject constructor(
             manager.uninstall(id)
             refresh()
             _message.value = context.getString(R.string.plugins_uninstalled)
+        }
+    }
+
+    /**
+     * 打包插件目录为 zip 字节（zip 内路径为插件根内相对路径，plugin.json 在 zip 根），
+     * 供分享/导出共用；目录为空或打包失败返回 null，调用方据此提示失败。
+     */
+    fun buildPluginExportZip(id: String, onResult: (ByteArray?) -> Unit) {
+        viewModelScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                val files = repository.collectPluginFiles(id)
+                if (files.isEmpty()) return@withContext null
+                buildZip(files.map { (rel, bytes) -> rel to bytes })
+            }
+            onResult(bytes)
         }
     }
 

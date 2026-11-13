@@ -91,4 +91,21 @@ class MemoryViewModel @Inject constructor(
             onResult(ok)
         }
     }
+
+    /** 批量删除多条记忆（多选模式用）：全部成功才认为成功，成功后刷新并失效记忆缓存。 */
+    fun deleteMemories(memories: List<Memory>, onResult: (Boolean) -> Unit) {
+        if (memories.isEmpty()) {
+            onResult(true)
+            return
+        }
+        viewModelScope.launch {
+            val projectRoot = workspaceRepository.currentPath()
+            val ok = withContext(Dispatchers.IO) {
+                memories.all { repository.deleteMemory(it.name, it.scope, projectRoot) }
+            }
+            if (ok) systemPromptProvider.invalidateMemoryCache()
+            refresh()
+            onResult(ok)
+        }
+    }
 }

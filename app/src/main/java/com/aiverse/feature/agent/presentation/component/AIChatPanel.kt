@@ -101,11 +101,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.R
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.tts.LocalTtsController
 import com.aiverse.core.ui.ImageViewerHost
 import com.aiverse.core.ui.LocalImageViewer
+import com.aiverse.core.ui.LocalMediaViewer
+import com.aiverse.core.ui.MediaPlayerHost
+import com.aiverse.core.ui.rememberMediaViewerState
 import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.appTextFieldColors
@@ -722,6 +726,8 @@ fun AIChatPanel(
     onOpenSearchProviders: () -> Unit = {},
     /** MCP 图标 → MCP 服务器设置页。 */
     onOpenMcp: () -> Unit = {},
+    /** 长按「优化输入」图标 → 默认模型配置页。 */
+    onOpenOptimizeModelSettings: () -> Unit = {},
     /** 附件「应用内预览」：打开编辑器并直接进预览模式（容器路径）。 */
     onOpenInEditor: (String) -> Unit = {},
     modifier: Modifier = Modifier
@@ -888,7 +894,7 @@ fun AIChatPanel(
         if (skipped.isEmpty()) return@LaunchedEffect
         val shown = skipped.take(MAX_REWIND_CONFLICT_LINES)
         val more = skipped.size - shown.size
-        val listText = shown.joinToString("\n") + if (more > 0) "\n…另有 $more 个" else ""
+        val listText = shown.joinToString("\n") + (if (more > 0) "\n" + context.getString(R.string.chat_rewind_more, more) else "")
         val message = if (skipped.size == 1) {
             context.getString(R.string.checkpoint_skipped_single, listText)
         } else {
@@ -1614,6 +1620,9 @@ fun AIChatPanel(
     val chatImageLoad = remember(viewModel.fileAccess, viewerDecodeSpec) {
         chatImageLoader(viewModel.fileAccess, viewerDecodeSpec.maxEdge, viewerDecodeSpec.maxPixels)
     }
+    // 应用内音视频播放器（issue #91）：取源统一走 FileAccessProvider.copyToLocal，远程 SSH 会先下载。
+    val mediaViewerState = rememberMediaViewerState()
+    val mediaFileResolve = remember(viewModel.fileAccess) { mediaFileResolver(viewModel.fileAccess) }
 
     // 文件卡片点击：可预览文档（md / html / txt 等）弹「预览 / 用其他应用打开」；
     // 其余非图片直接系统打开。重取/拷贝需要在 IO 线程跑（远程模式要下载），故由这里注入协程。
@@ -1683,7 +1692,8 @@ fun AIChatPanel(
                     animationSpec = tween(durationMillis = 300),
                     label = "message-highlight"
                 )
-                Box(
+                // 用 Column 让回复正文与错误气泡上下顺序排列（Box 会层叠导致错误卡片压住正文，issue #86），高亮背景保留。
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(highlightColor, RoundedCornerShape(Radius.md))
@@ -1736,6 +1746,7 @@ fun AIChatPanel(
     CompositionLocalProvider(
         LocalMarkdownImageTransformer provides markdownImageTransformer,
         LocalImageViewer provides imageViewerState,
+        LocalMediaViewer provides mediaViewerState,
         LocalChatFileAccess provides viewModel.fileAccess,
         LocalAttachmentOpener provides attachmentOpener,
         LocalSubAgentCardHost provides SubAgentCardHost(
@@ -1885,6 +1896,7 @@ fun AIChatPanel(
                         }
                     )
                 } else {
+                    val t = LocalUIDensityTokens.current
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -1904,9 +1916,9 @@ fun AIChatPanel(
                                 }
                             },
                         contentPadding = PaddingValues(
-                            start = Spacing.lg,
-                            end = Spacing.lg,
-                            top = Spacing.md,
+                            start = t.lg,
+                            end = t.lg,
+                            top = t.md,
                             bottom = with(LocalDensity.current) { inputBarReservePx.toDp() }
                         )
                     ) {
@@ -2174,11 +2186,12 @@ fun AIChatPanel(
                 onOpenProviders = onOpenProviders,
                 onOpenSearchProviders = onOpenSearchProviders,
                 onOpenMcp = onOpenMcp,
+                onOptimizeInput = { viewModel.optimizeInput() },
+                onOpenOptimizeModelSettings = onOpenOptimizeModelSettings,
                 onOpenInEditor = onOpenInEditor,
                 // 主页模型弹层的「测试」按钮：直接复用设置页的连通性测试链路，状态由弹层自己持有。
                 onRunModelTest = settingsViewModel?.let { svm -> { p, m -> svm.runModelTest(p, m) } },
                 inputBarPrefs = inputBarPrefs,
-                onClearChat = { currentSessionId?.let { viewModel.deleteSession(it) } },
                 onToggleWebSearch = { viewModel.toggleWebSearch() },
                 webSearchEnabled = webSearchEnabled,
                 modifier = Modifier
@@ -2296,6 +2309,7 @@ fun AIChatPanel(
             )
         }
         ImageViewerHost(state = imageViewerState, load = chatImageLoad)
+        MediaPlayerHost(state = mediaViewerState, resolve = mediaFileResolve)
     }
 }
 

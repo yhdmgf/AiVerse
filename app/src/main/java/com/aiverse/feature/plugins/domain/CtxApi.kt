@@ -1,5 +1,6 @@
 package com.aiverse.feature.plugins.domain
 
+import com.aiverse.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -78,9 +79,9 @@ class CtxApi(
         val request = PendingToolPermission(
             id = "plugin_perm_${manifest.id}_$perm",
             toolName = manifest.id,
-            title = "插件请求权限：$label",
-            summary = "「${manifest.name}」需要权限：$label",
-            details = "授权后插件可调用该能力；「始终允许」会记住（等同在 plugin.json 声明），「仅本次」临时放行。",
+            title = appContext.getString(R.string.plugin_permission_request_title, label),
+            summary = appContext.getString(R.string.plugin_permission_request_summary, manifest.name, label),
+            details = appContext.getString(R.string.plugin_permission_request_details),
             argsPreview = perm,
             sessionId = ""
         )
@@ -101,7 +102,7 @@ class CtxApi(
         require(PluginPermissions.NOTIFY)
         if (!ensureChannel()) return
         if (!canPostNotifications()) {
-            showToast("通知权限未开启：$title")
+            showToast(appContext.getString(R.string.plugin_notify_permission_off, title))
             return
         }
         val openApp = PendingIntent.getActivity(
@@ -120,7 +121,7 @@ class CtxApi(
         try {
             NotificationManagerCompat.from(appContext).notify(notificationId(title), notification)
         } catch (e: SecurityException) {
-            showToast("通知失败：${e.message ?: "无权限"}")
+            showToast(appContext.getString(R.string.plugin_notify_failed, e.message ?: appContext.getString(R.string.plugin_no_permission)))
         }
     }
 
@@ -130,8 +131,8 @@ class CtxApi(
             val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return false
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "插件通知", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "脚本插件发送的通知"
+                NotificationChannel(CHANNEL_ID, appContext.getString(R.string.plugin_notification_channel_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = appContext.getString(R.string.plugin_notification_channel_desc)
                     setShowBadge(false)
                 }
             )
@@ -275,18 +276,18 @@ class CtxApi(
     fun readSystemFile(path: String): String {
         require(PluginPermissions.ALL_FILES)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-            return err("需要「所有文件访问」权限，请在系统设置中开启")
+            return err(appContext.getString(R.string.plugin_err_all_files_permission))
         }
         val f = File(path)
-        if (f.isDirectory) return err("是目录，请指定文件路径: $path")
-        if (!f.exists()) return err("文件不存在: $path")
+        if (f.isDirectory) return err(appContext.getString(R.string.plugin_err_is_directory, path))
+        if (!f.exists()) return err(appContext.getString(R.string.plugin_err_file_not_found, path))
         return try {
             buildJsonObject {
                 put("status", JsonPrimitive("success"))
                 put("data", JsonPrimitive(f.readText(Charsets.UTF_8)))
             }.toString()
         } catch (e: Exception) {
-            err("读取失败（非文本或编码不支持）: ${e.message ?: e.javaClass.simpleName}")
+            err(appContext.getString(R.string.plugin_err_read_failed, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -294,19 +295,19 @@ class CtxApi(
     fun writeSystemFile(path: String, content: String): String {
         require(PluginPermissions.ALL_FILES)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-            return err("需要「所有文件访问」权限，请在系统设置中开启")
+            return err(appContext.getString(R.string.plugin_err_all_files_permission))
         }
         val f = File(path)
-        if (f.isDirectory) return err("是目录，请指定文件路径: $path")
+        if (f.isDirectory) return err(appContext.getString(R.string.plugin_err_is_directory, path))
         return try {
             f.parentFile?.mkdirs()
             f.writeText(content, Charsets.UTF_8)
             buildJsonObject {
                 put("status", JsonPrimitive("success"))
-                put("data", JsonPrimitive("已保存: $path"))
+                put("data", JsonPrimitive(appContext.getString(R.string.plugin_saved_path, path)))
             }.toString()
         } catch (e: Exception) {
-            err("保存失败: ${e.message ?: e.javaClass.simpleName}")
+            err(appContext.getString(R.string.plugin_err_write_failed, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -328,15 +329,15 @@ class CtxApi(
     // ---- callTool（调 AiVerse 已有工具；仅 AUTO_APPROVE，避免绕过权限） ----
     @JavascriptInterface
     fun callTool(name: String, argsJson: String): String {
-        val registry = toolRegistry ?: return err("工具系统不可用")
-        val tool: AgentTool = registry.getTool(name) ?: return err("工具不存在: $name")
+        val registry = toolRegistry ?: return err(appContext.getString(R.string.plugin_err_tool_system_unavailable))
+        val tool: AgentTool = registry.getTool(name) ?: return err(appContext.getString(R.string.plugin_err_tool_not_found, name))
         if (tool.permissionPolicy != com.aiverse.feature.agent.domain.tool.ToolPermissionPolicy.AUTO_APPROVE) {
-            return err("工具需要授权，插件不能直接调用: $name")
+            return err(appContext.getString(R.string.plugin_err_tool_needs_auth, name))
         }
         val args = try {
             Json.parseToJsonElement(argsJson).jsonObject.mapValues { it.value }
         } catch (e: Exception) {
-            return err("参数解析失败: ${e.message}")
+            return err(appContext.getString(R.string.plugin_err_arg_parse_failed, e.message))
         }
         return try {
             val result = runBlocking(Dispatchers.IO) { tool.execute(args) }
@@ -352,7 +353,7 @@ class CtxApi(
                 }.toString()
             }
         } catch (e: Exception) {
-            err("执行失败: ${e.message}")
+            err(appContext.getString(R.string.plugin_err_exec_failed, e.message))
         }
     }
 

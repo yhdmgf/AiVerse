@@ -31,6 +31,7 @@ import com.aiverse.feature.backup.domain.ChatSessionDto
 import com.aiverse.feature.backup.domain.FavoriteItemDto
 import com.aiverse.feature.backup.domain.ImportPreview
 import com.aiverse.feature.backup.domain.MemoryDto
+import com.aiverse.feature.backup.domain.PluginBackupMeta
 import com.aiverse.feature.backup.domain.ProviderDto
 import com.aiverse.feature.backup.domain.RemoteConnectionDto
 import com.aiverse.feature.backup.domain.RemoteMountDto
@@ -39,8 +40,10 @@ import com.aiverse.feature.backup.domain.SkillBackupMeta
 import com.aiverse.feature.backup.domain.TodoItemDto
 import com.aiverse.feature.backup.domain.WorkspaceBackupMeta
 import com.aiverse.feature.backup.domain.toMetadata
+import com.aiverse.feature.plugins.data.PluginRepository
 import com.aiverse.feature.settings.data.local.dao.AIProviderDao
 import com.aiverse.feature.settings.data.local.entity.AIProviderEntity
+import com.aiverse.feature.settings.data.repository.AppearanceSettingsRepository
 import com.aiverse.feature.settings.data.repository.CompactionModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.AgentSoundSettingsRepository
 import com.aiverse.feature.settings.data.repository.GeneralSettingsRepository
@@ -52,6 +55,7 @@ import com.aiverse.feature.settings.data.repository.LogSettingsRepository
 import com.aiverse.feature.settings.data.repository.SyncSettingsRepository
 import com.aiverse.feature.settings.data.repository.ThemeSettingsRepository
 import com.aiverse.feature.settings.data.repository.VisionModelSettingsRepository
+import com.aiverse.feature.settings.data.repository.OptimizeInputModelSettingsRepository
 import com.aiverse.feature.workspace.data.local.dao.RemoteConnectionDao
 import com.aiverse.feature.workspace.data.local.entity.RemoteConnectionEntity
 import com.aiverse.feature.workspace.data.local.entity.RemoteMountEntity
@@ -93,6 +97,7 @@ class BackupManagerImpl @Inject constructor(
     private val mcpManager: McpManager,
     private val permissionRulesRepository: PermissionRulesRepository,
     private val themeSettingsRepository: ThemeSettingsRepository,
+    private val appearanceSettingsRepository: AppearanceSettingsRepository,
     private val keepaliveSettingsRepository: KeepaliveSettingsRepository,
     private val liveNotificationSettingsRepository: LiveNotificationSettingsRepository,
     private val approvalNotificationSettingsRepository: ApprovalNotificationSettingsRepository,
@@ -102,11 +107,13 @@ class BackupManagerImpl @Inject constructor(
     private val logSettingsRepository: LogSettingsRepository,
     private val visionModelSettingsRepository: VisionModelSettingsRepository,
     private val compactionModelSettingsRepository: CompactionModelSettingsRepository,
+    private val optimizeInputModelSettingsRepository: OptimizeInputModelSettingsRepository,
     private val syncSettingsRepository: SyncSettingsRepository,
     private val workspaceRepository: WorkspaceRepository,
     private val memoryRepository: MemoryRepository,
     private val favoriteRepository: FavoriteRepository,
-    private val skillRepository: SkillRepository
+    private val skillRepository: SkillRepository,
+    private val pluginRepository: PluginRepository
 ) : BackupManager {
 
     private val json = Json {
@@ -314,6 +321,9 @@ class BackupManagerImpl @Inject constructor(
                     if (options.skills) {
                         writeSkillEntries(tar)
                     }
+                    if (options.plugins) {
+                        writePluginEntries(tar)
+                    }
                     if (options.chatHistory) {
                         writeJsonlFileEntry(tar, FILE_SESSIONS) { writer ->
                             var lastTs = 0L
@@ -366,6 +376,12 @@ class BackupManagerImpl @Inject constructor(
         themeMode = if (options.appSettings) themeSettingsRepository.snapshot() else null,
         themePresetId = if (options.appSettings) themeSettingsRepository.presetSnapshot() else null,
         dynamicColorEnabled = if (options.appSettings) themeSettingsRepository.dynamicColorSnapshot() else false,
+        codeFontSizeSp = if (options.appSettings) appearanceSettingsRepository.codeFontSizeSnapshot() else 13,
+        codeWrapEnabled = if (options.appSettings) appearanceSettingsRepository.codeWrapSnapshot() else false,
+        codeAutoFoldEnabled = if (options.appSettings) appearanceSettingsRepository.codeAutoFoldSnapshot() else true,
+        codeShowLineNumber = if (options.appSettings) appearanceSettingsRepository.codeShowLineNumberSnapshot() else true,
+        userBubbleOpacity = if (options.appSettings) appearanceSettingsRepository.userBubbleOpacitySnapshot() else 100,
+        assistantBubbleOpacity = if (options.appSettings) appearanceSettingsRepository.assistantBubbleOpacitySnapshot() else 100,
         keepaliveEnabled = if (options.appSettings) keepaliveSettingsRepository.snapshot() else false,
         liveNotificationEnabled = if (options.appSettings) liveNotificationSettingsRepository.snapshot() else false,
         approvalNotificationEnabled = if (options.appSettings) approvalNotificationSettingsRepository.snapshot() else false,
@@ -385,11 +401,14 @@ class BackupManagerImpl @Inject constructor(
         visionModel = if (options.appSettings) visionModelSettingsRepository.getVisionModel() else "",
         compactionProviderId = if (options.appSettings) compactionModelSettingsRepository.getCompactionProviderId() else "",
         compactionModel = if (options.appSettings) compactionModelSettingsRepository.getCompactionModel() else "",
+        optimizeProviderId = if (options.appSettings) optimizeInputModelSettingsRepository.getOptimizeInputProviderId() else "",
+        optimizeModel = if (options.appSettings) optimizeInputModelSettingsRepository.getOptimizeInputModel() else "",
         syncSettings = if (options.appSettings) syncSettingsRepository.snapshot() else null,
         workspaces = if (options.workspaceFiles) collectWorkspaceMetas() else emptyList(),
         memories = if (options.memories) collectMemories() else emptyList(),
         favorites = if (options.favorites) favoriteRepository.getAllOnce().map { it.toDto() } else emptyList(),
         skills = if (options.skills) collectSkillMetas() else emptyList(),
+        plugins = if (options.plugins) collectPluginMetas() else emptyList(),
         includesAppSettings = options.appSettings
     )
 
@@ -484,6 +503,24 @@ class BackupManagerImpl @Inject constructor(
         }
     }
 
+    // ── 脚本插件备份 ─────────────────────────────────────────
+
+    /** 第一遍：统计每个已安装插件的文件数（写 metadata 用）。 */
+    private fun collectPluginMetas(): List<PluginBackupMeta> =
+        pluginRepository.listInstalled().mapNotNull { plugin ->
+            val count = pluginRepository.collectPluginFiles(plugin.manifest.id).size
+            if (count > 0) PluginBackupMeta(plugin.manifest.id, plugin.manifest.name, count) else null
+        }
+
+    /** 第二遍：把各插件目录文件写入 tar（`plugins/<id>/<相对路径>`，zip 内 plugin.json 在插件根）。 */
+    private fun writePluginEntries(tar: TarArchiveOutputStream) {
+        pluginRepository.listInstalled().forEach { plugin ->
+            pluginRepository.collectPluginFiles(plugin.manifest.id).forEach { (rel, bytes) ->
+                writeTarEntry(tar, "${PLUGIN_PREFIX}${plugin.manifest.id}/$rel", bytes)
+            }
+        }
+    }
+
     /**
      * 递归遍历本地工作区，按「.gitignore（锚定）+ 同步忽略清单」排除文件；
      * `.git` 目录强制包含（其内部不参与忽略判断）；符号链接跳过（防循环）。
@@ -533,6 +570,7 @@ class BackupManagerImpl @Inject constructor(
     private suspend fun restoreFromTar(tar: TarArchiveInputStream, selectedWorkspaces: Set<String>?): RestoreStats {
         val restoreMapping = mutableMapOf<String, Workspace>()
         val restoredSkills = mutableSetOf<String>()
+        val restoredPlugins = mutableSetOf<String>()
         var metadata: BackupMetadata? = null
         var stats = RestoreStats()
         var entry = tar.nextEntry
@@ -581,6 +619,8 @@ class BackupManagerImpl @Inject constructor(
                         stats += restoreWorkspaceEntry(tar, entry.name, selectedWorkspaces, restoreMapping)
                     } else if (entry.name.startsWith(SKILL_PREFIX)) {
                         restoreSkillEntry(tar, entry.name)?.let { restoredSkills += it }
+                    } else if (entry.name.startsWith(PLUGIN_PREFIX)) {
+                        restorePluginEntry(tar, entry.name)?.let { restoredPlugins += it }
                     }
                 }
             }
@@ -591,7 +631,7 @@ class BackupManagerImpl @Inject constructor(
             error("不是有效的 AiVerse 备份文件：缺少 metadata.json")
         }
         FileLogger.i(TAG, "tar 解析完成，开始还原元数据段")
-        return stats + RestoreStats(skills = restoredSkills.size) + restoreMeta(meta, restoreMapping)
+        return stats + RestoreStats(skills = restoredSkills.size, plugins = restoredPlugins.size) + restoreMeta(meta, restoreMapping)
     }
 
     /** 逐行解析 jsonl 条目，每 [PAGE_SIZE] 条回调一次批量插入；返回该文件的总条数。 */
@@ -696,6 +736,14 @@ class BackupManagerImpl @Inject constructor(
         if (meta.includesAppSettings) {
             meta.themeMode?.let { themeSettingsRepository.restore(it) }
             themeSettingsRepository.restoreColors(meta.themePresetId, meta.dynamicColorEnabled)
+            appearanceSettingsRepository.restoreCodeDisplay(
+                meta.codeFontSizeSp,
+                meta.codeWrapEnabled,
+                meta.codeAutoFoldEnabled,
+                meta.codeShowLineNumber,
+                meta.userBubbleOpacity,
+                meta.assistantBubbleOpacity
+            )
             keepaliveSettingsRepository.restore(meta.keepaliveEnabled)
             liveNotificationSettingsRepository.restore(meta.liveNotificationEnabled)
             approvalNotificationSettingsRepository.restore(meta.approvalNotificationEnabled)
@@ -716,6 +764,9 @@ class BackupManagerImpl @Inject constructor(
             }
             if (meta.compactionProviderId.isNotBlank() || meta.compactionModel.isNotBlank()) {
                 compactionModelSettingsRepository.setCompactionModel(meta.compactionProviderId, meta.compactionModel)
+            }
+            if (meta.optimizeProviderId.isNotBlank() || meta.optimizeModel.isNotBlank()) {
+                optimizeInputModelSettingsRepository.setOptimizeInputModel(meta.optimizeProviderId, meta.optimizeModel)
             }
             meta.syncSettings?.let { syncSettingsRepository.restore(it) }
         }
@@ -766,6 +817,25 @@ class BackupManagerImpl @Inject constructor(
         } else {
             null
         }
+    }
+
+    /**
+     * 还原单个脚本插件文件条目：`plugins/<id>/<相对路径>`。
+     * 逐文件写回插件目录（同名插件覆盖，plugin.json 在插件根）；成功返回插件 id（供去重计数），失败返回 null。
+     */
+    private fun restorePluginEntry(tar: TarArchiveInputStream, name: String): String? {
+        val parts = name.removePrefix(PLUGIN_PREFIX).split('/')
+        if (parts.size < 2) return null
+        val id = parts[0]
+        val relParts = parts.drop(1)
+        // 防路径穿越：跳过空段与 . / ..（备份内部生成，正常不含，兜底防御）。
+        if (id.isBlank() || relParts.any { it.isBlank() || it == "." || it == ".." }) return null
+        val bytes = tar.readBytes()
+        if (bytes.isEmpty()) return null
+        val target = File(pluginRepository.pluginDir(id), relParts.joinToString("/"))
+        target.parentFile?.mkdirs()
+        target.writeBytes(bytes)
+        return id
     }
 
     /**
@@ -990,6 +1060,7 @@ class BackupManagerImpl @Inject constructor(
         const val FILE_LEGACY_SNAPSHOT = "snapshot.json"
         const val WORKSPACE_PREFIX = "workspaces/"
         const val SKILL_PREFIX = "skills/"
+        const val PLUGIN_PREFIX = "plugins/"
     }
 }
 

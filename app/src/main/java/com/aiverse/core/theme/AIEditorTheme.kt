@@ -40,6 +40,24 @@ val LocalChatFontSizeSp = staticCompositionLocalOf { 16 }
 /** 底部聊天输入框字号（sp），由 [AIEditorTheme] 从外观设置注入。 */
 val LocalInputFontSizeSp = staticCompositionLocalOf { 16 }
 
+/** 代码块/行内代码字号（sp），由 [AIEditorTheme] 从外观设置注入（与聊天字号分开调）。 */
+val LocalChatCodeFontSizeSp = staticCompositionLocalOf { 13 }
+
+/** 代码块自动换行（默认关）。 */
+val LocalCodeWrapEnabled = staticCompositionLocalOf { false }
+
+/** 代码块自动折叠（默认开）。 */
+val LocalCodeAutoFoldEnabled = staticCompositionLocalOf { true }
+
+/** 代码块显示行号（默认开）。 */
+val LocalCodeShowLineNumber = staticCompositionLocalOf { true }
+
+/** 用户气泡底色透明度（10~100%，默认 100）。 */
+val LocalUserBubbleOpacity = staticCompositionLocalOf { 100 }
+
+/** AI 回复气泡底色透明度（10~100%，默认 100）。 */
+val LocalAssistantBubbleOpacity = staticCompositionLocalOf { 100 }
+
 object Radius {
     val xs = 4.dp
     val sm = 8.dp
@@ -81,7 +99,11 @@ data class AppSemanticColors(
     val pageBackground: Color,
     val mutedSurface: Color,
     val capsuleSurface: Color,
-    val buttonMutedBg: Color
+    val buttonMutedBg: Color,
+    /** 半透明玻璃表面色：磨砂铺开的卡片/顶栏/输入框统一底色，非 HyperOS 预设的半透明渐变基准。 */
+    val surfaceGlass: Color,
+    /** 玻璃表面描边色：与 [surfaceGlass] 配套的 1dp 描边。 */
+    val surfaceGlassBorder: Color
 )
 
 val LightSemanticColors = AppSemanticColors(
@@ -107,7 +129,9 @@ val LightSemanticColors = AppSemanticColors(
     pageBackground = Color(0xFFF8F8F8),
     mutedSurface = Color(0xFFF2F2F7),
     capsuleSurface = Color(0xFFE9E9EB),
-    buttonMutedBg = Color(0xFFF0F2F5)
+    buttonMutedBg = Color(0xFFF0F2F5),
+    surfaceGlass = Color(0xFFFFFFFF).copy(alpha = 0.85f),
+    surfaceGlassBorder = Color(0xFFE5E5EA).copy(alpha = 0.60f)
 )
 
 val DarkSemanticColors = AppSemanticColors(
@@ -133,7 +157,9 @@ val DarkSemanticColors = AppSemanticColors(
     pageBackground = Color(0xFF07111F),
     mutedSurface = Color(0xFF13273F),
     capsuleSurface = Color(0xFF1E293B),
-    buttonMutedBg = Color(0xFF1E293B)
+    buttonMutedBg = Color(0xFF1E293B),
+    surfaceGlass = Color(0xFF0D1B2E).copy(alpha = 0.86f),
+    surfaceGlassBorder = Color(0xFF2A3F56).copy(alpha = 0.45f)
 )
 
 val LocalAppSemanticColors = staticCompositionLocalOf { LightSemanticColors }
@@ -286,6 +312,20 @@ private val AppTypography = Typography().run {
 /** HyperOS 风格开关：当前主题预设是否为 HyperOS。组件据此做条件渲染（大圆角、胶囊开关等）。 */
 val LocalHyperOSStyle = staticCompositionLocalOf { false }
 
+/** 轻量玻璃档开关：当前主题预设是否为 HyperOS 玻璃（hyperos_glass）。
+ *  仅在需要的表面（独立弹层窗口 blur 等）用它做更激进的半透明表现，不改现有 HyperOS 分支。 */
+val LocalSurfaceGlassStyle = staticCompositionLocalOf { false }
+
+/** 玻璃档返回 [glass]，其它档回退 [fallback]（改动前的原实色）。用于表面背景取色，磨砂只门控在玻璃档。 */
+@Composable
+fun glassOr(glass: Color, fallback: Color): Color =
+    if (LocalSurfaceGlassStyle.current) glass else fallback
+
+/** 玻璃档返回描边色，其它档返回透明（等效无边框，回到改动前的无描边状态）。 */
+@Composable
+fun glassBorderOr(glass: Color): Color =
+    if (LocalSurfaceGlassStyle.current) glass else Color.Transparent
+
 /** 图标彩色开关：true 时设置页图标按图标名取色，false 时统一灰白色。 */
 val LocalIconColorful = staticCompositionLocalOf { true }
 
@@ -401,8 +441,19 @@ fun AIEditorTheme(
     assistantBubbleStyle: ChatBubbleStyle = ChatBubbleStyle.CLASSIC_OUTLINE,
     chatFontSizeSp: Int = 16,
     inputFontSizeSp: Int = 16,
+    codeFontSizeSp: Int = 13,
+    codeWrapEnabled: Boolean = false,
+    codeAutoFoldEnabled: Boolean = true,
+    codeShowLineNumber: Boolean = true,
+    userBubbleOpacity: Int = 100,
+    assistantBubbleOpacity: Int = 100,
     uiFontScale: Float = 1f,
     uiDensity: UIDensity = UIDensity.STANDARD,
+    cardCornerDp: Int = 12,
+    buttonCornerDp: Int = 10,
+    fieldCornerDp: Int = 12,
+    bubbleCornerDp: Int = 10,
+    imageCornerDp: Int = 12,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -419,18 +470,35 @@ fun AIEditorTheme(
     }
 
     val isHyperOS = preset.id == "hyperos"
+    val isGlass = preset.id == "hyperos_glass"
     val typography = if (isHyperOS) HyperOSAppTypography else AppTypography
     val shapes = if (isHyperOS) HyperOSAppShapes else Shapes()
 
     CompositionLocalProvider(
         LocalAppSemanticColors provides themeColors.semanticColors,
         LocalHyperOSStyle provides isHyperOS,
+        LocalSurfaceGlassStyle provides isGlass,
         LocalIconColorful provides iconColorful,
         LocalUserBubbleStyle provides userBubbleStyle,
         LocalAssistantBubbleStyle provides assistantBubbleStyle,
         LocalChatFontSizeSp provides chatFontSizeSp,
         LocalInputFontSizeSp provides inputFontSizeSp,
-        LocalUIDensityTokens provides remember(uiDensity) { UIDensityTokens.forDensity(uiDensity) }
+        LocalChatCodeFontSizeSp provides codeFontSizeSp,
+        LocalCodeWrapEnabled provides codeWrapEnabled,
+        LocalCodeAutoFoldEnabled provides codeAutoFoldEnabled,
+        LocalCodeShowLineNumber provides codeShowLineNumber,
+        LocalUserBubbleOpacity provides userBubbleOpacity,
+        LocalAssistantBubbleOpacity provides assistantBubbleOpacity,
+        LocalUIDensityTokens provides remember(uiDensity, cardCornerDp, buttonCornerDp, fieldCornerDp, bubbleCornerDp, imageCornerDp) {
+            UIDensityTokens.forDensity(
+                uiDensity,
+                cardCornerDp,
+                buttonCornerDp,
+                fieldCornerDp,
+                bubbleCornerDp,
+                imageCornerDp
+            )
+        }
     ) {
         val baseDensity = LocalDensity.current
         CompositionLocalProvider(

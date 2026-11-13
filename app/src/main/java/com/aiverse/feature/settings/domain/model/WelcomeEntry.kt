@@ -24,8 +24,9 @@ enum class WelcomeEntryAction {
  *
  * - [VECTOR]：[WelcomeEntry.iconValue] 为 Feather 图标的简单名（如 "Terminal"、"GitBranch"、
  *   "Code"、"AlertCircle"），由 UI 层解析成 compose.icons.FeatherIcons 对应的 [androidx.compose.ui.graphics.vector.ImageVector] 渲染。
- *   仅预置项使用（用户自定义入口只能选 emoji / 文字 / 图片，故 VECTOR 不进图标选择弹层）。
- * - [EMOJI]：[WelcomeEntry.iconValue] 为一个 emoji 字符。
+ *   预置项与用户自定义入口均使用（图标选择弹层的矢量网格）。
+ * - [EMOJI]：[WelcomeEntry.iconValue] 为一个 emoji 字符。**已废弃**：仅用于旧数据解码兼容，不再生成；
+ *   加载时由 [com.aiverse.feature.settings.data.repository.WelcomeEntriesRepository] 迁移为 [VECTOR]。
  * - [TEXT]：[WelcomeEntry.iconValue] 为不超过 3 个字的文本（如「AI」「代码」）。
  * - [IMAGE]：[WelcomeEntry.iconValue] 为应用私有目录内图片文件的绝对路径（由 [com.aiverse.feature.settings.data.repository.WelcomeEntriesRepository.saveIconImage] 落盘）。
  */
@@ -47,7 +48,7 @@ enum class WelcomeIconKind {
  * @property title 卡片标题；预置项由字符串资源解析后存入（UI 直接显示，无需再解析）。
  * @property subtitle 卡片说明，可为空字符串表示不显示。
  * @property iconKind 图标呈现方式。
- * @property iconValue 图标内容：Feather 图标简单名 / emoji 字符 / 不超过 3 字文本 / 图片绝对路径。
+ * @property iconValue 图标内容：Feather 图标简单名 / 不超过 3 字文本 / 图片绝对路径。
  * @property action 点击后的动作。
  * @property promptText [action] == [WelcomeEntryAction.FILL_PROMPT] 时填入输入框的提示词模板。
  * @property enabled 是否启用；禁用的卡片显示但点击无动作（或在设置页置灰）。
@@ -58,8 +59,8 @@ data class WelcomeEntry(
     val id: String,
     val title: String,
     val subtitle: String = "",
-    val iconKind: WelcomeIconKind = WelcomeIconKind.EMOJI,
-    val iconValue: String = "",
+    val iconKind: WelcomeIconKind = WelcomeIconKind.VECTOR,
+    val iconValue: String = VECTOR_ICON_DEFAULT,
     val action: WelcomeEntryAction = WelcomeEntryAction.FILL_PROMPT,
     val promptText: String = "",
     val enabled: Boolean = true,
@@ -89,6 +90,9 @@ const val VECTOR_ICON_CODE = "Code"
 
 /** [WelcomeIconKind.VECTOR] 图标名：分析项目（Feather AlertCircle）。 */
 const val VECTOR_ICON_ALERT_CIRCLE = "AlertCircle"
+
+/** [WelcomeIconKind.VECTOR] 默认图标名（Feather MessageCircle）；未知名/旧 emoji 数据回退到它。 */
+const val VECTOR_ICON_DEFAULT = "MessageCircle"
 
 /**
  * 预置欢迎卡片：从字符串资源解析中文标题/说明/提示词。

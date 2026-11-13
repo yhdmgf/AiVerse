@@ -1,5 +1,6 @@
 package com.aiverse.core.tts
 
+import com.aiverse.R
 import android.content.Context
 import android.os.SystemClock
 import com.aiverse.feature.settings.data.repository.TtsCodeBlockMode
@@ -37,7 +38,7 @@ data class ReadProgress(
 
 @Singleton
 class TtsController @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     private val settings: TtsSettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -91,7 +92,7 @@ class TtsController @Inject constructor(
                 UtteranceEvent.ERROR -> finish()
             }
         }
-        engine.setOnError { scope.launch { _errorMessage.emit("系统 TTS 不可用：未安装语音引擎或初始化失败") } }
+        engine.setOnError { scope.launch { _errorMessage.emit(context.getString(R.string.tts_system_unavailable)) } }
         engine.setOnReady {
             engine.setRate(cachedRate)
             engine.setPitch(cachedPitch)
@@ -111,7 +112,7 @@ class TtsController @Inject constructor(
         val onlineConfig = OnlineTtsConfig(cachedBaseUrl, cachedApiKey, cachedModel, cachedVoice, cachedRate, cachedProviderType)
         if (cachedOnlineEnabled && onlineConfig.isUsable) {
             onlineEngine.play(text, onlineConfig, onDone = { finish() }, onError = { msg ->
-                scope.launch { _errorMessage.emit("在线 TTS 失败：$msg") }
+                scope.launch { _errorMessage.emit(context.getString(R.string.tts_online_failed, msg)) }
                 finish()
             })
             return

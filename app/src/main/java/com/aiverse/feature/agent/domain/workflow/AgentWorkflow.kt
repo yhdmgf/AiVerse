@@ -126,4 +126,11 @@ interface AgentWorkflow {
      * @return 建议的提交说明，失败返回 null。
      */
     suspend fun generateCommitMessage(diff: String): String?
+
+    /**
+     * 把输入框内容交给模型润色后返回润色后的文本（供「优化输入」快捷按钮）。
+     * 默认跟随当前聊天模型；若配置了优化输入专用模型且可用则用之。
+     * 输入为空、生成失败或取不到结果时返回 null。
+     */
+    suspend fun optimizeInput(sessionId: String, text: String): String?
 }

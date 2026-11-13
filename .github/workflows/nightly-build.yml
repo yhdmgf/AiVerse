@@ -61,39 +61,48 @@ jobs:
 
           # 说明 txt：测试版声明 + 包含的三个 APK + 本次 commit
           SHA=$(git rev-parse --short HEAD)
-          BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          cat > "dist/测试版不代表最终版本.txt" <<EOF
-          AiVerse 测试版（beta）安装说明
+          BUILD_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          cat > "dist/-使用守则.txt" <<EOF
+          AiVerse 测试版（Beta）安装说明
           =================================
 
-          【重要提示】测试版不代表最终版本。
-          请勿二传 / 分发本包给他人，仅供内部测试使用。
-          测试包不参与应用内检查更新，不会产生覆盖正式版的升级提示。
+          【请先阅读】
+          测试版不代表最终版本，仅供内部测试体验。
+          请勿二次分发、转包、上传或分享给他人，禁止用于商业用途。
+          测试包不参与应用内检查更新，不会触发覆盖正式版的升级提示。
 
           本次构建
-          - commit: $SHA
-          - 构建时间: $BUILD_TIME
-          - 签名: release 正式签名 + R8，包名 com.aiverse.beta（与正式版同机共存、互不覆盖）
+          - commit：$SHA
+          - 构建时间：$BUILD_TIME
+          - 包名：com.aiverse.beta（可与正式版同机共存，互不覆盖）
 
-          本 zip 内包含三个 APK，请按设备选择安装：
-          - AiVerse-universal-beta.apk  通用版（含 arm + x86 两套镜像，体积最大，任意设备可装）
-          - AiVerse-arm64-beta.apk      arm64 真机版（绝大多数真机选这个，体积最小）
-          - AiVerse-x86_64-beta.apk     x86_64 模拟器版（模拟器选这个）
+          安装包选择
+          本 zip 内包含三个 APK，请按设备类型选择安装：
+
+          - AiVerse-universal-beta.apk
+            通用版，包含 arm + x86 两套镜像，体积最大，任意设备可安装。
+            不确定设备架构时，优先选择此版本。
+
+          - AiVerse-arm64-beta.apk
+            arm64 真机版，绝大多数真机选择此版本，体积最小。
+
+          - AiVerse-x86_64-beta.apk
+            x86_64 模拟器版，模拟器选择此版本。
+
+          正式版下载
+          https://aivapp.cn/download
+
+          官方仓库
+          https://github.com/yhdmgf/aiverse
+
+          安装前请确认设备架构；如不确定，建议安装 universal 通用版。
           EOF
           # heredoc 正文必须与 run: | 块缩进一致（顶格会破坏 YAML），
           # 故写入后再剥掉行首 10 空格，让 txt 内容真正顶格。
-          sed -i 's/^          //' "dist/测试版不代表最终版本.txt"
-          # 三个 APK + 说明 txt 打包成一个 zip（zip 内为扁平结构：APK 与 txt 同在根目录）
-          cd dist
-          zip -q "AiVerse-beta-测试版.zip" \
-            "AiVerse-universal-beta.apk" \
-            "AiVerse-arm64-beta.apk" \
-            "AiVerse-x86_64-beta.apk" \
-            "测试版不代表最终版本.txt"
-          cd -
+          sed -i 's/^          //' "dist/-使用守则.txt"
+          touch -d "1949-10-01 00:00:00" "dist/-使用守则.txt"
 
           ls -la dist/
-          unzip -l "dist/AiVerse-beta-测试版.zip"
 
       - name: 输出构建信息到运行摘要
         run: |
@@ -104,13 +113,13 @@ jobs:
           echo "- 构建: beta（正式签名 + R8，包名 com.aiverse.beta，与正式版独立共存）" >> "$GITHUB_STEP_SUMMARY"
           echo "- 三架构: universal / arm64 / x86_64" >> "$GITHUB_STEP_SUMMARY"
           echo "- 测试包不参与检查更新（无应用内升级，避免导向正式包）" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 下载: 下方 artifact（aiverse-beta），产物已打包为 AiVerse-beta-测试版.zip（含测试版说明 txt）" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 下载: 下方 artifact（AiVerse-beta），内含三架构 APK 与 -使用守则.txt" >> "$GITHUB_STEP_SUMMARY"
 
-      # 产物已打包为单个 zip（三架构 APK + 测试版说明 txt），避免用户下载三个散 APK 时漏装说明。
+      # 三架构 APK + 测试版说明 txt 直接作为 artifact 内容上传，GitHub 打包的一层即唯一压缩层。
       - name: 上传 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aiverse-beta
-          path: dist/AiVerse-beta-测试版.zip
+          name: AiVerse-beta
+          path: dist/*
           if-no-files-found: error
           retention-days: 14

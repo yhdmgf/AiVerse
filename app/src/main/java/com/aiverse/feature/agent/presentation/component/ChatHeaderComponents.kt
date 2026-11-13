@@ -78,12 +78,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aiverse.core.theme.LocalHyperOSStyle
+import com.aiverse.core.theme.LocalSurfaceGlassStyle
+import com.aiverse.core.theme.glassOr
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.semanticColors
 import com.aiverse.feature.agent.domain.model.AgentMode
 import com.aiverse.feature.onboarding.domain.OnboardingStep
 import com.aiverse.feature.onboarding.presentation.onboardingTarget
@@ -154,7 +157,12 @@ internal fun ChatHeader(
     onOpenMessageTimeline: () -> Unit = {}
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.background
+        color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.colorScheme.background),
+        border = if (LocalSurfaceGlassStyle.current) {
+            BorderStroke(1.dp, MaterialTheme.semanticColors.surfaceGlassBorder)
+        } else {
+            null
+        }
     ) {
         Column(
             modifier = Modifier
@@ -194,7 +202,7 @@ internal fun ChatHeader(
                         ) {
                             Text(
                                 text = sessionTitle,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -203,7 +211,7 @@ internal fun ChatHeader(
                     } else {
                         Text(
                             text = sessionTitle,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -855,12 +863,21 @@ private fun WelcomeEntryIcon(entry: WelcomeEntry) {
                 tint = MaterialTheme.colorScheme.primary
             )
         }
-        // EMOJI / TEXT：直接以文本渲染 iconValue。
-        else -> {
+        // 文字图标：≤3 字，以文本渲染 iconValue。
+        WelcomeIconKind.TEXT -> {
             Text(
                 text = entry.iconValue,
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // EMOJI：旧数据兼容兜底；加载时已迁移为 VECTOR，此处仅渲染默认矢量图标。
+        else -> {
+            Icon(
+                imageVector = welcomeEntryVectorIcon(entry.iconValue),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

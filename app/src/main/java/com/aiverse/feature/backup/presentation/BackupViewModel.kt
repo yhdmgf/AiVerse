@@ -413,7 +413,7 @@ class BackupViewModel @Inject constructor(
             var depth = 0
             while (cause != null && depth < 2) {
                 append("\nCaused by: ")
-                append(cause::class.simpleName ?: "未知异常")
+                append(cause::class.simpleName ?: context.getString(R.string.backup_unknown_exception))
                 append(": ")
                 append(cause.message ?: "")
                 cause = cause.cause

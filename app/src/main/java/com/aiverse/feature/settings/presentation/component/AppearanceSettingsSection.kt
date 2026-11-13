@@ -1,15 +1,19 @@
 package com.aiverse.feature.settings.presentation.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +43,7 @@ import com.aiverse.core.theme.FileTreeDisplayPrefs
 import com.aiverse.core.theme.FileTreeIndentDensity
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.UIDensity
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.ui.SegmentedTabs
 import com.aiverse.core.theme.isDynamicColorSupported
 import com.aiverse.core.theme.semanticColors
@@ -49,9 +55,12 @@ import com.aiverse.feature.settings.data.repository.InputBarQuickAction
 import com.aiverse.feature.settings.data.repository.BackgroundMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
 import com.aiverse.feature.settings.domain.model.WelcomeEntry
+import com.aiverse.feature.agent.presentation.component.chatBubbleColorFor
+import com.aiverse.feature.agent.presentation.component.chatBubbleTextColorFor
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Box
 import compose.icons.feathericons.ChevronUp
+import compose.icons.feathericons.Code
 import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.Download
 import compose.icons.feathericons.Eye
@@ -59,11 +68,15 @@ import compose.icons.feathericons.Folder
 import compose.icons.feathericons.Globe
 import compose.icons.feathericons.Image
 import compose.icons.feathericons.MessageSquare
+import compose.icons.feathericons.Minimize
 import compose.icons.feathericons.Moon
 import compose.icons.feathericons.RotateCcw
 import compose.icons.feathericons.Share
+import compose.icons.feathericons.Sliders
 import compose.icons.feathericons.Trash
 import compose.icons.feathericons.Zap
+import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Star
 import kotlin.math.roundToInt
 
 /** 背景模式 -> 标签文案资源（设置项尾部与弹窗共用）。 */
@@ -104,6 +117,8 @@ internal fun AppearanceSettingsSection(
     onSetInputFontSizeSp: (Int) -> Unit,
     onSetUiFontScale: (Float) -> Unit,
     onSetUiDensity: (UIDensity) -> Unit,
+    onOpenDensity: () -> Unit,
+    onOpenCorner: () -> Unit,
     onRestoreDefaults: () -> Unit,
     onExportRequest: () -> Unit,
     onImportThemePackage: (String) -> Unit,
@@ -111,7 +126,19 @@ internal fun AppearanceSettingsSection(
     inputBarPrefs: InputBarPrefs,
     onInputBarPrefsChange: (InputBarPrefs) -> Unit,
     welcomeEntries: List<WelcomeEntry>,
-    onOpenWelcomeEntriesSheet: () -> Unit
+    onOpenWelcomeEntriesSheet: () -> Unit,
+    codeFontSizeSp: Int,
+    codeWrapEnabled: Boolean,
+    codeAutoFoldEnabled: Boolean,
+    codeShowLineNumber: Boolean,
+    userBubbleOpacity: Int,
+    assistantBubbleOpacity: Int,
+    onSetCodeFontSizeSp: (Int) -> Unit,
+    onSetCodeWrapEnabled: (Boolean) -> Unit,
+    onSetCodeAutoFoldEnabled: (Boolean) -> Unit,
+    onSetCodeShowLineNumber: (Boolean) -> Unit,
+    onSetUserBubbleOpacity: (Int) -> Unit,
+    onSetAssistantBubbleOpacity: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -160,13 +187,14 @@ internal fun AppearanceSettingsSection(
             ).show()
         }
     }
+    val t = LocalUIDensityTokens.current
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = Spacing.lg)
+            .padding(horizontal = Spacing.md)
             .padding(bottom = Spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        verticalArrangement = Arrangement.spacedBy(t.sm)
     ) {
         SettingsGroupHeader(text = stringResource(R.string.settings_appearance_general))
         SettingsGroup {
@@ -195,11 +223,25 @@ internal fun AppearanceSettingsSection(
                 onClick = onOpenUserBubbleStyleSheet
             )
             SettingsDivider()
+            BubbleOpacityRow(
+                title = stringResource(R.string.settings_appearance_user_bubble_opacity),
+                style = userBubbleStyle,
+                value = userBubbleOpacity,
+                onSet = onSetUserBubbleOpacity
+            )
+            SettingsDivider()
             SettingsRow(
                 icon = FeatherIcons.MessageSquare,
                 title = stringResource(R.string.bubble_assistant),
                 subtitle = stringResource(assistantBubbleStyle.labelRes),
                 onClick = onOpenAssistantBubbleStyleSheet
+            )
+            SettingsDivider()
+            BubbleOpacityRow(
+                title = stringResource(R.string.settings_appearance_assistant_bubble_opacity),
+                style = assistantBubbleStyle,
+                value = assistantBubbleOpacity,
+                onSet = onSetAssistantBubbleOpacity
             )
             SettingsDivider()
             SettingsRow(
@@ -239,15 +281,64 @@ internal fun AppearanceSettingsSection(
                 onSet = onSetInputFontSizeSp
             )
             SettingsDivider()
+            FontSizeSliderRow(
+                title = stringResource(R.string.settings_appearance_code_font),
+                value = codeFontSizeSp,
+                min = AppearanceFontRanges.CODE_MIN,
+                max = AppearanceFontRanges.CODE_MAX,
+                onSet = onSetCodeFontSizeSp
+            )
+            SettingsDivider()
             ScaleSliderRow(
                 title = stringResource(R.string.settings_appearance_ui_scale),
                 value = uiFontScale,
                 onSet = onSetUiFontScale
             )
             SettingsDivider()
-            DensityRow(
-                selected = uiDensity,
-                onSelect = onSetUiDensity
+            SettingsRow(
+                icon = FeatherIcons.Sliders,
+                title = stringResource(R.string.settings_appearance_density),
+                onClick = onOpenDensity,
+                trailing = {
+                    Text(
+                        text = stringResource(
+                            when (uiDensity) {
+                                UIDensity.COMPACT -> R.string.density_compact
+                                UIDensity.STANDARD -> R.string.density_standard
+                                UIDensity.COMFORTABLE -> R.string.density_comfortable
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.semanticColors.subtleText
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.Box,
+                title = stringResource(R.string.settings_appearance_corner),
+                onClick = onOpenCorner
+            )
+        }
+
+        SettingsGroupHeader(text = stringResource(R.string.settings_appearance_code_display))
+        SettingsGroup {
+            SettingsRow(
+                icon = FeatherIcons.Code,
+                title = stringResource(R.string.settings_appearance_code_wrap),
+                trailing = { AppSwitch(checked = codeWrapEnabled, onCheckedChange = onSetCodeWrapEnabled) }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.Minimize,
+                title = stringResource(R.string.settings_appearance_code_auto_fold),
+                trailing = { AppSwitch(checked = codeAutoFoldEnabled, onCheckedChange = onSetCodeAutoFoldEnabled) }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.Eye,
+                title = stringResource(R.string.settings_appearance_code_line_number),
+                trailing = { AppSwitch(checked = codeShowLineNumber, onCheckedChange = onSetCodeShowLineNumber) }
             )
         }
 
@@ -336,6 +427,10 @@ private object AppearanceFontRanges {
     const val CHAT_MAX = 22
     const val INPUT_MIN = 12
     const val INPUT_MAX = 22
+    const val CODE_MIN = 10
+    const val CODE_MAX = 22
+    const val OPACITY_MIN = 10
+    const val OPACITY_MAX = 100
 }
 
 /** 聊天 / 输入框字号滑块行：拖动实时预览，松手才落盘。 */
@@ -371,36 +466,6 @@ private fun FontSizeSliderRow(
             onValueChangeFinished = { onSet(local) },
             valueRange = min.toFloat()..max.toFloat(),
             steps = (max - min - 1)
-        )
-    }
-}
-
-/** 界面密度三档选择行：复用 iOS 风分段控件，实时持久化。 */
-@Composable
-private fun DensityRow(
-    selected: UIDensity,
-    onSelect: (UIDensity) -> Unit
-) {
-    val options = UIDensity.entries
-    val labels = listOf(
-        stringResource(R.string.density_compact),
-        stringResource(R.string.density_standard),
-        stringResource(R.string.density_comfortable)
-    )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
-    ) {
-        Text(
-            text = stringResource(R.string.settings_appearance_density),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(bottom = Spacing.sm)
-        )
-        SegmentedTabs(
-            selected = options.indexOf(selected).coerceAtLeast(0),
-            labels = labels,
-            onSelect = { index -> onSelect(options[index]) }
         )
     }
 }
@@ -498,6 +563,79 @@ private fun ScaleSliderRow(
     }
 }
 
+/**
+ * 气泡透明度滑块行 + 常驻预览块：拖动时预览实时跟随变化，松手才落盘。
+ * 预览块在滑块下方常驻，随所选样式与透明度实时更新（需求：选完样式后在该行下面常驻预览）。
+ */
+@Composable
+private fun BubbleOpacityRow(
+    title: String,
+    style: ChatBubbleStyle,
+    value: Int,
+    onSet: (Int) -> Unit
+) {
+    var local by remember(value) { mutableStateOf(value) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${local}%",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.semanticColors.subtleText
+            )
+        }
+        Slider(
+            value = local.toFloat(),
+            onValueChange = { local = it.roundToInt() },
+            onValueChangeFinished = { onSet(local) },
+            valueRange = AppearanceFontRanges.OPACITY_MIN.toFloat()..AppearanceFontRanges.OPACITY_MAX.toFloat(),
+            steps = (AppearanceFontRanges.OPACITY_MAX - AppearanceFontRanges.OPACITY_MIN - 1)
+        )
+        BubblePreviewBlock(style = style, opacity = local)
+    }
+}
+
+/** 固定高度的气泡预览块：按所选样式取底色/文字色/描边/圆角，叠加透明度实时预览。 */
+@Composable
+private fun BubblePreviewBlock(style: ChatBubbleStyle, opacity: Int) {
+    val color = chatBubbleColorFor(style).copy(alpha = opacity / 100f)
+    val textColor = chatBubbleTextColorFor(style)
+    val t = LocalUIDensityTokens.current
+    val shape = if (style == ChatBubbleStyle.FRESH_GREEN) RoundedCornerShape(24.dp) else RoundedCornerShape(t.rMd)
+    val border = when (style) {
+        ChatBubbleStyle.CLASSIC_OUTLINE -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.onSurface)
+        ChatBubbleStyle.COMIC -> BorderStroke(2.dp, Color.Black)
+        ChatBubbleStyle.HEARTBEAT -> BorderStroke(1.5.dp, Color(0xFFBDBDBD))
+        ChatBubbleStyle.MINIMAL_WHITE -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ChatBubbleStyle.NO_BUBBLE -> null
+        else -> null
+    }
+    Surface(
+        shape = shape,
+        color = color,
+        border = border,
+        shadowElevation = if (style == ChatBubbleStyle.SOFT_SHADOW) 4.dp else 0.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.bubble_preview_text),
+            color = textColor,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = t.md, vertical = t.sm)
+        )
+    }
+}
+
 /** 设置页快捷栏开关行的展示规格（图标/标题/开关状态/回调）。 */
 private class InputBarRowSpec(
     val icon: ImageVector,
@@ -522,6 +660,8 @@ private fun inputBarActionRowSpec(
         InputBarRowSpec(FeatherIcons.Folder, R.string.settings_inputbar_folder, prefs.showFolder) { onChange(prefs.copy(showFolder = it)) }
     InputBarQuickAction.MCP ->
         InputBarRowSpec(FeatherIcons.Box, R.string.settings_inputbar_mcp, prefs.showMcp) { onChange(prefs.copy(showMcp = it)) }
-    InputBarQuickAction.CLEAR ->
-        InputBarRowSpec(FeatherIcons.Trash, R.string.settings_inputbar_clear, prefs.showClear) { onChange(prefs.copy(showClear = it)) }
+    InputBarQuickAction.OPTIMIZE ->
+        InputBarRowSpec(FeatherIcons.Star, R.string.settings_inputbar_optimize, prefs.showOptimize) { onChange(prefs.copy(showOptimize = it)) }
+    InputBarQuickAction.PLUS ->
+        InputBarRowSpec(FeatherIcons.Plus, R.string.settings_inputbar_plus, prefs.showPlus) { onChange(prefs.copy(showPlus = it)) }
 }

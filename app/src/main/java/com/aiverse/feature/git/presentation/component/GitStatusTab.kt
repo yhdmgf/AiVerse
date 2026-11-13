@@ -35,6 +35,7 @@ import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.core.ui.AppSwitch
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.dialogTextFieldColors
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -199,7 +200,7 @@ internal fun StatusTab(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = 70.dp)
+        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = floatingTabBarContentBottomPadding())
     ) {
         item(key = "overview") { StatusOverview(status = s, clean = clean) }
 

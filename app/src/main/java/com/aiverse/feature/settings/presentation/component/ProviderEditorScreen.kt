@@ -130,6 +130,7 @@ import com.aiverse.feature.settings.domain.model.BalanceConfig
 import com.aiverse.feature.settings.domain.model.BalanceHeader
 import com.aiverse.feature.settings.domain.model.KeyRotationStrategy
 import com.aiverse.feature.settings.domain.model.ModelMetadata
+import com.aiverse.feature.settings.domain.model.DEFAULT_KEY_WEIGHT
 import com.aiverse.feature.settings.domain.model.MAX_KEY_WEIGHT
 import com.aiverse.feature.settings.domain.model.ProviderKey
 import com.aiverse.feature.settings.domain.model.ProviderType
@@ -2419,6 +2420,7 @@ private fun ProviderKeysPage(
                                     expanded = rowId in expandedIds,
                                     onValueChange = { keys[index] = keys[index].copy(value = it) },
                                     onWeightChange = { keys[index] = keys[index].copy(weight = it) },
+                                    onNameChange = { keys[index] = keys[index].copy(name = it) },
                                     dragModifier = Modifier.longPressDraggableHandle(
                                         onDragStarted = {
                                             hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
@@ -2504,6 +2506,7 @@ private fun ProviderKeyCard(
     key: ProviderKey,
     expanded: Boolean,
     onValueChange: (String) -> Unit,
+    onNameChange: (String) -> Unit,
     onWeightChange: (Int) -> Unit,
     dragModifier: Modifier
 ) {
@@ -2520,10 +2523,25 @@ private fun ProviderKeyCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = stringResource(R.string.provider_multi_key_item, index + 1),
+                text = key.name.ifBlank { stringResource(R.string.provider_multi_key_item, index + 1) },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            if (key.weight > 0 && key.weight != DEFAULT_KEY_WEIGHT) {
+                Text(
+                    text = stringResource(R.string.provider_multi_key_weight_value, key.weight),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.semanticColors.subtleText,
+                    modifier = Modifier.padding(start = Spacing.xs)
+                )
+            } else if (key.weight <= 0) {
+                Text(
+                    text = stringResource(R.string.provider_multi_key_disabled),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.semanticColors.warning,
+                    modifier = Modifier.padding(start = Spacing.xs)
+                )
+            }
             Spacer(Modifier.width(Spacing.sm))
             Text(
                 text = key.value.maskedKeyPreview(),
@@ -2564,6 +2582,13 @@ private fun ProviderKeyCard(
                                 .size(20.dp)
                                 .clickable { valueVisible = !valueVisible }
                         )
+                    }
+                )
+                ProviderTextFieldRow(
+                    label = stringResource(R.string.provider_multi_key_name),
+                    value = key.name,
+                    onValueChange = { input ->
+                        onNameChange(input.filter { c -> c != '|' && c != '\n' && c != '\r' })
                     }
                 )
                 ProviderTextFieldRow(

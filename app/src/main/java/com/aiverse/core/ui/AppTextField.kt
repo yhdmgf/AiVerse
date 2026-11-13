@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.core.theme.glassOr
 import com.aiverse.core.theme.semanticColors
 
 /**
@@ -29,9 +30,8 @@ import com.aiverse.core.theme.semanticColors
 @Composable
 fun appTextFieldColors(
     isLight: Boolean = MaterialTheme.colorScheme.background.luminance() > 0.5f,
-    unfocusedContainerColor: Color = MaterialTheme.semanticColors.cardSurface,
-    focusedContainerColor: Color = if (isLight) MaterialTheme.semanticColors.cardSurface
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+    unfocusedContainerColor: Color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface),
+    focusedContainerColor: Color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface)
 ): TextFieldColors {
     return OutlinedTextFieldDefaults.colors(
         unfocusedBorderColor = if (isLight) MaterialTheme.colorScheme.outlineVariant

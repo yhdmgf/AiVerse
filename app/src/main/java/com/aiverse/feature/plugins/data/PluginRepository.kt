@@ -1,5 +1,6 @@
 package com.aiverse.feature.plugins.data
 
+import com.aiverse.R
 import android.content.Context
 import com.aiverse.feature.plugins.domain.model.PluginManifest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,13 +37,13 @@ class PluginRepository @Inject constructor(
         try {
             extractZip(zipFile, tmp)
             val pluginJson = tmp.walkTopDown().find { it.name == "plugin.json" }
-                ?: throw IllegalStateException("压缩包中未找到 plugin.json")
+                ?: throw IllegalStateException(context.getString(R.string.plugin_install_no_plugin_json))
             val manifest = json.decodeFromString<PluginManifest>(pluginJson.readText())
-            if (manifest.packageName.isBlank()) throw IllegalStateException("plugin.json 缺少 package 字段")
-            if (manifest.name.isBlank()) throw IllegalStateException("plugin.json 缺少 name 字段")
-            if (manifest.main.isBlank()) throw IllegalStateException("plugin.json 缺少 main 字段")
+            if (manifest.packageName.isBlank()) throw IllegalStateException(context.getString(R.string.plugin_install_missing_package))
+            if (manifest.name.isBlank()) throw IllegalStateException(context.getString(R.string.plugin_install_missing_name))
+            if (manifest.main.isBlank()) throw IllegalStateException(context.getString(R.string.plugin_install_missing_main))
 
-            val pluginRoot = pluginJson.parentFile ?: throw IllegalStateException("plugin.json 所在目录异常")
+            val pluginRoot = pluginJson.parentFile ?: throw IllegalStateException(context.getString(R.string.plugin_install_bad_dir))
             val target = File(pluginsDir, manifest.id)
             if (target.exists()) target.deleteRecursively()
             pluginsDir.mkdirs()
@@ -105,6 +106,23 @@ class PluginRepository @Inject constructor(
     }
 
     fun pluginDir(id: String): File = File(pluginsDir, id)
+
+    /**
+     * 收集插件目录下全部文件的（相对插件根路径, 字节）映射，用于分享/导出打包。
+     * zip 内路径为插件根内相对路径（plugin.json 在 zip 根），这样导出的 zip 可直接再安装。
+     * 目录不存在或读取失败返回空映射（调用方据此提示失败）。
+     */
+    fun collectPluginFiles(id: String): Map<String, ByteArray> {
+        val root = pluginDir(id)
+        if (!root.isDirectory) return emptyMap()
+        return root.walkTopDown()
+            .filter { it.isFile }
+            .mapNotNull { file ->
+                val rel = file.relativeTo(root).path
+                runCatching { rel to file.readBytes() }.getOrNull()
+            }
+            .toMap()
+    }
 
     fun uninstall(id: String) {
         val dir = File(pluginsDir, id)

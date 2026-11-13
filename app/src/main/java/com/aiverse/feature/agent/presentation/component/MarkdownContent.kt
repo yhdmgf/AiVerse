@@ -1,10 +1,13 @@
 package com.aiverse.feature.agent.presentation.component
 
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -35,6 +39,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +74,7 @@ import dev.snipme.highlights.model.SyntaxLanguage
 import dev.snipme.highlights.model.SyntaxThemes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.min
 
 // 代码块与行内代码共用字体。系统等宽（FontFamily.Monospace）缺下标字形且不回落，
 // 内置 JetBrains Mono NL 经资源加载可走系统 fallback，能显示 ₀-₉ 等下标/上标字符。
@@ -147,7 +153,16 @@ internal fun MarkdownContent(
     /** 块级元素（代码块正文）文字色：非 null 时覆盖主题默认（onSurface），
      *  深底气泡场景由调用方传入浅色，保证深底上可读。代码块顶部语言标签行跟随 [color]
      *  （即气泡文字色），深底气泡下同为浅色，随 [blockBackground] 转深底后自然可读。 */
-    blockTextColor: Color? = null
+    blockTextColor: Color? = null,
+    /** 代码块/行内代码字号（sp）：非 null 时覆盖默认（compact 12sp / 常规 13sp），
+     *  供「代码块字体大小」外观设置独立调节。 */
+    codeFontSizeSp: Int? = null,
+    /** 代码块自动换行：true 时行内软换行（不横向滚动）；false 时横向滚动（默认）。 */
+    codeWrapEnabled: Boolean = false,
+    /** 代码块自动折叠：超过阈值行数时折叠，可点击展开。 */
+    codeAutoFoldEnabled: Boolean = false,
+    /** 代码块显示行号。 */
+    codeShowLineNumber: Boolean = false
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val semantic = MaterialTheme.semanticColors
@@ -170,7 +185,7 @@ internal fun MarkdownContent(
     val body = if (fontSizeSp == null) baseBody
     else baseBody.copy(fontSize = fontSizeSp.sp, lineHeight = (fontSizeSp + 4).sp)
     val bodyLineHeight = if (fontSizeSp != null) (fontSizeSp + 4).sp else if (compact) 18.sp else 20.sp
-    val codeSize = if (compact) 12.sp else 13.sp
+    val codeSize = codeFontSizeSp?.sp ?: if (compact) 12.sp else 13.sp
     val mdTypography = markdownTypography(
         h1 = (if (compact) typography.titleMedium else typography.headlineSmall).copy(fontWeight = FontWeight.Bold, color = color),
         h2 = (if (compact) typography.titleSmall else typography.titleLarge).copy(fontWeight = FontWeight.Bold, color = color),
@@ -365,7 +380,10 @@ internal fun MarkdownContent(
                         content = it.content,
                         node = it.node,
                     ) { code, language, style ->
-                        SafeMarkdownHighlightedCode(code, language, style, highlightsBuilder, showHeader = true)
+                        SafeMarkdownHighlightedCode(
+                            code, language, style, highlightsBuilder, showHeader = true,
+                            wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
+                        )
                     }
                 },
                 codeBlock = {
@@ -373,7 +391,10 @@ internal fun MarkdownContent(
                         content = it.content,
                         node = it.node,
                     ) { code, language, style ->
-                        SafeMarkdownHighlightedCode(code, language, style, highlightsBuilder, showHeader = true)
+                        SafeMarkdownHighlightedCode(
+                            code, language, style, highlightsBuilder, showHeader = true,
+                            wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
+                        )
                     }
                 },
                 // 库默认 maxLines=1 + Ellipsis，单元格长文会被截断；这里放开为完整多行显示。
@@ -468,6 +489,9 @@ private object CodeHighlightCache {
     }
 }
 
+/** 代码块自动折叠的行数阈值：超过该行数且开启折叠时，先显示前 N 行 + 「展开全部」。 */
+private const val CODE_FOLD_THRESHOLD_LINES = 12
+
 @Composable
 private fun SafeMarkdownHighlightedCode(
     code: String,
@@ -475,6 +499,9 @@ private fun SafeMarkdownHighlightedCode(
     style: TextStyle,
     highlightsBuilder: Highlights.Builder,
     showHeader: Boolean,
+    wrapEnabled: Boolean = false,
+    autoFold: Boolean = false,
+    showLineNumber: Boolean = false,
 ) {
     val isDark = LocalMarkdownColors.current.codeBackground.luminance() < 0.5f
     val cached = CodeHighlightCache.get(code, language, isDark)
@@ -494,6 +521,17 @@ private fun SafeMarkdownHighlightedCode(
     // 与相邻块之间保留 scale(8) 呼吸感，块与块正常间距不受影响。
     val isFirstBlock = LocalIsFirstBlock.current
     val isLastBlock = LocalIsLastBlock.current
+    // 折叠：超过阈值行数且开启折叠时，先显示前 N 行，行尾「展开全部」按钮；行号列同步只显示可见行。
+    val t = LocalUIDensityTokens.current
+    val lineCount = code.count { it == '\n' } + 1
+    val canFold = autoFold && lineCount > CODE_FOLD_THRESHOLD_LINES
+    var expanded by remember(code) { mutableStateOf(false) }
+    val folded = canFold && !expanded
+    val maxLines = if (folded) CODE_FOLD_THRESHOLD_LINES else Int.MAX_VALUE
+    val visibleLines = if (folded) min(lineCount, CODE_FOLD_THRESHOLD_LINES) else lineCount
+    // 行号与代码同字号同字高才能逐行对齐；颜色取代码文字色降透明度，同色系弱化不抢正文。
+    val lineNumberStyle = style.copy(color = style.color.copy(alpha = 0.45f))
+
     MarkdownCodeBackground(
         color = LocalMarkdownColors.current.codeBackground,
         shape = RoundedCornerShape(LocalMarkdownDimens.current.codeBackgroundCornerSize),
@@ -505,13 +543,54 @@ private fun SafeMarkdownHighlightedCode(
         language = language,
         code = code,
     ) {
-        MarkdownBasicText(
-            text = highlighted,
-            style = style,
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(LocalMarkdownPadding.current.codeBlock),
-        )
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth()) {
+                if (showLineNumber) {
+                    Column(
+                        modifier = Modifier.padding(start = t.sm, top = t.sm, bottom = t.sm)
+                    ) {
+                        for (i in 0 until visibleLines) {
+                            Text(
+                                text = "${i + 1}",
+                                style = lineNumberStyle,
+                                maxLines = 1,
+                                modifier = Modifier.padding(end = t.xs)
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(if (!wrapEnabled) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                ) {
+                    MarkdownBasicText(
+                        text = highlighted,
+                        style = style,
+                        maxLines = maxLines,
+                        softWrap = wrapEnabled,
+                        overflow = if (folded) TextOverflow.Ellipsis else TextOverflow.Clip,
+                        modifier = Modifier.padding(
+                            start = if (showLineNumber) 0.dp else t.sm,
+                            end = t.sm,
+                            top = t.sm,
+                            bottom = t.sm,
+                        ),
+                    )
+                }
+            }
+            if (folded) {
+                Text(
+                    text = stringResource(R.string.chat_code_expand),
+                    style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.primary),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = true }
+                        .padding(vertical = t.scale(4)),
+                )
+            }
+        }
     }
 }
 

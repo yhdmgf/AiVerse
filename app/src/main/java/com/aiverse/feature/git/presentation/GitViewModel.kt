@@ -681,6 +681,38 @@ class GitViewModel @Inject constructor(
         }
     }
 
+    /** 批量给选中的 issue 分配受理人；成功后刷新列表并清空选择。 */
+    fun bulkSetAssigneesToSelected(assignees: List<String>) {
+        val selected = _state.value.selectedIssueNumbers
+        if (selected.isEmpty() || assignees.isEmpty() || _state.value.issueBulkBusy) return
+        _state.update { it.copy(issueBulkBusy = true, issueActionError = null) }
+        viewModelScope.launch {
+            var failed = 0
+            try {
+                for (number in selected) {
+                    val r = issuesRepository.setAssignees(number, assignees)
+                    if (r.isFailure) failed++
+                }
+                _state.update {
+                    it.copy(
+                        issueBulkBusy = false,
+                        issueSelectionMode = false,
+                        selectedIssueNumbers = emptySet(),
+                        toast = context.getString(
+                            if (failed == 0) R.string.git_issue_bulk_assign_success
+                            else R.string.git_issue_bulk_assign_partial, selected.size - failed, failed
+                        )
+                    )
+                }
+                loadIssues()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                FileLogger.e(TAG, "批量分配受理人失败", e)
+                _state.update { it.copy(issueBulkBusy = false, issueActionError = e.message) }
+            }
+        }
+    }
+
     /** 懒加载当前 issue 的评论列表。 */
     fun loadIssueComments(number: Long) {
         if (_state.value.issueCommentsLoading) return

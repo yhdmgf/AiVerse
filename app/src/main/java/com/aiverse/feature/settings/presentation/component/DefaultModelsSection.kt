@@ -75,6 +75,7 @@ import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.Image
 import compose.icons.feathericons.Minimize2
 import compose.icons.feathericons.Sliders
+import compose.icons.feathericons.Star
 import compose.icons.feathericons.Type
 import compose.icons.feathericons.Zap
 
@@ -90,6 +91,8 @@ internal fun DefaultModelsSection(
     compactionModel: String,
     titleProviderId: String,
     titleModel: String,
+    optimizeProviderId: String,
+    optimizeModel: String,
     imageGenProviderId: String,
     imageGenModel: String,
     subagentTierSelections: Map<SubagentModelTier, SubagentTierSelection>,
@@ -101,6 +104,8 @@ internal fun DefaultModelsSection(
     onClearCompactionModel: () -> Unit,
     onSelectTitleModel: (providerId: String, model: String) -> Unit,
     onClearTitleModel: () -> Unit,
+    onSelectOptimizeModel: (providerId: String, model: String) -> Unit,
+    onClearOptimizeModel: () -> Unit,
     onSelectImageGenModel: (providerId: String, model: String) -> Unit,
     onClearImageGenModel: () -> Unit,
     onSelectSubagentTierModel: (SubagentModelTier, providerId: String, model: String) -> Unit,
@@ -109,6 +114,7 @@ internal fun DefaultModelsSection(
     var showVisionSheet by remember { mutableStateOf(false) }
     var showCompactionSheet by remember { mutableStateOf(false) }
     var showTitleSheet by remember { mutableStateOf(false) }
+    var showOptimizeSheet by remember { mutableStateOf(false) }
     var showImageGenSheet by remember { mutableStateOf(false) }
     // 三档共用一个弹层：记下当前在编辑哪一档即可，不必三个 boolean。
     var tierSheet by remember { mutableStateOf<SubagentModelTier?>(null) }
@@ -131,6 +137,12 @@ internal fun DefaultModelsSection(
         stringResource(R.string.settings_title_follow_chat)
     } else {
         titleModel
+    }
+
+    val optimizeValue = if (optimizeProviderId.isBlank() || optimizeModel.isBlank()) {
+        stringResource(R.string.settings_optimize_input_follow_chat)
+    } else {
+        optimizeModel
     }
 
     val imageGenValue = if (imageGenProviderId.isBlank() || imageGenModel.isBlank()) {
@@ -189,6 +201,23 @@ internal fun DefaultModelsSection(
                 trailing = {
                     Text(
                         text = titleValue,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(2f)
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.Star,
+                title = stringResource(R.string.settings_optimize_input_model),
+                onClick = { showOptimizeSheet = true },
+                trailing = {
+                    Text(
+                        text = optimizeValue,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -304,6 +333,26 @@ internal fun DefaultModelsSection(
                 showTitleSheet = false
             },
             onDismiss = { showTitleSheet = false }
+        )
+    }
+
+    if (showOptimizeSheet) {
+        ModelSelectionSheet(
+            title = stringResource(R.string.settings_optimize_input_model),
+            noModelsText = stringResource(R.string.optimize_input_no_models),
+            providers = providers,
+            currentProviderId = optimizeProviderId,
+            currentModel = optimizeModel,
+            modelMetadata = modelMetadata,
+            onSelect = { pid, model ->
+                onSelectOptimizeModel(pid, model)
+                showOptimizeSheet = false
+            },
+            onClear = {
+                onClearOptimizeModel()
+                showOptimizeSheet = false
+            },
+            onDismiss = { showOptimizeSheet = false }
         )
     }
 

@@ -34,11 +34,11 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -46,11 +46,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiverse.R
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.ExpandableChevronIcon
 import com.aiverse.core.ui.PressableSurface
+import com.aiverse.feature.agent.data.repository.SubAgentDismissPrefsRepository
 import com.aiverse.feature.agent.presentation.SubAgentCardState
 import com.aiverse.feature.agent.presentation.SubAgentCardStatus
 import compose.icons.FeatherIcons
@@ -58,7 +60,9 @@ import compose.icons.feathericons.AlertCircle
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.X
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -538,18 +542,29 @@ internal fun SubAgentStatusRow(
     modifier: Modifier = Modifier
 ) {
     if (states.isEmpty()) return
-    // 叉号收起：仅记录「用户想隐藏」的子会话 id，不删除任何数据、不联动侧边栏会话列表。
-    // 切换父会话时 remember 键变化，已收起集合自动重置，新会话重新展示。
-    val dismissedIds = remember(states.firstOrNull()?.parentSessionId) { mutableStateSetOf<String>() }
-    val visibleStates = remember(states, dismissedIds.size) {
+    // 叉号关闭持久化：记录用户「点过 × 隐藏」的子会话 id，重启 App / 切换父会话后不再冒出。
+    // 只隐藏状态横幅显示，不删除任何子代理数据、不联动侧边栏会话列表（子代理会话仍可查看）。
+    val parentSessionId = states.firstOrNull()?.parentSessionId
+    val context = LocalContext.current
+    val uiTokens = LocalUIDensityTokens.current
+    val dismissPrefs = remember(context.applicationContext) {
+        SubAgentDismissPrefsRepository(context.applicationContext)
+    }
+    // 已关闭集合：初始为空，异步从持久化加载，避免在主线程做磁盘读；父会话切换时重新加载。
+    var dismissedIds by remember(parentSessionId) { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(parentSessionId) {
+        val pid = parentSessionId ?: return@LaunchedEffect
+        dismissedIds = withContext(Dispatchers.IO) { dismissPrefs.dismissed(pid) }
+    }
+    val visibleStates = remember(states, dismissedIds) {
         states.filter { it.subSessionId !in dismissedIds }
     }
     if (visibleStates.isEmpty()) return
     val runningCount = visibleStates.count { it.status == SubAgentCardStatus.RUNNING }
     // 全部子代理已结束（成功/失败/停止都算）→ 视为收尾态，标题收成一行摘要。
     val allFinished = runningCount == 0
-    // 折叠开关：默认展开，用户点过则以选择为准；状态行本身常驻，只有明细可收合。
-    var expanded by remember { mutableStateOf(true) }
+    // 折叠开关：默认折叠，用户点过则以选择为准；状态行本身常驻，只有明细可收合。
+    var expanded by remember { mutableStateOf(false) }
     // 全部结束后自动收成摘要行（issue #54）：只在状态从「有运行中」变为「全部结束」这一跳触发收起，
     // 不覆盖用户的后续手动展开——点开看明细后不会被强行再收。
     LaunchedEffect(allFinished) {
@@ -572,81 +587,88 @@ internal fun SubAgentStatusRow(
                 ),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
-            PressableSurface(
-                onClick = { expanded = !expanded },
-                shape = RoundedCornerShape(Radius.sm),
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                // 左侧可点区：占满剩余宽度，点击切换展开/收起。标题行整行可点，保持原交互。
+                PressableSurface(
+                    onClick = { expanded = !expanded },
+                    shape = RoundedCornerShape(Radius.sm),
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(Radius.xs))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = FeatherIcons.Cpu,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(Spacing.sm))
-                    // 展开/收起箭头放到标题左侧，与 Cpu 图标一起作状态指示器；整行点击仍切换展开态。
-                    ExpandableChevronIcon(
-                        expanded = expanded,
-                        contentDescription = stringResource(
-                            if (expanded) R.string.common_collapse else R.string.common_expand
-                        ),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                        modifier = Modifier.padding(end = Spacing.xs),
-                        size = 16.dp
-                    )
-                    Text(
-                        // 收起态且全部结束 → 一行摘要「N 个子代理已完成，点开查看」；展开或仍在运行 → 原标题。
-                        text = if (allFinished && !expanded) {
-                            stringResource(R.string.subagent_status_row_all_done, visibleStates.size)
-                        } else {
-                            stringResource(R.string.subagent_status_row_title)
-                        },
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (runningCount > 0) {
-                        Spacer(Modifier.width(Spacing.xs))
-                        SubAgentStatusPill(
-                            label = stringResource(R.string.subagent_status_row_running_count, runningCount),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    // 叉号：仅收起整条状态横幅（本会话内不再展示），不删除子代理数据，也不影响侧边栏。
-                    // 有运行中的子代理时不给关闭入口，避免进行中状态与停止按钮被一键隐藏；
-                    // 全部结束后 × 独占右端，并用 md 间距与左侧内容拉开，减少误触。
-                    if (runningCount == 0) {
-                        Spacer(Modifier.width(Spacing.md))
                         Box(
                             modifier = Modifier
-                                .size(24.dp)
-                                .clip(RoundedCornerShape(Radius.sm))
-                                .clickable {
-                                    visibleStates.forEach { dismissedIds.add(it.subSessionId) }
-                                },
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(Radius.xs))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = FeatherIcons.X,
-                                contentDescription = stringResource(R.string.common_close),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                                modifier = Modifier.size(16.dp)
+                                imageVector = FeatherIcons.Cpu,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp)
                             )
                         }
+                        Spacer(Modifier.width(Spacing.sm))
+                        // 展开/收起箭头放到标题左侧，与 Cpu 图标一起作状态指示器；左侧可点区点击仍切换展开态。
+                        ExpandableChevronIcon(
+                            expanded = expanded,
+                            contentDescription = stringResource(
+                                if (expanded) R.string.common_collapse else R.string.common_expand
+                            ),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                            modifier = Modifier.padding(end = Spacing.xs),
+                            size = 16.dp
+                        )
+                        Text(
+                            // 收起态且全部结束 → 一行摘要「N 个子代理已完成，点开查看」；展开或仍在运行 → 原标题。
+                            text = if (allFinished && !expanded) {
+                                stringResource(R.string.subagent_status_row_all_done, visibleStates.size)
+                            } else {
+                                stringResource(R.string.subagent_status_row_title)
+                            },
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (runningCount > 0) {
+                            Spacer(Modifier.width(Spacing.xs))
+                            SubAgentStatusPill(
+                                label = stringResource(R.string.subagent_status_row_running_count, runningCount),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+                // 叉号：移出可点区（兄弟节点），彻底避免被外层展开/收起点击拦截；
+                // 仅全部结束时出现，独占右端。触控目标增大到至少 32dp（密度感知），确保一点就中。
+                // 仅隐藏整条状态横幅（本会话内不再展示），不删除子代理数据、不影响侧边栏。
+                if (runningCount == 0) {
+                    Spacer(Modifier.width(Spacing.md))
+                    Box(
+                        modifier = Modifier
+                            .size(maxOf(32.dp, uiTokens.scale(36)))
+                            .clip(RoundedCornerShape(Radius.sm))
+                            .clickable {
+                                val ids = visibleStates.map { it.subSessionId }
+                                dismissedIds = dismissedIds + ids
+                                parentSessionId?.let { dismissPrefs.dismiss(it, ids) }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = FeatherIcons.X,
+                            contentDescription = stringResource(R.string.common_close),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }

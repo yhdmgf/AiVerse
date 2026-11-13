@@ -68,6 +68,7 @@ import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.LocalImageViewer
+import com.aiverse.core.ui.LocalMediaViewer
 import com.aiverse.feature.agent.presentation.component.LocalChatFileAccess
 import com.aiverse.feature.agent.presentation.component.isChatPreviewableDocument
 import com.aiverse.core.ui.THUMBNAIL_MAX_EDGE
@@ -329,6 +330,18 @@ private fun PendingAttachmentPreviewItem(
                         .fillMaxSize()
                         .clickable(onClickLabel = previewLabel) {
                             viewer.show(attachment.toViewerRequest())
+                        }
+                )
+            } else if (attachment.isMedia) {
+                // 待发送的音视频（issue #91）：点击进应用内播放器
+                val mediaViewer = LocalMediaViewer.current
+                val playLabel = stringResource(R.string.chat_attachment_play, attachment.fileName)
+                FileAttachmentPreview(
+                    attachment = attachment,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(onClickLabel = playLabel) {
+                            mediaViewer.show(attachment.toMediaRequest())
                         }
                 )
             } else if (isChatPreviewableDocument(attachment.fileName, attachment.mimeType)) {

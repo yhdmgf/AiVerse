@@ -554,6 +554,16 @@ private fun LocalBackupTab(
             )
             SettingsDivider()
             SettingsRow(
+                title = stringResource(R.string.backup_data_plugins),
+                trailing = {
+                    AppSwitch(
+                        checked = exportOptions.plugins,
+                        onCheckedChange = { onUpdateOptions(exportOptions.copy(plugins = it)) }
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
                 title = stringResource(R.string.backup_data_workspace),
                 trailing = {
                     AppSwitch(
@@ -958,5 +968,6 @@ private fun buildImportSummary(context: android.content.Context, stats: RestoreS
     if (stats.memories > 0) appendLine(context.getString(R.string.backup_stat_memories, stats.memories))
     if (stats.favorites > 0) appendLine(context.getString(R.string.backup_stat_favorites, stats.favorites))
     if (stats.skills > 0) appendLine(context.getString(R.string.backup_stat_skills, stats.skills))
+    if (stats.plugins > 0) appendLine(context.getString(R.string.backup_stat_plugins, stats.plugins))
     append(context.getString(R.string.backup_settings_covered))
 }

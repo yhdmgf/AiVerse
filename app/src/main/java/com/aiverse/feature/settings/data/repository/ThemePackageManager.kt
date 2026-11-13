@@ -30,7 +30,13 @@ class ThemePackageManager @Inject constructor(
         chatFontSizeSp = appearanceSettingsRepository.chatFontSizeSpFlow.first(),
         inputFontSizeSp = appearanceSettingsRepository.inputFontSizeSpFlow.first(),
         uiFontScale = appearanceSettingsRepository.uiFontScaleFlow.first(),
-        uiDensityId = appearanceSettingsRepository.uiDensityFlow.first().id
+        uiDensityId = appearanceSettingsRepository.uiDensityFlow.first().id,
+        codeFontSizeSp = appearanceSettingsRepository.codeFontSizeSpFlow.first(),
+        codeWrapEnabled = appearanceSettingsRepository.codeWrapEnabledFlow.first(),
+        codeAutoFoldEnabled = appearanceSettingsRepository.codeAutoFoldEnabledFlow.first(),
+        codeShowLineNumber = appearanceSettingsRepository.codeShowLineNumberFlow.first(),
+        userBubbleOpacity = appearanceSettingsRepository.userBubbleOpacityFlow.first(),
+        assistantBubbleOpacity = appearanceSettingsRepository.assistantBubbleOpacityFlow.first()
     )
 
     /** 一键套用主题包：整体覆盖全部外观设置。 */
@@ -47,5 +53,11 @@ class ThemePackageManager @Inject constructor(
         appearanceSettingsRepository.setInputFontSizeSp(pkg.inputFontSizeSp)
         appearanceSettingsRepository.setUiFontScale(pkg.uiFontScale)
         appearanceSettingsRepository.setUiDensity(pkg.uiDensity)
+        appearanceSettingsRepository.setCodeFontSizeSp(pkg.codeFontSizeSp)
+        appearanceSettingsRepository.setCodeWrapEnabled(pkg.codeWrapEnabled)
+        appearanceSettingsRepository.setCodeAutoFoldEnabled(pkg.codeAutoFoldEnabled)
+        appearanceSettingsRepository.setCodeShowLineNumber(pkg.codeShowLineNumber)
+        appearanceSettingsRepository.setUserBubbleOpacity(pkg.userBubbleOpacity)
+        appearanceSettingsRepository.setAssistantBubbleOpacity(pkg.assistantBubbleOpacity)
     }
 }

@@ -82,7 +82,7 @@ class GetGitHubIssueTool @Inject constructor(
     private val repository: GitHubIssuesRepository
 ) : AgentTool() {
     override val name = "getIssue"
-    override val description = "获取当前 GitHub 仓库单条 issue 的详情（只读）。仅 GitHub 仓库且已配置 token 时可用。"
+    override val description = "获取当前 GitHub 仓库单条 issue 的详情，含正文与全部评论（只读）。返回 issue、comments（评论列表）、commentCount（评论数）。仅 GitHub 仓库且已配置 token 时可用。"
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ)
 
@@ -101,8 +101,13 @@ class GetGitHubIssueTool @Inject constructor(
         val result = repository.getIssue(number)
         return if (result.isSuccess) {
             val gson = Gson()
+            // 默认同时读取全部评论，避免 AI 需要额外调用才能看到评论区
+            val commentsResult = repository.getComments(number)
+            val comments = commentsResult.getOrDefault(emptyList())
             ToolResult.Success(JsonObject(mapOf(
-                "issue" to Json.parseToJsonElement(gson.toJson(result.getOrThrow()))
+                "issue" to Json.parseToJsonElement(gson.toJson(result.getOrThrow())),
+                "commentCount" to JsonPrimitive(comments.size),
+                "comments" to Json.parseToJsonElement(gson.toJson(comments))
             )))
         } else {
             failure(result.exceptionOrNull() as? Exception ?: Exception("未知错误"))

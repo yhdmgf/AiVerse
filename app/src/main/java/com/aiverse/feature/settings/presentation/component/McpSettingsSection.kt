@@ -135,7 +135,7 @@ internal fun McpSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(),
-            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = Spacing.xl + selectionActionBarHeight()),
+            contentPadding = PaddingValues(start = Spacing.md, end = Spacing.md, bottom = Spacing.xl + selectionActionBarHeight()),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {
             if (entries.size >= 3) {

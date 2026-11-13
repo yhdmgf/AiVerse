@@ -1,6 +1,7 @@
 package com.aiverse.feature.settings.presentation.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,10 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +54,8 @@ import com.aiverse.feature.agent.domain.skill.SkillScope
 import com.aiverse.feature.settings.presentation.SkillUiEntry
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Book
+import compose.icons.feathericons.Box
+import compose.icons.feathericons.Check
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Download
 import compose.icons.feathericons.Share2
@@ -77,7 +82,9 @@ internal fun SkillsSection(
     onBatchDelete: (List<SkillUiEntry>) -> Unit,
     onBatchSetEnabled: (List<SkillUiEntry>, Boolean) -> Unit,
     onBatchShare: (List<SkillUiEntry>) -> Unit,
-    onBatchExport: (List<SkillUiEntry>) -> Unit
+    onBatchExport: (List<SkillUiEntry>) -> Unit,
+    defaultSkillInstallScope: SkillScope,
+    onSetDefaultSkillInstallScope: (SkillScope) -> Unit
 ) {
     val t = LocalUIDensityTokens.current
     // 只在数据变化时分组，避免每次重组都产生两份新 List。
@@ -95,46 +102,6 @@ internal fun SkillsSection(
         if (selection.isActive && entries.isEmpty()) selection.exit()
     }
 
-    if (entries.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = Spacing.xl, vertical = 48.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Spacing.md)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(Radius.lg)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        FeatherIcons.Book,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.skills_empty),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.skills_empty_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-        return
-    }
-
     var projectExpanded by rememberSaveable { mutableStateOf(true) }
     var globalExpanded by rememberSaveable { mutableStateOf(true) }
     val allSelected = selection.selectedCount > 0 && selection.selectedCount == allKeys.size
@@ -142,6 +109,51 @@ internal fun SkillsSection(
 
     Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
         Column(modifier = Modifier.fillMaxSize()) {
+        // 顶部始终渲染「技能默认安装作用域」设置项：技能为空时也可见（issue #85）。
+        SkillDefaultScopeSetting(
+            defaultSkillInstallScope = defaultSkillInstallScope,
+            onSetDefaultSkillInstallScope = onSetDefaultSkillInstallScope
+        )
+
+        if (entries.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.xl, vertical = 48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(Radius.lg)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            FeatherIcons.Book,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.skills_empty),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.skills_empty_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
         // 批量删除期间给一行文字提示：远程模式下逐条 SFTP 递归删可能持续数秒，没有反馈会以为没生效。
         if (deletingInProgress) {
             Text(
@@ -156,7 +168,7 @@ internal fun SkillsSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = Spacing.xl + selectionActionBarHeight()),
+            contentPadding = PaddingValues(start = Spacing.md, end = Spacing.md, bottom = Spacing.xl + selectionActionBarHeight()),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {
             item(key = "project-header", contentType = "header") {
@@ -226,6 +238,7 @@ internal fun SkillsSection(
                     }
                 }
             }
+        }
         }
         }
         if (selection.isActive) {
@@ -382,4 +395,122 @@ private fun SkillEmptyHint(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = Spacing.lg, vertical = 12.dp)
     )
+}
+
+/**
+ * 「技能默认安装作用域」设置项：顶部设置组内一行，点击弹单选弹窗（项目 / 全局）。
+ * 独立 DataStore（[SkillInstallSettingsRepository]）生效，与提示词列表无数据联动（issue #85）。
+ */
+@Composable
+private fun SkillDefaultScopeSetting(
+    defaultSkillInstallScope: SkillScope,
+    onSetDefaultSkillInstallScope: (SkillScope) -> Unit
+) {
+    var showSkillScopeSheet by remember { mutableStateOf(false) }
+
+    SettingsGroup(
+        modifier = Modifier
+            .padding(horizontal = Spacing.lg)
+            .padding(top = Spacing.sm)
+    ) {
+        SettingsRow(
+            icon = FeatherIcons.Box,
+            title = stringResource(R.string.prompt_skill_default_scope),
+            subtitle = stringResource(
+                if (defaultSkillInstallScope == SkillScope.PROJECT) {
+                    R.string.prompt_skill_scope_project_hint
+                } else {
+                    R.string.prompt_skill_scope_global_hint
+                }
+            ),
+            onClick = { showSkillScopeSheet = true },
+            trailing = {
+                Text(
+                    text = stringResource(
+                        if (defaultSkillInstallScope == SkillScope.PROJECT) {
+                            R.string.prompt_skill_scope_project
+                        } else {
+                            R.string.prompt_skill_scope_global
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.semanticColors.subtleText
+                )
+            }
+        )
+    }
+
+    if (showSkillScopeSheet) {
+        AlertDialog(
+            onDismissRequest = { showSkillScopeSheet = false },
+            title = { Text(stringResource(R.string.prompt_skill_default_scope)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SkillScopeOptionRow(
+                        scope = SkillScope.PROJECT,
+                        current = defaultSkillInstallScope,
+                        onClick = {
+                            onSetDefaultSkillInstallScope(SkillScope.PROJECT)
+                            showSkillScopeSheet = false
+                        }
+                    )
+                    SkillScopeOptionRow(
+                        scope = SkillScope.GLOBAL,
+                        current = defaultSkillInstallScope,
+                        onClick = {
+                            onSetDefaultSkillInstallScope(SkillScope.GLOBAL)
+                            showSkillScopeSheet = false
+                        }
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSkillScopeSheet = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+}
+
+/** 单选弹窗中的一行：作用域名 + 说明，当前选中项右侧打勾。 */
+@Composable
+private fun SkillScopeOptionRow(
+    scope: SkillScope,
+    current: SkillScope,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(
+                    if (scope == SkillScope.PROJECT) R.string.prompt_skill_scope_project
+                    else R.string.prompt_skill_scope_global
+                ),
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = stringResource(
+                    if (scope == SkillScope.PROJECT) R.string.prompt_skill_scope_project_hint
+                    else R.string.prompt_skill_scope_global_hint
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.semanticColors.subtleText
+            )
+        }
+        if (scope == current) {
+            Icon(
+                FeatherIcons.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
 }

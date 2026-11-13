@@ -84,19 +84,26 @@ import androidx.navigation.navArgument
 import com.aiverse.core.theme.AIEditorTheme
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.FileTreeDisplayPrefs
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.UIDensity
 import com.aiverse.core.ui.BetaWatermark
 import com.aiverse.core.ui.ImageSource
 import com.aiverse.core.ui.ImageViewerHost
 import com.aiverse.core.ui.ImageViewerRequest
 import com.aiverse.core.ui.LocalImageViewer
+import com.aiverse.core.ui.MediaKind
+import com.aiverse.core.ui.MediaPlayerHost
+import com.aiverse.core.ui.MediaSource
+import com.aiverse.core.ui.MediaViewerRequest
 import com.aiverse.core.ui.PAGE_MOTION_MS
 import com.aiverse.core.ui.VerticalSplitHandle
 import com.aiverse.core.ui.drawerWidth
 import com.aiverse.core.ui.isExpandedWidth
+import com.aiverse.core.ui.mediaKindOf
 import com.aiverse.core.ui.pageEnter
 import com.aiverse.core.ui.pageExit
 import com.aiverse.core.ui.rememberImageViewerState
+import com.aiverse.core.ui.rememberMediaViewerState
 import com.aiverse.core.ui.rememberViewerDecodeSpec
 import com.aiverse.core.util.ApkInstaller
 import com.aiverse.feature.agent.presentation.AIAgentViewModel
@@ -104,6 +111,7 @@ import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.component.AIChatPanel
 import com.aiverse.feature.agent.presentation.component.ChatDrawerContent
 import com.aiverse.feature.agent.presentation.component.chatImageLoader
+import com.aiverse.feature.agent.presentation.component.mediaFileResolver
 import com.aiverse.feature.agent.presentation.component.openSentAttachment
 import com.aiverse.feature.agreement.presentation.AgreementGate
 import com.aiverse.feature.editor.presentation.CodeEditorScreen
@@ -320,8 +328,19 @@ class MainActivity : ComponentActivity() {
             val iconColorful by themeSettings.iconColorFlow.collectAsStateWithLifecycle(initialValue = true)
             val chatFontSizeSp by appearanceSettings.chatFontSizeSpFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CHAT_FONT_SIZE_SP)
             val inputFontSizeSp by appearanceSettings.inputFontSizeSpFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_INPUT_FONT_SIZE_SP)
+            val codeFontSizeSp by appearanceSettings.codeFontSizeSpFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CODE_FONT_SIZE_SP)
+            val codeWrapEnabled by appearanceSettings.codeWrapEnabledFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CODE_WRAP_ENABLED)
+            val codeAutoFoldEnabled by appearanceSettings.codeAutoFoldEnabledFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CODE_AUTO_FOLD_ENABLED)
+            val codeShowLineNumber by appearanceSettings.codeShowLineNumberFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CODE_SHOW_LINE_NUMBER)
+            val userBubbleOpacity by appearanceSettings.userBubbleOpacityFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
+            val assistantBubbleOpacity by appearanceSettings.assistantBubbleOpacityFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
             val uiFontScale by appearanceSettings.uiFontScaleFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_UI_FONT_SCALE)
             val uiDensity by appearanceSettings.uiDensityFlow.collectAsStateWithLifecycle(initialValue = UIDensity.STANDARD)
+            val cardCorner by appearanceSettings.cardCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_CARD_CORNER)
+            val buttonCorner by appearanceSettings.buttonCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_BUTTON_CORNER)
+            val fieldCorner by appearanceSettings.fieldCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_FIELD_CORNER)
+            val bubbleCorner by appearanceSettings.bubbleCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_BUBBLE_CORNER)
+            val imageCorner by appearanceSettings.imageCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_IMAGE_CORNER)
             val fileTreeDisplayPrefs by appearanceSettings.fileTreeDisplayPrefsFlow.collectAsStateWithLifecycle(initialValue = FileTreeDisplayPrefs.Default)
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = when (themeMode) {
@@ -349,8 +368,19 @@ class MainActivity : ComponentActivity() {
                 assistantBubbleStyle = assistantBubbleStyle,
                 chatFontSizeSp = chatFontSizeSp,
                 inputFontSizeSp = inputFontSizeSp,
+                codeFontSizeSp = codeFontSizeSp,
+                codeWrapEnabled = codeWrapEnabled,
+                codeAutoFoldEnabled = codeAutoFoldEnabled,
+                codeShowLineNumber = codeShowLineNumber,
+                userBubbleOpacity = userBubbleOpacity,
+                assistantBubbleOpacity = assistantBubbleOpacity,
                 uiFontScale = uiFontScale,
-                uiDensity = uiDensity
+                uiDensity = uiDensity,
+                cardCornerDp = cardCorner,
+                buttonCornerDp = buttonCorner,
+                fieldCornerDp = fieldCorner,
+                bubbleCornerDp = bubbleCorner,
+                imageCornerDp = imageCorner
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -643,18 +673,25 @@ fun AppNavigation(
         }
     }
 
-    // 文件树里点文件：图片进内置全屏查看器、APK 走系统安装器，其余仍进编辑器。
+    // 文件树里点文件：图片进内置全屏查看器、音视频进应用内播放器、APK 走系统安装器，其余仍进编辑器。
     val drawerImageViewerState = rememberImageViewerState()
     val drawerDecodeSpec = rememberViewerDecodeSpec()
     val drawerImageLoad = remember(agentViewModel.fileAccess, drawerDecodeSpec) {
         chatImageLoader(agentViewModel.fileAccess, drawerDecodeSpec.maxEdge, drawerDecodeSpec.maxPixels)
     }
+    // 应用内音视频播放器（issue #91）：取源统一走 copyToLocal，远程 SSH 先整份下载。
+    val drawerMediaViewerState = rememberMediaViewerState()
+    val drawerMediaResolve = remember(agentViewModel.fileAccess) { mediaFileResolver(agentViewModel.fileAccess) }
     val openTreeEntry: (String) -> Unit = { path ->
         val name = path.trimEnd('/').substringAfterLast('/')
         val ext = name.substringAfterLast('.', "").lowercase()
+        val mediaKind = mediaKindOf(name)
         when {
             ext in PREVIEWABLE_IMAGE_EXTS -> drawerImageViewerState.show(
                 ImageViewerRequest(listOf(ImageSource.ContainerPath(path)), name)
+            )
+            mediaKind != null -> drawerMediaViewerState.show(
+                MediaViewerRequest(sources = listOf(MediaSource.ContainerPath(path)), title = name, kind = mediaKind)
             )
             ext in INSTALLABLE_APK_EXTS -> scope.launch {
                 openSentAttachment(
@@ -915,6 +952,9 @@ fun AppNavigation(
                                     onOpenMcp = {
                                         navController.navigate("settings?section=mcp&from=chat")
                                     },
+                                    onOpenOptimizeModelSettings = {
+                                        navController.navigate("settings?section=default_models&from=chat")
+                                    },
                                     onOpenInEditor = openFilePreview
                                 )
                             }
@@ -1120,8 +1160,9 @@ fun AppNavigation(
         LocalImageViewer provides drawerImageViewerState
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
-    // 文件树里点开的图片走这个查看器；聊天面板自带一个，两层互不影响。
+    // 文件树里点开的图片/音视频走这个查看器/播放器；聊天面板自带一套，两层互不影响。
     ImageViewerHost(state = drawerImageViewerState, load = drawerImageLoad)
+    MediaPlayerHost(state = drawerMediaViewerState, resolve = drawerMediaResolve)
     if (expanded) {
         // 大屏不套 ModalNavigationDrawer：侧栏常驻在左，抽屉那套 scrim / 手势 / 锚点在这里完全用不上。
         // 侧栏只在聊天页展开：设置页自己就是「菜单 + 详情」两栏，外面再套一层会话侧栏就成了三栏。
@@ -1161,6 +1202,7 @@ fun AppNavigation(
             }
         }
     } else {
+        val t = LocalUIDensityTokens.current
         ModalNavigationDrawer(
             drawerState = drawerState,
             // 仅在聊天页启用手势滑出；其他页面禁止（但已打开时始终可关闭）。
@@ -1173,11 +1215,11 @@ fun AppNavigation(
                     modifier = Modifier
                         .width(drawerWidth())
                         .shadow(
-                            elevation = 8.dp,
+                            elevation = t.elevationMd,
                             shape = RectangleShape,
                             clip = false,
-                            ambientColor = Color.Black.copy(alpha = 0.08f),
-                            spotColor = Color.Black.copy(alpha = 0.08f)
+                            ambientColor = Color.Black.copy(alpha = t.ambientAlpha),
+                            spotColor = Color.Black.copy(alpha = t.spotAlpha)
                         )
                 ) {
                     drawerBody()

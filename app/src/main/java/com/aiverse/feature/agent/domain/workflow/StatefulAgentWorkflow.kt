@@ -47,6 +47,7 @@ import com.aiverse.feature.settings.data.remote.ModelMetadataService
 import com.aiverse.feature.settings.data.repository.CompactionModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.DefaultModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.GeneralSettingsRepository
+import com.aiverse.feature.settings.data.repository.OptimizeInputModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.ProviderKeyRotator
 import com.aiverse.feature.settings.data.repository.TitleModelSettingsRepository
 import com.aiverse.feature.settings.domain.model.AIProviderConfig
@@ -111,6 +112,7 @@ class StatefulAgentWorkflow @Inject constructor(
     private val modelMetadataService: ModelMetadataService,
     private val compactionModelSettingsRepository: CompactionModelSettingsRepository,
     private val titleModelSettingsRepository: TitleModelSettingsRepository,
+    private val optimizeInputModelSettingsRepository: OptimizeInputModelSettingsRepository,
     private val defaultModelSettingsRepository: DefaultModelSettingsRepository,
     private val generalSettingsRepository: GeneralSettingsRepository,
     private val sessionUseCase: SessionUseCase,
@@ -132,6 +134,7 @@ class StatefulAgentWorkflow @Inject constructor(
         const val TITLE_GENERATOR_FILE = "agent/title-generator.md"
         const val TITLE_MAX_CHARS = 50
         const val COMMIT_GENERATOR_FILE = "agent/commit-generator.md"
+        const val OPTIMIZE_INPUT_FILE = "agent/input-optimizer.md"
         /** 模式提醒提示词：复用 prompts 目录文件（用户可自定义覆盖），切换时随消息注入而非进 system。 */
         const val MODE_REMINDER_PLAN_FILE = "agent/plan-mode.md"
         const val MODE_REMINDER_AUTO_FILE = "agent/auto-mode.md"
@@ -1110,6 +1113,20 @@ class StatefulAgentWorkflow @Inject constructor(
     }
 
     /**
+     * 优化输入专用模型存在且可用时返回独立的 [AIProvider] 实例（仅当配置了 providerId+model 且可用）；
+     * 否则返回 null（沿用当前聊天模型）。
+     */
+    private suspend fun resolveOptimizeFallbackProvider(sessionId: String?): AIProvider? {
+        val providerId = optimizeInputModelSettingsRepository.getOptimizeInputProviderId().trim()
+        if (providerId.isEmpty()) return null
+        val model = optimizeInputModelSettingsRepository.getOptimizeInputModel().trim()
+        if (model.isEmpty()) return null
+        val config = aiProviderRepository.getProviderById(providerId) ?: return null
+        if (!config.isEnabled || !config.hasUsableApiKey) return null
+        return createStandaloneProvider(config.copy(selectedModel = model), sessionId)
+    }
+
+    /**
      * 为新建会话生成标题：默认跟随当前聊天模型，配置了标题总结专用模型则用之。
      * 提示词来自 [SystemPromptProvider] 的 `agent/title-generator.md`。
      * 生成失败或取不到标题时返回 null（调用方保留临时标题）。
@@ -1185,6 +1202,64 @@ class StatefulAgentWorkflow @Inject constructor(
         line?.take(100)?.ifBlank { null }
     }.onFailure { e ->
         FileLogger.w(TAG, "生成提交信息失败", e)
+    }.getOrNull()
+
+    /**
+     * 把输入框内容交给模型润色后返回润色后的文本（供「优化输入」快捷按钮）。
+     * 默认跟随当前聊天模型；配置了优化输入专用模型且可用时用之。
+     * 输入为空、生成失败或取不到结果时返回 null（调用方保留原文本）。
+     */
+    override suspend fun optimizeInput(sessionId: String, text: String): String? = runCatching {
+        if (text.isBlank()) return@runCatching null
+        val provider = resolveOptimizeFallbackProvider(sessionId) ?: getEffectiveProvider(sessionId)
+        val prompt = promptProvider.resolvePrompt(OPTIMIZE_INPUT_FILE)
+            .replace(LEADING_COMMENT, "")
+        val callStartWall = System.currentTimeMillis()
+        val callStartElapsed = SystemClock.elapsedRealtime()
+        var callCompleted = false
+        var callError: String? = null
+        var usage: AIResponse? = null
+        val response = try {
+            val resp = provider.complete(
+                systemPrompt = prompt,
+                messages = listOf(AgentMessage.UserMessage(content = text)),
+                tools = emptyList()
+            )
+            usage = resp
+            callCompleted = true
+            resp
+        } catch (e: CancellationException) {
+            callError = "cancelled"
+            throw e
+        } catch (e: Exception) {
+            callError = e.message ?: e.javaClass.simpleName
+            throw e
+        } finally {
+            val durationMillis = (SystemClock.elapsedRealtime() - callStartElapsed).toInt()
+            runCatching {
+                llmCallRecordDao.insert(
+                    LlmCallRecordEntity(
+                        sessionId = sessionId,
+                        providerId = provider.providerId.ifBlank { null },
+                        model = provider.model,
+                        kind = "optimize_input",
+                        inputTokens = usage?.inputTokens ?: 0,
+                        outputTokens = usage?.outputTokens ?: 0,
+                        cachedInputTokens = usage?.cachedInputTokens ?: 0,
+                        cacheCreationTokens = usage?.cacheCreationTokens ?: 0,
+                        ttfbMillis = null,
+                        durationMillis = durationMillis,
+                        status = if (callCompleted) "success" else "error",
+                        errorMessage = callError,
+                        stopReason = usage?.stopReason,
+                        createdAt = callStartWall
+                    )
+                )
+            }
+        }
+        response.content.trim().takeIf { it.isNotBlank() }
+    }.onFailure { e ->
+        FileLogger.w(TAG, "优化输入失败", e)
     }.getOrNull()
 
     private suspend fun runToolStream(

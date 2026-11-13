@@ -1,5 +1,6 @@
 package com.aiverse.feature.phonecontrol.presentation
 
+import com.aiverse.R
 import android.app.NotificationManager
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -87,22 +88,22 @@ class PhoneControlViewModel @Inject constructor(
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch {
         repository.setEnabled(enabled)
-        log(if (enabled) "已开启手机控制" else "已关闭手机控制")
+        log(if (enabled) context.getString(R.string.phone_control_enabled) else context.getString(R.string.phone_control_disabled))
     }
 
     fun setRule(packageName: String, rule: AppRule) = viewModelScope.launch {
         repository.setRule(packageName, rule)
-        log("应用规则：$packageName → ${rule.name}")
+        log(context.getString(R.string.phone_rule_applied, packageName, rule.name))
     }
 
     fun setConfirmMode(mode: ConfirmMode) = viewModelScope.launch {
         repository.setConfirmMode(mode)
-        log("确认方式：${mode.name}")
+        log(context.getString(R.string.phone_confirm_mode, mode.name))
     }
 
     fun setUnlocks(unlocks: PhoneUnlocks) = viewModelScope.launch {
         repository.setUnlocks(unlocks)
-        log("解除权限：系统=${unlocks.systemPages} 密码=${unlocks.secretFields} 应用=${unlocks.ownApp}")
+        log(context.getString(R.string.phone_unlock_detail, unlocks.systemPages, unlocks.secretFields, unlocks.ownApp))
     }
 
     fun setOverlayPrefs(overlay: OverlayPrefs) = viewModelScope.launch {
@@ -128,9 +129,9 @@ class PhoneControlViewModel @Inject constructor(
         val granted = PermissionGranter.grantViaShizuku(shizukuManager, context.packageName).getOrDefault(false)
         if (granted) {
             A11yKeeper.enable(context)
-            log("已用 Shizuku 开启无障碍")
+            log(context.getString(R.string.phone_shizuku_enabled))
         } else {
-            log("Shizuku 授权失败")
+            log(context.getString(R.string.phone_shizuku_failed))
         }
         refreshPermissions()
     }
@@ -140,9 +141,9 @@ class PhoneControlViewModel @Inject constructor(
         val granted = PermissionGranter.grantViaRoot(context, context.packageName).getOrDefault(false)
         if (granted) {
             A11yKeeper.enable(context)
-            log("已用 Root 开启无障碍")
+            log(context.getString(R.string.phone_root_enabled))
         } else {
-            log("Root 授权失败")
+            log(context.getString(R.string.phone_root_failed))
         }
         refreshPermissions()
     }
@@ -153,7 +154,7 @@ class PhoneControlViewModel @Inject constructor(
     /** 直接用 A11yKeeper 开启（需已授予 WRITE_SECURE_SETTINGS）。 */
     fun enableAccessibilityNow() = viewModelScope.launch {
         val ok = A11yKeeper.enable(context)
-        log(if (ok) "已开启无障碍服务" else "开启无障碍失败（缺系统写入权限）")
+        log(if (ok) context.getString(R.string.phone_a11y_enabled) else context.getString(R.string.phone_a11y_failed))
         refreshPermissions()
     }
 
@@ -167,18 +168,18 @@ class PhoneControlViewModel @Inject constructor(
     fun readScreen() {
         val service = PhoneAccessibilityService.current()
         if (service == null) {
-            reading.value = false to "无障碍服务未开启"
+            reading.value = false to context.getString(R.string.phone_a11y_not_enabled)
             return
         }
         reading.value = true to ""
-        status.begin("正在读屏")
+        status.begin(context.getString(R.string.phone_reading_screen))
         viewModelScope.launch {
             val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 service.readScreenText()
             }
             reading.value = false to text
             status.end()
-            log("已读取当前屏幕（${text.length} 字）")
+            log(context.getString(R.string.phone_screen_read, text.length))
         }
     }
 

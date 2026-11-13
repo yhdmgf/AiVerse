@@ -89,6 +89,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.graphics.RectangleShape
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.dialogTextFieldColors
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
@@ -275,7 +276,7 @@ internal fun LogTab(
                 .fillMaxSize()
                 .padding(horizontal = Spacing.lg),
             state = listState,
-            contentPadding = PaddingValues(bottom = 70.dp)
+            contentPadding = PaddingValues(bottom = floatingTabBarContentBottomPadding())
         ) {
             itemsIndexed(commits, key = { _, c -> c.hash }) { index, c ->
                 val shape = when {

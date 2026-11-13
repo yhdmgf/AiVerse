@@ -68,6 +68,10 @@ import com.aiverse.core.theme.ChatBubbleRole
 import com.aiverse.core.theme.ChatBubbleStyle
 import com.aiverse.core.theme.LocalAssistantBubbleStyle
 import com.aiverse.core.theme.LocalUserBubbleStyle
+import com.aiverse.core.theme.LocalChatCodeFontSizeSp
+import com.aiverse.core.theme.LocalCodeWrapEnabled
+import com.aiverse.core.theme.LocalCodeAutoFoldEnabled
+import com.aiverse.core.theme.LocalCodeShowLineNumber
 import com.aiverse.core.theme.LocalChatFontSizeSp
 import com.aiverse.core.tts.LocalTtsController
 import com.aiverse.core.tts.ReadProgress
@@ -390,7 +394,7 @@ internal fun AgentMessageItem(
                                                 fontSize = chatFontSizeSp.sp,
                                                 lineHeight = (chatFontSizeSp + 4).sp
                                             ),
-                                            modifier = Modifier.padding(horizontal = t.md, vertical = t.sm)
+                                            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
                                         )
                                     }
                                 }
@@ -434,6 +438,10 @@ internal fun AgentMessageItem(
                             // 其余样式套与用户同款的气泡容器。内部仍是 Markdown 文档流。
                             val assistantBubbleStyle = LocalAssistantBubbleStyle.current
                             val chatFontSizeSp = LocalChatFontSizeSp.current
+                            val codeFontSizeSp = LocalChatCodeFontSizeSp.current
+                            val codeWrapEnabled = LocalCodeWrapEnabled.current
+                            val codeAutoFoldEnabled = LocalCodeAutoFoldEnabled.current
+                            val codeShowLineNumber = LocalCodeShowLineNumber.current
                             val assistantBody: @Composable () -> Unit = {
                                 SelectionContainer {
                                     CompositionLocalProvider(
@@ -449,7 +457,7 @@ internal fun AgentMessageItem(
                                             color = chatBubbleTextColor(ChatBubbleRole.ASSISTANT),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = t.md, vertical = t.sm)
+                                                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
                                                 .then(
                                                     if (isThisSpeaking) Modifier
                                                         .clip(RoundedCornerShape(t.rMdLarge))
@@ -460,6 +468,10 @@ internal fun AgentMessageItem(
                                                 ),
                                             cache = markdownCache,
                                             fontSizeSp = chatFontSizeSp,
+                                            codeFontSizeSp = codeFontSizeSp,
+                                            codeWrapEnabled = codeWrapEnabled,
+                                            codeAutoFoldEnabled = codeAutoFoldEnabled,
+                                            codeShowLineNumber = codeShowLineNumber,
                                             readProgress = readProgressState
                                                 ?.takeIf { it.messageId == message.id && isThisSpeaking }?.ratio,
                                             blockBackground = blockBackground,

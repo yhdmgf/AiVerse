@@ -182,8 +182,40 @@ data class AppThemePreset(
             )
         )
 
-        /** HyperOS 默认排第一（应用默认主题），咖啡退居第二，其后品牌蓝、石墨、森林。 */
-        val ALL_PRESETS = listOf(HYPEROS, COFFEE, DEFAULT, GRAPHITE, FOREST)
+        /** HyperOS 玻璃：轻量玻璃档。沿用 HyperOS 种子，仅把半透明玻璃表面调得更激进透明，
+         *  配合 [LocalSurfaceGlassStyle] 在独立弹层（API31+）启用窗口级 blur 增强玻璃观感。 */
+        val HYPEROS_GLASS = fromSeeds(
+            id = "hyperos_glass",
+            nameRes = R.string.theme_preset_hyperos_glass,
+            lightSeed = AppThemeSeed(
+                primary = Color(0xFF3482FF),
+                secondary = Color(0xFF5AC8FA),
+                tertiary = Color(0xFFFF8A00),
+                background = Color(0xFFF5F5F6),
+                surface = Color(0xFFFFFFFF),
+                surfaceVariant = Color(0xFFF2F2F3),
+                onSurface = Color(0xFF1C1C1E),
+                onSurfaceVariant = Color(0xFF6E6E73),
+                outline = Color(0xFFD1D1D6),
+                outlineVariant = Color(0xFFE5E5EA)
+            ),
+            darkSeed = AppThemeSeed(
+                primary = Color(0xFF4A8DFF),
+                secondary = Color(0xFF5AC8FA),
+                tertiary = Color(0xFFFF8A00),
+                background = Color(0xFF000000),
+                surface = Color(0xFF17171A),
+                surfaceVariant = Color(0xFF232326),
+                onSurface = Color(0xFFFFFFFF),
+                onSurfaceVariant = Color(0xFF8E8E93),
+                outline = Color(0xFF38383C),
+                outlineVariant = Color(0xFF2C2C30)
+            ),
+            glass = true
+        )
+
+        /** HyperOS 默认排第一（应用默认主题），其后 HyperOS 玻璃、咖啡、品牌蓝、石墨、森林。 */
+        val ALL_PRESETS = listOf(HYPEROS, HYPEROS_GLASS, COFFEE, DEFAULT, GRAPHITE, FOREST)
 
         fun findById(id: String?): AppThemePreset =
             ALL_PRESETS.firstOrNull { it.id == id } ?: HYPEROS
@@ -192,12 +224,13 @@ data class AppThemePreset(
             id: String,
             @StringRes nameRes: Int,
             lightSeed: AppThemeSeed,
-            darkSeed: AppThemeSeed
+            darkSeed: AppThemeSeed,
+            glass: Boolean = false
         ) = AppThemePreset(
             id = id,
             nameRes = nameRes,
-            light = deriveThemeColors(lightSeed, dark = false),
-            dark = deriveThemeColors(darkSeed, dark = true)
+            light = deriveThemeColors(lightSeed, dark = false, glass = glass),
+            dark = deriveThemeColors(darkSeed, dark = true, glass = glass)
         )
     }
 }
@@ -220,10 +253,10 @@ private object FunctionalHues {
 }
 
 /** 由种子推导完整的 Material 槽位与语义色。 */
-fun deriveThemeColors(seed: AppThemeSeed, dark: Boolean): AppThemeColors =
+fun deriveThemeColors(seed: AppThemeSeed, dark: Boolean, glass: Boolean = false): AppThemeColors =
     AppThemeColors(
         colorScheme = deriveColorScheme(seed, dark),
-        semanticColors = deriveSemanticColors(seed, dark)
+        semanticColors = deriveSemanticColors(seed, dark, glass)
     )
 
 /**
@@ -294,12 +327,29 @@ private fun deriveColorScheme(seed: AppThemeSeed, dark: Boolean): ColorScheme {
     )
 }
 
-private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean): AppSemanticColors {
+private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean, glass: Boolean = false): AppSemanticColors {
     val success = if (dark) FunctionalHues.DarkSuccess else FunctionalHues.LightSuccess
     val warning = if (dark) FunctionalHues.DarkWarning else FunctionalHues.LightWarning
     val info = if (dark) FunctionalHues.DarkInfo else FunctionalHues.LightInfo
     val error = if (dark) FunctionalHues.DarkError else FunctionalHues.LightError
     val overlayAlpha = if (dark) 0.20f else 0.15f
+    // 磨砂铺开基准：浅色 0.85 / 深色 0.86；轻量玻璃档（glass=true）沿用 HyperOS 种子、半透明磨砂铺开。
+    // 深色玻璃必须更实：alpha 0.70 太透明，叠在底下亮内容/背景上会透出亮部、形成「中间白、边缘不均」
+    // 的观感；提到 0.86（对齐非玻璃深色基准）让深色玻璃保持「深色为主、均匀磨砂」。浅色玻璃本身偏白，
+    // 透出浅色内容影响小，保留 0.70 轻透。
+    val surfaceGlassAlpha = when {
+        glass -> if (dark) 0.86f else 0.70f
+        dark -> 0.86f
+        else -> 0.85f
+    }
+    // 玻璃档描边：不用偏黑的 outlineVariant（深色下呈明显黑边、压内容），改用近前景色（onSurface）的
+    // 低不透明度模拟玻璃边缘反光——浅色为半透明黑、深色为半透明白，观感是柔和发丝线而非黑框。
+    // 非玻璃档保持原 outlineVariant 逻辑不变。
+    val glassBorderAlpha = when {
+        glass -> if (dark) 0.22f else 0.30f
+        dark -> 0.45f
+        else -> 0.60f
+    }
 
     return AppSemanticColors(
         success = success,
@@ -324,7 +374,13 @@ private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean): AppSemantic
         pageBackground = seed.background,
         mutedSurface = seed.surfaceVariant,
         capsuleSurface = lerp(seed.surfaceVariant, seed.onSurface, 0.07f),
-        buttonMutedBg = lerp(seed.surfaceVariant, seed.onSurface, 0.03f)
+        buttonMutedBg = lerp(seed.surfaceVariant, seed.onSurface, 0.03f),
+        surfaceGlass = seed.surface.copy(alpha = surfaceGlassAlpha),
+        surfaceGlassBorder = if (glass) {
+            seed.onSurface.copy(alpha = glassBorderAlpha)
+        } else {
+            seed.outlineVariant.copy(alpha = glassBorderAlpha)
+        }
     )
 }
 

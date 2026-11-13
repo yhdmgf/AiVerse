@@ -60,10 +60,12 @@ import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import com.aiverse.feature.git.domain.model.GitHubIssue
 import com.aiverse.feature.git.domain.model.IssueLabel
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.CheckCircle
+import compose.icons.feathericons.User
 import coil.compose.AsyncImage
 
 /** GitHub issue 状态色：open 绿 / closed 紫。 */
@@ -109,7 +111,8 @@ internal fun IssuesTab(
     onClearSelection: () -> Unit = {},
     onSelectAll: () -> Unit = {},
     onBulkClose: () -> Unit = {},
-    onBulkAddLabels: (List<String>) -> Unit = {}
+    onBulkAddLabels: (List<String>) -> Unit = {},
+    onBulkAssign: (List<String>) -> Unit = {}
 ) {
     // remoteUrl 变化（如切换仓库）时懒加载；仅 GitHub 且有 token 时触发。
     LaunchedEffect(remoteUrl) {
@@ -119,6 +122,9 @@ internal fun IssuesTab(
     // 批量加标签弹窗的输入状态。
     var labelDialogVisible by remember { mutableStateOf(false) }
     var labelInput by remember { mutableStateOf("") }
+    // 批量分配受理人弹窗的输入状态。
+    var assigneeDialogVisible by remember { mutableStateOf(false) }
+    var assigneeInput by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (isGitHub && hasToken) {
@@ -129,7 +135,8 @@ internal fun IssuesTab(
                     onClear = onClearSelection,
                     onSelectAll = onSelectAll,
                     onBulkClose = onBulkClose,
-                    onBulkAddLabel = { labelDialogVisible = true }
+                    onBulkAddLabel = { labelDialogVisible = true },
+                    onBulkAssign = { assigneeDialogVisible = true }
                 )
             } else {
                 Row(
@@ -165,7 +172,7 @@ internal fun IssuesTab(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
-                    contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = 70.dp),
+                    contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = floatingTabBarContentBottomPadding()),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
                     items(sorted, key = { it.number }) { issue ->
@@ -211,6 +218,35 @@ internal fun IssuesTab(
             }
         )
     }
+
+    if (assigneeDialogVisible) {
+        AlertDialog(
+            onDismissRequest = { assigneeDialogVisible = false },
+            title = { Text(stringResource(R.string.git_issue_bulk_assign_hint)) },
+            text = {
+                OutlinedTextField(
+                    value = assigneeInput,
+                    onValueChange = { assigneeInput = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.git_issue_bulk_assign_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val names = assigneeInput.split(',', '，').map { it.trim() }.filter { it.isNotBlank() }
+                        if (names.isNotEmpty()) onBulkAssign(names)
+                        assigneeDialogVisible = false
+                        assigneeInput = ""
+                    }
+                ) { Text(stringResource(R.string.git_issue_bulk_assign_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { assigneeDialogVisible = false }) { Text(stringResource(R.string.common_cancel)) }
+            }
+        )
+    }
 }
 
 @Composable
@@ -220,7 +256,8 @@ private fun BulkActionBar(
     onClear: () -> Unit,
     onSelectAll: () -> Unit,
     onBulkClose: () -> Unit,
-    onBulkAddLabel: () -> Unit
+    onBulkAddLabel: () -> Unit,
+    onBulkAssign: () -> Unit
 ) {
     Surface(color = MaterialTheme.semanticColors.cardSurface, shape = RoundedCornerShape(Radius.md)) {
         Column(
@@ -234,7 +271,10 @@ private fun BulkActionBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(Spacing.xs))
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
                 TextButton(onClick = onClear) { Text(stringResource(R.string.git_issue_clear_selection)) }
                 TextButton(onClick = onSelectAll) { Text(stringResource(R.string.git_issue_select_all)) }
                 TextButton(onClick = onBulkClose, enabled = !busy && selectedCount > 0) {
@@ -242,6 +282,11 @@ private fun BulkActionBar(
                 }
                 TextButton(onClick = onBulkAddLabel, enabled = !busy && selectedCount > 0) {
                     Text(stringResource(R.string.git_issue_bulk_add_label))
+                }
+                TextButton(onClick = onBulkAssign, enabled = !busy && selectedCount > 0) {
+                    Icon(FeatherIcons.User, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(Spacing.xs))
+                    Text(stringResource(R.string.git_issue_bulk_assign))
                 }
             }
         }

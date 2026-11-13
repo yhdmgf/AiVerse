@@ -475,7 +475,7 @@ class SystemPromptProvider @Inject constructor(
     private fun currentDate(): String =
         java.time.ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
-    /** 技能默认安装作用域（由用户在设置→提示词中选择）的友好名称，注入 {{AIVERSE_SKILL_DEFAULT_SCOPE}}。 */
+    /** 技能默认安装作用域（由用户在设置→技能中选择）的友好名称，注入 {{AIVERSE_SKILL_DEFAULT_SCOPE}}。 */
     private fun skillInstallScopeLabel(): String {
         val scope = runBlocking { skillInstallSettingsRepository.defaultInstallScopeFlow.first() }
         return if (scope == SkillScope.GLOBAL) "全局" else "项目（当前工作区）"

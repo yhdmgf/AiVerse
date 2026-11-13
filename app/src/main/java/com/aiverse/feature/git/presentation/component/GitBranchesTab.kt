@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.rememberModalBottomSheetState
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.dialogTextFieldColors
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -420,7 +421,7 @@ internal fun BranchesTab(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = 70.dp),
+        contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = floatingTabBarContentBottomPadding()),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         item { BranchesOverview(currentBranch, localBranches.size, remoteBranches.size, tags.size, hasCurrentBranch) }

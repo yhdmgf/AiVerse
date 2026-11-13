@@ -3,6 +3,7 @@ package com.aiverse.feature.terminal.domain
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import com.aiverse.R
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.domain.container.RemoteSshConnection
 import com.aiverse.feature.agent.domain.tool.explorer.shellQuote
@@ -86,7 +87,7 @@ class RemoteTerminalSessionManager @Inject constructor(
 
     /** 新建一个交互 shell 标签并设为当前。返回新标签 id。 */
     suspend fun createInteractiveTab(): String {
-        if (!ensureRemote()) throw IllegalStateException("非远程模式或 SSH 未连接")
+        if (!ensureRemote()) throw IllegalStateException(context.getString(R.string.terminal_not_remote_or_ssh_disconnected))
         return openShellTab(command = null, isBackground = false, notify = false, title = null, sourceSessionId = null).also { id ->
             _activeTabId.value = id
             FileLogger.i(TAG, "新建交互远程终端标签 $id")
@@ -99,7 +100,7 @@ class RemoteTerminalSessionManager @Inject constructor(
         notify: Boolean,
         sourceSessionId: String?
     ): String {
-        if (!ensureRemote()) throw IllegalStateException("非远程模式或 SSH 未连接")
+        if (!ensureRemote()) throw IllegalStateException(context.getString(R.string.terminal_not_remote_or_ssh_disconnected))
         val id = openShellTab(command, isBackground = true, notify = notify, title = title, sourceSessionId = sourceSessionId)
         if (notify) monitorBackgroundExit(id)
         FileLogger.i(TAG, "后台命令标签 $id: $command")

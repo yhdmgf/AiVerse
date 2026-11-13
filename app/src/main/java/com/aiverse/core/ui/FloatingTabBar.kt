@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,12 +57,14 @@ import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.theme.LocalHyperOSStyle
+import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -69,6 +74,27 @@ data class FloatingTabItem(
     val icon: ImageVector,
     val label: String
 )
+
+/**
+ * 底部悬浮 Tab 栏所需的内容底部留白：Tab 栏容器高度 + 呼吸余量 + 底部系统安全区。
+ * 供各页 LazyColumn / 滚动容器的 contentPadding 底部复用，避免列表最后一项被底栏或
+ * 系统导航栏/手势条遮住（随界面密度档缩放）。
+ *
+ * 为什么把系统导航栏高度也显式加进来：宿主 Scaffold 的 contentWindowInsets 对滚动容器
+ * 底部的处理实测并不可靠（边缘到边缘 + 悬浮底栏贴底时，底部文字仍会被导航栏/手势条遮住），
+ * 因此在此处直接叠加 `WindowInsets.navigationBars` 的底部高度，确保任何机型
+ * （手势条 0~48dp）最后一项都完整可见。
+ *
+ * 旧值 = tabBarHeight + Spacing.sm（标准档 ≈ 76dp，不含导航栏，实测不足）；
+ * 新值 = tabBarHeight + Spacing.xl + 导航栏高度：标准档、无导航栏 ≈ 92dp；
+ * 手势导航机型 ≈ 116dp；三键导航机型 ≈ 140dp，均 ≥ 底栏实际占用（约 74dp+）+ 导航栏 + 余量。
+ */
+@Composable
+fun floatingTabBarContentBottomPadding(): Dp {
+    val density = LocalDensity.current
+    val navBarsBottom = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+    return LocalUIDensityTokens.current.tabBarHeight + Spacing.xl + navBarsBottom
+}
 
 /**
  * 底部悬浮液态玻璃 Tab 栏（PagerState 联动版）：
@@ -87,6 +113,7 @@ fun FloatingTabBar(
     val coroutineScope = rememberCoroutineScope()
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val hyperOS = LocalHyperOSStyle.current
+    val glass = LocalSurfaceGlassStyle.current
     val t = LocalUIDensityTokens.current
 
     val contentAlpha by animateFloatAsState(
@@ -103,33 +130,27 @@ fun FloatingTabBar(
     val cardSurfaceColor = MaterialTheme.semanticColors.cardSurface
     val mutedSurfaceColor = MaterialTheme.semanticColors.mutedSurface
     val pageBackgroundColor = MaterialTheme.semanticColors.pageBackground
+    val surfaceGlassColor = MaterialTheme.semanticColors.surfaceGlass
+    val surfaceGlassBorderColor = MaterialTheme.semanticColors.surfaceGlassBorder
 
     // 材质与描边画笔
-    val glassBackgroundBrush = remember(isLight, surfaceColor, surfaceVariantColor, cardSurfaceColor, mutedSurfaceColor, hyperOS) {
-        if (hyperOS) {
+    val glassBackgroundBrush = remember(isLight, surfaceColor, surfaceVariantColor, cardSurfaceColor, mutedSurfaceColor, hyperOS, surfaceGlassColor, glass) {
+        if (!glass) {
+            // 非玻璃档：回退改动前的实色画笔（原 HyperOS 实色逻辑）。
             if (isLight) {
                 Brush.verticalGradient(listOf(cardSurfaceColor, cardSurfaceColor))
             } else {
                 Brush.verticalGradient(listOf(surfaceVariantColor, surfaceColor))
             }
         } else {
-            if (isLight) {
-                Brush.verticalGradient(
-                    listOf(cardSurfaceColor.copy(alpha = 0.94f), mutedSurfaceColor.copy(alpha = 0.90f))
-                )
-            } else {
-                Brush.verticalGradient(
-                    listOf(
-                        surfaceVariantColor.copy(alpha = 0.92f),
-                        surfaceColor.copy(alpha = 0.88f)
-                    )
-                )
-            }
+            // 玻璃档：半透明玻璃表面色，alpha 由主题语义色推导。
+            Brush.verticalGradient(listOf(surfaceGlassColor, surfaceGlassColor))
         }
     }
 
-    val glassBorderBrush = remember(isLight, outlineVariantColor, pageBackgroundColor, hyperOS) {
-        if (hyperOS) {
+    val glassBorderBrush = remember(isLight, outlineVariantColor, pageBackgroundColor, hyperOS, surfaceGlassBorderColor, glass) {
+        if (!glass) {
+            // 非玻璃档：回退改动前的实色描边逻辑（原 HyperOS 实色描边）。
             if (isLight) {
                 Brush.verticalGradient(listOf(outlineVariantColor, outlineVariantColor))
             } else {
@@ -141,23 +162,8 @@ fun FloatingTabBar(
                 )
             }
         } else {
-            if (isLight) {
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.12f),
-                        Color.Black.copy(alpha = 0.06f),
-                        Color.Black.copy(alpha = 0.14f)
-                    )
-                )
-            } else {
-                Brush.verticalGradient(
-                    listOf(
-                        outlineVariantColor.copy(alpha = 0.55f),
-                        outlineVariantColor.copy(alpha = 0.20f),
-                        pageBackgroundColor.copy(alpha = 0.60f)
-                    )
-                )
-            }
+            // 玻璃档：玻璃描边色（语义色推导）。
+            Brush.verticalGradient(listOf(surfaceGlassBorderColor, surfaceGlassBorderColor))
         }
     }
 
@@ -190,7 +196,7 @@ fun FloatingTabBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tabBarHeight)
+            .heightIn(min = t.tabBarHeight)
             .background(
                 Brush.verticalGradient(
                     listOf(maskColor.copy(alpha = 0f), maskColor.copy(alpha = 0.98f))
@@ -203,17 +209,17 @@ fun FloatingTabBar(
                 .padding(bottom = 6.dp)
                 .graphicsLayer { alpha = contentAlpha }
                 .shadow(
-                    elevation = if (hyperOS) 3.dp else 8.dp,
+                    elevation = if (hyperOS || glass) t.elevationSm else t.elevationMd,
                     shape = RoundedCornerShape(t.rPill),
-                    ambientColor = if (hyperOS) {
+                    ambientColor = if (hyperOS || glass) {
                         if (isLight) Color.Black.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.30f)
                     } else {
-                        if (isLight) Color.Black.copy(alpha = 0.08f) else Color(0xFF040A14).copy(alpha = 0.35f)
+                        if (isLight) Color.Black.copy(alpha = t.ambientAlpha) else Color(0xFF040A14).copy(alpha = t.ambientAlphaDark)
                     },
-                    spotColor = if (hyperOS) {
+                    spotColor = if (hyperOS || glass) {
                         if (isLight) Color.Black.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.45f)
                     } else {
-                        if (isLight) Color.Black.copy(alpha = 0.14f) else Color(0xFF040A14).copy(alpha = 0.50f)
+                        if (isLight) Color.Black.copy(alpha = t.spotAlpha) else Color(0xFF040A14).copy(alpha = t.spotAlphaDark)
                     }
                 )
                 .clip(RoundedCornerShape(t.rPill))
@@ -340,7 +346,7 @@ fun FloatingTabBar(
                     Column(
                         modifier = Modifier
                             .onGloballyPositioned { tabBounds[index] = it.boundsInParent() }
-                            .widthIn(min = t.scale(84))
+                            .widthIn(min = t.scale(84).coerceAtMost(84.dp))
                             .graphicsLayer {
                                 scaleX = tabScale
                                 scaleY = tabScale
@@ -409,6 +415,7 @@ fun FloatingTabBar(
 
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val hyperOS = LocalHyperOSStyle.current
+    val glass = LocalSurfaceGlassStyle.current
     val t = LocalUIDensityTokens.current
     val colorScheme = MaterialTheme.colorScheme
     val surfaceColor = colorScheme.surface
@@ -418,32 +425,26 @@ fun FloatingTabBar(
     val cardSurfaceColor = MaterialTheme.semanticColors.cardSurface
     val mutedSurfaceColor = MaterialTheme.semanticColors.mutedSurface
     val pageBackgroundColor = MaterialTheme.semanticColors.pageBackground
+    val surfaceGlassColor = MaterialTheme.semanticColors.surfaceGlass
+    val surfaceGlassBorderColor = MaterialTheme.semanticColors.surfaceGlassBorder
 
-    val glassBackgroundBrush = remember(isLight, surfaceColor, surfaceVariantColor, cardSurfaceColor, mutedSurfaceColor, hyperOS) {
-        if (hyperOS) {
+    val glassBackgroundBrush = remember(isLight, surfaceColor, surfaceVariantColor, cardSurfaceColor, mutedSurfaceColor, hyperOS, surfaceGlassColor, glass) {
+        if (!glass) {
+            // 非玻璃档：回退改动前的实色画笔（原 HyperOS 实色逻辑）。
             if (isLight) {
                 Brush.verticalGradient(listOf(cardSurfaceColor, cardSurfaceColor))
             } else {
                 Brush.verticalGradient(listOf(surfaceVariantColor, surfaceColor))
             }
         } else {
-            if (isLight) {
-                Brush.verticalGradient(
-                    listOf(cardSurfaceColor.copy(alpha = 0.94f), mutedSurfaceColor.copy(alpha = 0.90f))
-                )
-            } else {
-                Brush.verticalGradient(
-                    listOf(
-                        surfaceVariantColor.copy(alpha = 0.92f),
-                        surfaceColor.copy(alpha = 0.88f)
-                    )
-                )
-            }
+            // 玻璃档：半透明玻璃表面色，alpha 由主题语义色推导。
+            Brush.verticalGradient(listOf(surfaceGlassColor, surfaceGlassColor))
         }
     }
 
-    val glassBorderBrush = remember(isLight, outlineVariantColor, pageBackgroundColor, hyperOS) {
-        if (hyperOS) {
+    val glassBorderBrush = remember(isLight, outlineVariantColor, pageBackgroundColor, hyperOS, surfaceGlassBorderColor, glass) {
+        if (!glass) {
+            // 非玻璃档：回退改动前的实色描边逻辑（原 HyperOS 实色描边）。
             if (isLight) {
                 Brush.verticalGradient(listOf(outlineVariantColor, outlineVariantColor))
             } else {
@@ -455,23 +456,8 @@ fun FloatingTabBar(
                 )
             }
         } else {
-            if (isLight) {
-                Brush.verticalGradient(
-                    listOf(
-                        Color.Black.copy(alpha = 0.12f),
-                        Color.Black.copy(alpha = 0.06f),
-                        Color.Black.copy(alpha = 0.14f)
-                    )
-                )
-            } else {
-                Brush.verticalGradient(
-                    listOf(
-                        outlineVariantColor.copy(alpha = 0.55f),
-                        outlineVariantColor.copy(alpha = 0.20f),
-                        pageBackgroundColor.copy(alpha = 0.60f)
-                    )
-                )
-            }
+            // 玻璃档：玻璃描边色（语义色推导）。
+            Brush.verticalGradient(listOf(surfaceGlassBorderColor, surfaceGlassBorderColor))
         }
     }
 
@@ -505,7 +491,7 @@ fun FloatingTabBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(t.tabBarHeight)
+            .heightIn(min = t.tabBarHeight)
             .background(
                 Brush.verticalGradient(
                     listOf(maskColor.copy(alpha = 0f), maskColor.copy(alpha = 0.98f))
@@ -518,17 +504,17 @@ fun FloatingTabBar(
                 .padding(bottom = 6.dp)
                 .graphicsLayer { alpha = contentAlpha }
                 .shadow(
-                    elevation = if (hyperOS) 3.dp else 8.dp,
+                    elevation = if (hyperOS || glass) t.elevationSm else t.elevationMd,
                     shape = RoundedCornerShape(t.rPill),
-                    ambientColor = if (hyperOS) {
+                    ambientColor = if (hyperOS || glass) {
                         if (isLight) Color.Black.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.30f)
                     } else {
-                        if (isLight) Color.Black.copy(alpha = 0.08f) else Color(0xFF040A14).copy(alpha = 0.35f)
+                        if (isLight) Color.Black.copy(alpha = t.ambientAlpha) else Color(0xFF040A14).copy(alpha = t.ambientAlphaDark)
                     },
-                    spotColor = if (hyperOS) {
+                    spotColor = if (hyperOS || glass) {
                         if (isLight) Color.Black.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.45f)
                     } else {
-                        if (isLight) Color.Black.copy(alpha = 0.14f) else Color(0xFF040A14).copy(alpha = 0.50f)
+                        if (isLight) Color.Black.copy(alpha = t.spotAlpha) else Color(0xFF040A14).copy(alpha = t.spotAlphaDark)
                     }
                 )
                 .clip(RoundedCornerShape(t.rPill))
@@ -636,7 +622,7 @@ fun FloatingTabBar(
                     Column(
                         modifier = Modifier
                             .onGloballyPositioned { tabBounds[index] = it.boundsInParent() }
-                            .widthIn(min = t.scale(84))
+                            .widthIn(min = t.scale(84).coerceAtMost(84.dp))
                             .graphicsLayer {
                                 scaleX = tabScale
                                 scaleY = tabScale

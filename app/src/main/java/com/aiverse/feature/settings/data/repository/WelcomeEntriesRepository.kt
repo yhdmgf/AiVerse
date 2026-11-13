@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
+import com.aiverse.feature.settings.domain.model.VECTOR_ICON_DEFAULT
 import com.aiverse.feature.settings.domain.model.WelcomeEntry
 import com.aiverse.feature.settings.domain.model.WelcomeIconKind
 import com.aiverse.feature.settings.domain.model.buildDefaultWelcomeEntries
@@ -136,13 +137,27 @@ class WelcomeEntriesRepository @Inject constructor(
         return if (written) target.absolutePath else null
     }
 
-    /** 首次加载：无数据（或解析失败）时回退到预置项；否则返回持久化列表。 */
+    /** 首次加载：无数据（或解析失败）时回退到预置项；否则返回持久化列表（含旧 emoji 数据迁移）。 */
     private fun loadFromPrefs(): List<WelcomeEntry> {
         val raw = prefs.getString(KEY_ENTRIES, null)
         if (raw.isNullOrBlank()) return buildDefaultWelcomeEntries(context)
         return runCatching { json.decodeFromString<List<WelcomeEntry>>(raw) }
+            .map { migrateLegacyEntries(it) }
             .getOrElse { buildDefaultWelcomeEntries(context) }
     }
+
+    /**
+     * 旧数据兼容：历史版本允许用户自定义入口使用 emoji 图标；现统一为 Feather 矢量图标，
+     * 无法语义映射的 emoji 一律回退到 [VECTOR_ICON_DEFAULT]。
+     */
+    private fun migrateLegacyEntries(list: List<WelcomeEntry>): List<WelcomeEntry> =
+        list.map { entry ->
+            if (entry.iconKind == WelcomeIconKind.EMOJI) {
+                entry.copy(iconKind = WelcomeIconKind.VECTOR, iconValue = VECTOR_ICON_DEFAULT)
+            } else {
+                entry
+            }
+        }
 
     /** 持久化 + 发布（单一真源）。 */
     private fun persist(list: List<WelcomeEntry>) {

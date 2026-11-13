@@ -152,7 +152,7 @@ internal fun SubAgentsSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = Spacing.xl + selectionActionBarHeight()),
+            contentPadding = PaddingValues(start = Spacing.md, end = Spacing.md, bottom = Spacing.xl + selectionActionBarHeight()),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {
             item(key = "project-header", contentType = "header") {

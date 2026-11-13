@@ -1,5 +1,6 @@
 package com.aiverse.feature.phonecontrol.domain
 
+import com.aiverse.R
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
@@ -100,10 +101,10 @@ class PhoneAccessibilityService : AccessibilityService() {
     private fun roleOf(node: AccessibilityNodeInfo): String {
         val cls = node.className?.toString()?.substringAfterLast('.')?.lowercase() ?: ""
         return when {
-            node.isEditable -> "输入框"
-            node.isScrollable -> "列表"
-            node.isClickable -> "按钮"
-            else -> cls.ifEmpty { "节点" }
+            node.isEditable -> getString(R.string.phone_node_editable)
+            node.isScrollable -> getString(R.string.phone_node_scrollable)
+            node.isClickable -> getString(R.string.phone_node_clickable)
+            else -> cls.ifEmpty { getString(R.string.phone_node_default) }
         }
     }
 

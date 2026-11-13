@@ -87,7 +87,7 @@ internal fun ModelIconButton(
     if (buttonVisible) {
         Box(
             modifier = modifier
-                .size(36.dp)
+                .size(32.dp)
                 .clip(CircleShape)
                 .combinedClickable(
                     onClick = { showSheet = true },
@@ -178,7 +178,7 @@ internal fun ReasoningEffortSelector(
         IconButton(
             onClick = { showSheet = true },
             enabled = enabled,
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(32.dp)
         ) {
             Icon(
                 FeatherIcons.Zap,

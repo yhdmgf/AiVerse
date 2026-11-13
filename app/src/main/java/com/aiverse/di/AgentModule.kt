@@ -116,6 +116,7 @@ import com.aiverse.feature.agent.domain.workflow.ContextCompactor
 import com.aiverse.feature.agent.domain.workflow.StatefulAgentWorkflow
 import com.aiverse.feature.settings.data.repository.CompactionModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.DefaultModelSettingsRepository
+import com.aiverse.feature.settings.data.repository.OptimizeInputModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.GeneralSettingsRepository
 import com.aiverse.feature.settings.data.repository.ProviderKeyRotator
 import com.aiverse.feature.settings.data.repository.TitleModelSettingsRepository
@@ -477,6 +478,7 @@ object AgentModule {
         modelMetadataService: ModelMetadataService,
         compactionModelSettingsRepository: CompactionModelSettingsRepository,
         titleModelSettingsRepository: TitleModelSettingsRepository,
+        optimizeInputModelSettingsRepository: OptimizeInputModelSettingsRepository,
         defaultModelSettingsRepository: DefaultModelSettingsRepository,
         generalSettingsRepository: GeneralSettingsRepository,
         sessionUseCase: SessionUseCase,
@@ -504,6 +506,7 @@ object AgentModule {
             modelMetadataService,
             compactionModelSettingsRepository,
             titleModelSettingsRepository,
+            optimizeInputModelSettingsRepository,
             defaultModelSettingsRepository,
             generalSettingsRepository,
             sessionUseCase,

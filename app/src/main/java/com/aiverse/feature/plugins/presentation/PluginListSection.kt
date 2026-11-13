@@ -59,9 +59,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import compose.icons.FeatherIcons
+import compose.icons.feathericons.Download
 import compose.icons.feathericons.HelpCircle
+import compose.icons.feathericons.Share2
 import com.aiverse.R
 import com.aiverse.core.ui.AppSwitch
+import com.aiverse.core.ui.FileMenuRow
+import com.aiverse.core.ui.rememberFileShareExport
 import com.aiverse.feature.plugins.data.InstalledPlugin
 import com.aiverse.feature.plugins.domain.model.PluginPermissions
 import com.aiverse.feature.plugins.domain.model.PluginRepoEntry
@@ -90,6 +94,48 @@ fun PluginListSection(
     var confirmUninstall by remember { mutableStateOf<InstalledPlugin?>(null) }
     var showInstallMenu by remember { mutableStateOf(false) }
 
+    // 分享/导出公共入口（每项「更多」菜单共用同一份，避免各自创建 launcher）。
+    val fileShareExport = rememberFileShareExport()
+    val context = LocalContext.current
+
+    // 分享插件：打包单插件 zip 后走系统分享（FileProvider 授权）。
+    fun sharePlugin(plugin: InstalledPlugin) {
+        viewModel.buildPluginExportZip(plugin.manifest.id) { bytes ->
+            if (bytes == null) {
+                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.plugins_share_failed)) }
+            } else {
+                fileShareExport.shareZip(
+                    bytes,
+                    "${plugin.manifest.name}.zip",
+                    context.getString(R.string.plugins_share_chooser)
+                ) { ok ->
+                    if (!ok) {
+                        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.plugins_share_failed)) }
+                    }
+                }
+            }
+        }
+    }
+
+    // 导出插件：打包单插件 zip 后用 SAF 存到本地。
+    fun exportPlugin(plugin: InstalledPlugin) {
+        viewModel.buildPluginExportZip(plugin.manifest.id) { bytes ->
+            if (bytes == null) {
+                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.plugins_export_failed)) }
+            } else {
+                fileShareExport.exportZip(bytes, "${plugin.manifest.name}.zip") { ok ->
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(
+                                if (ok) R.string.plugins_export_success else R.string.plugins_export_failed
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     val zipPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> if (uri != null) viewModel.install(uri) }
@@ -115,7 +161,6 @@ fun PluginListSection(
             ) {
                 // 顶栏已展示「脚本插件」标题，页内不再重复；帮助图标与「安装插件」按钮同一行基线靠右。
                 Spacer(Modifier.weight(1f))
-                val context = LocalContext.current
                 IconButton(
                     onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SCRIPTS_DOCS_URL)))
@@ -209,7 +254,9 @@ fun PluginListSection(
                             onToggleEnabled = { enabled ->
                                 viewModel.setEnabled(plugin.manifest.id, enabled)
                             },
-                            onUninstall = { confirmUninstall = plugin }
+                            onUninstall = { confirmUninstall = plugin },
+                            onShare = { sharePlugin(plugin) },
+                            onExport = { exportPlugin(plugin) }
                         )
                     }
                 }
@@ -454,7 +501,9 @@ private fun PluginCard(
     hasUpdate: Boolean,
     onUpdate: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
-    onUninstall: () -> Unit
+    onUninstall: () -> Unit,
+    onShare: () -> Unit,
+    onExport: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Card(
@@ -546,6 +595,20 @@ private fun PluginCard(
                                 }
                             )
                         }
+                        DropdownMenuItem(
+                            text = { FileMenuRow(FeatherIcons.Share2, stringResource(R.string.plugins_share)) },
+                            onClick = {
+                                menuExpanded = false
+                                onShare()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { FileMenuRow(FeatherIcons.Download, stringResource(R.string.plugins_export)) },
+                            onClick = {
+                                menuExpanded = false
+                                onExport()
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.plugins_uninstall)) },
                             leadingIcon = {

@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.glassOr
+import com.aiverse.core.theme.semanticColors
 
 /**
  * miuix 风格大标题顶栏：首行是返回键与操作按钮，下方是左对齐的大标题。
@@ -29,7 +31,11 @@ import com.aiverse.core.theme.Spacing
 fun MiuixLargeTopBar(
     title: String,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.background,
+    /**
+     * 顶栏底色。磨砂铺开：默认用半透明玻璃表面色，让滚动内容从顶栏后透出；
+     * 保守取舍：顶栏不做整圈描边（顶部接状态栏、加 border 会画出异常边框），保留纯半透明。
+     */
+    containerColor: Color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.colorScheme.background),
     navigationIcon: (@Composable () -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
     titleStyle: TextStyle = MaterialTheme.typography.headlineMedium

@@ -106,11 +106,27 @@
     <string name="settings_appearance_fonts">Font Size</string>
     <string name="settings_appearance_chat_font">Chat Font Size</string>
     <string name="settings_appearance_input_font">Input Font Size</string>
+    <string name="settings_appearance_code_font">Code Block Font Size</string>
+    <string name="settings_appearance_code_display">Code Display</string>
+    <string name="settings_appearance_code_wrap">Word Wrap</string>
+    <string name="settings_appearance_code_auto_fold">Auto-fold Code Blocks</string>
+    <string name="settings_appearance_code_line_number">Show Line Numbers</string>
+    <string name="settings_appearance_user_bubble_opacity">User Bubble Opacity</string>
+    <string name="settings_appearance_assistant_bubble_opacity">AI Bubble Opacity</string>
+    <string name="chat_code_expand">Expand All</string>
     <string name="settings_appearance_ui_scale">UI Scale</string>
     <string name="settings_appearance_density">UI Density</string>
+    <string name="settings_appearance_density_title">Interface Density</string>
     <string name="density_compact">Compact</string>
     <string name="density_standard">Standard</string>
     <string name="density_comfortable">Comfortable</string>
+    <string name="settings_appearance_corner">Corner Radius</string>
+    <string name="settings_appearance_corner_title">Corner Radius</string>
+    <string name="corner_card">Card Corner</string>
+    <string name="corner_button">Button Corner</string>
+    <string name="corner_input">Input Corner</string>
+    <string name="corner_bubble">Bubble Corner</string>
+    <string name="corner_image">Image Corner</string>
     <string name="settings_appearance_files">Files</string>
     <string name="file_tree_filename_display">File Name Display</string>
     <string name="file_name_display_scroll">Single line (scroll)</string>
@@ -170,12 +186,10 @@
     <string name="settings_welcome_entry_icon_select">Choose Icon</string>
     <string name="settings_welcome_icon_upload_failed">Failed to save image, please retry</string>
     <string name="settings_welcome_icon_title">Choose Icon</string>
-    <string name="settings_welcome_icon_emoji">Emoji</string>
+    <string name="settings_welcome_icon_vector">Icon</string>
     <string name="settings_welcome_icon_text">Text</string>
     <string name="settings_welcome_icon_image">Upload Image</string>
     <string name="settings_welcome_icon_text_hint">Up to 3 characters</string>
-    <string name="settings_welcome_icon_emoji_custom">Custom Emoji</string>
-    <string name="settings_welcome_icon_emoji_custom_hint">Up to 2 characters</string>
     <string name="settings_welcome_icon_uploading">Saving image…</string>
     <string name="settings_welcome_icon_image_pick">Choose Image</string>
     <string name="settings_appearance_input_bar">Input Bar Shortcuts</string>
@@ -183,14 +197,14 @@
     <string name="settings_inputbar_thinking">Thinking Effort Quick Button</string>
     <string name="settings_inputbar_folder">Folder Quick Button</string>
     <string name="settings_inputbar_model">Model Quick Button</string>
-    <string name="settings_inputbar_clear">Clear Current Chat</string>
     <string name="settings_inputbar_web_search">Web Search Toggle</string>
+    <string name="settings_inputbar_optimize">Optimize Input Quick Button</string>
+    <string name="settings_inputbar_plus">Plus Quick Button</string>
     <string name="inputbar_action_model">Switch Model</string>
     <string name="inputbar_action_thinking">Thinking Effort</string>
     <string name="inputbar_action_web_search">Web Search</string>
     <string name="inputbar_action_folder">Folder</string>
     <string name="inputbar_action_mcp">MCP</string>
-    <string name="inputbar_action_clear">Clear</string>
     <string name="settings_general_models">Models</string>
     <string name="settings_auto_remove_stale_models">Remove stale models after fetching</string>
     <string name="settings_auto_remove_stale_models_desc">On a successful fetch, drop local models the vendor no longer offers</string>
@@ -247,6 +261,8 @@
     <string name="settings_goal_max_tokens_input_hint">Integer not less than 1000</string>
     <string name="settings_vision_model">Vision Model</string>
     <string name="settings_compaction_model">Compaction Model</string>
+    <string name="settings_optimize_input_model">Optimize Input Model</string>
+    <string name="settings_optimize_input_follow_chat">Follow current chat model</string>
     <string name="settings_title_model">Title Model</string>
     <string name="settings_image_gen_model">Image Generation Model</string>
     <string name="settings_mcp">MCP Servers</string>
@@ -356,6 +372,12 @@
     <string name="plugins_install">Install</string>
     <string name="plugins_scripts_docs">View script plugins documentation</string>
     <string name="plugins_more_actions">More actions</string>
+    <string name="plugins_share">Share</string>
+    <string name="plugins_export">Export</string>
+    <string name="plugins_share_chooser">Share plugin</string>
+    <string name="plugins_share_failed">Share failed: unable to read plugin files</string>
+    <string name="plugins_export_failed">Export failed</string>
+    <string name="plugins_export_success">Plugin exported</string>
     <string name="plugins_empty">No script plugins installed. Tap install to add a zip package.</string>
     <string name="plugins_uninstall">Uninstall</string>
     <string name="plugins_cancel">Cancel</string>
@@ -490,6 +512,7 @@
     <string name="theme_preset_section">Color theme</string>
     <string name="theme_preset_default">Blue</string>
     <string name="theme_preset_hyperos">HyperOS (Default)</string>
+    <string name="theme_preset_hyperos_glass">HyperOS Glass</string>
     <string name="theme_preset_coffee">Coffee</string>
     <string name="theme_preset_graphite">Graphite</string>
     <string name="theme_preset_forest">Forest</string>
@@ -674,6 +697,9 @@
     <string name="common_name">Name</string>
     <string name="common_image_preview">Image Preview</string>
     <string name="common_image_load_failed">Failed to load image; the file may have been moved or deleted</string>
+    <string name="common_play">Play</string>
+    <string name="common_pause">Pause</string>
+    <string name="common_media_load_failed">Failed to play this file; it may have been moved or deleted</string>
     <string name="common_expand">Expand</string>
     <string name="common_workspace">Workspace</string>
     <string name="common_tool">Tool</string>
@@ -744,7 +770,7 @@
     <string name="chat_new_session_btn">New Chat</string>
     <string name="chat_open_sidebar">Open sidebar</string>
     <string name="chat_add_attachment">Add attachment</string>
-    <string name="chat_clear_chat">Clear current chat</string>
+    <string name="chat_optimize_input">Optimize Input</string>
     <string name="chat_web_search_toggle">Web search</string>
     <string name="chat_more_tools">More tools</string>
     <string name="chat_balance_icon">Balance</string>
@@ -786,6 +812,7 @@
     <string name="chat_open_apk_permission">Installing apps requires permission. Allow installs from this source in the settings that just opened</string>
     <string name="chat_attachment_preview">Preview %1$s</string>
     <string name="chat_attachment_open">Open %1$s</string>
+    <string name="chat_attachment_play">Play %1$s</string>
     <string name="attachment_open_preview">Preview</string>
     <string name="attachment_open_external">Open with another app</string>
     <string name="chat_no_model_selected">No model selected</string>
@@ -872,6 +899,9 @@
     <string name="about_update_install_failed">No app available to install packages</string>
 
     <string name="agreement_title">Welcome to AiVerse</string>
+    <string name="agreement_test_title">Test Build Notice</string>
+    <string name="agreement_test_notice">This is a test build and does not represent the final version. Do not redistribute.</string>
+    <string name="agreement_test_download">Download Official Version</string>
     <string name="agreement_terms">User Agreement</string>
     <string name="agreement_privacy">Privacy Policy</string>
     <string name="agreement_notice_prefix">"Before using AiVerse, please read and agree to the "</string>
@@ -883,6 +913,7 @@
     <string name="agreement_decline">Disagree</string>
     <string name="agreement_terms_url">https://aivapp.cn/en/terms</string>
     <string name="agreement_privacy_url">https://aivapp.cn/en/privacy</string>
+    <string name="agreement_test_download_url">https://aivapp.cn/download</string>
 
     <!-- Ask User Question -->
     <string name="ask_confirm_title">AI needs your confirmation</string>
@@ -917,6 +948,7 @@
     <string name="backup_data_memories">Memories</string>
     <string name="backup_data_favorites">Favorite Messages</string>
     <string name="backup_data_skills">Skills</string>
+    <string name="backup_data_plugins">Script Plugins</string>
     <string name="backup_workspace_git_hint">Workspace files are best backed up via Git; the export here is only a fallback</string>
     <string name="backup_password_label">Password (optional)</string>
     <string name="backup_processing">Processing</string>
@@ -934,6 +966,7 @@
     <string name="backup_stat_memories">· Memories: %1$s</string>
     <string name="backup_stat_favorites">· Favorite Messages: %1$s</string>
     <string name="backup_stat_skills">· Skills: %1$s</string>
+    <string name="backup_stat_plugins">· Script Plugins: %1$s</string>
     <string name="backup_settings_covered">Theme, keepalive, logging, vision, and sync preferences covered</string>
     <string name="backup_restore_workspaces_title">Restore workspaces</string>
     <string name="backup_restore_workspaces_warning">Files in local workspaces with the same name will be overwritten and cannot be undone. Select carefully.</string>
@@ -1383,6 +1416,12 @@
     <string name="git_issue_bulk_close_partial">Bulk close: %1$d succeeded, %2$d failed</string>
     <string name="git_issue_bulk_label_success">Added labels to selected issues</string>
     <string name="git_issue_bulk_label_partial">Bulk add label: %1$d succeeded, %2$d failed</string>
+    <string name="git_issue_bulk_assign">Assign</string>
+    <string name="git_issue_bulk_assign_hint">Assign assignees</string>
+    <string name="git_issue_bulk_assign_label">User logins (comma-separated)</string>
+    <string name="git_issue_bulk_assign_confirm">Assign</string>
+    <string name="git_issue_bulk_assign_success">Assigned assignees to selected issues</string>
+    <string name="git_issue_bulk_assign_partial">Bulk assign: %1$d succeeded, %2$d failed</string>
     <string name="git_issue_action_close">Close</string>
     <string name="git_issue_close_reason_completed">Completed</string>
     <string name="git_issue_close_reason_not_planned">Not planned</string>
@@ -2181,6 +2220,7 @@
     <!-- Compaction Model -->
     <string name="compaction_no_models">No models available. Please add and configure a model in "AI Vendors" before selecting a dedicated compaction model.</string>
     <string name="title_no_models">No models available. Please add and configure a model in "AI Vendors" before selecting a dedicated title model.</string>
+    <string name="optimize_input_no_models">No models available. Please add and configure a model in "AI Vendors" before selecting a dedicated optimize-input model.</string>
 
     <!-- Image Generation Model -->
     <string name="image_gen_no_models">No models available. Add a model supporting image output (e.g. gpt-image-1 / dall-e-3) in "AI Vendors" first.</string>
@@ -2315,8 +2355,11 @@
     <string name="provider_multi_key_item">Key #%1$d</string>
     <string name="provider_multi_key_empty">Tap to add the first key</string>
     <string name="provider_multi_key_add">Add key</string>
+    <string name="provider_multi_key_name">Name</string>
     <string name="provider_multi_key_weight">Scheduling weight</string>
     <string name="provider_multi_key_weight_hint">Default 1 · ≤ 0 excluded · Max 1,000,000</string>
+    <string name="provider_multi_key_disabled">Disabled</string>
+    <string name="provider_multi_key_weight_value">· Weight %1$d</string>
     <string name="provider_multi_key_strategy">Selection Strategy</string>
     <string name="provider_multi_key_strategy_sequential">Sequential</string>
     <string name="provider_multi_key_strategy_sequential_desc">Always use the earliest key; move on only after the failure threshold</string>
@@ -2485,6 +2528,9 @@
     <string name="memory_delete_failed">Delete failed</string>
     <string name="memory_delete_confirm_title">Delete Memory</string>
     <string name="memory_delete_confirm_message">Delete "%1$s"?</string>
+    <string name="memory_add_expand">New memory and expand</string>
+    <string name="memory_delete_selected_confirm_title">Delete Selected Memories</string>
+    <string name="memory_delete_selected_confirm_message">Delete the %1$d selected memories? This cannot be undone.</string>
     <!-- Header memory chip -->
     <string name="memory_chip_label">Mem %1$d%%</string>
     <string name="memory_chip_used_total">Used %1$s / %2$s</string>
@@ -2602,4 +2648,91 @@
     <string name="a11y_grant_allow_action">Allow authorization</string>
     <string name="a11y_grant_allow_desc">Enable the accessibility service in one tap after WRITE_SECURE_SETTINGS is granted</string>
     <string name="welcome_entry_card_desc">Quick entry: %1$s</string>
+    <string name="chat_subagent_title">Sub-agent</string>
+    <string name="chat_main_session_title">Main session</string>
+    <string name="chat_expert_title">Expert</string>
+    <string name="chat_peer_notice_content">[Expert peer notice] %1$s sent a message directly to %2$s (seq %3$d): %4$s. Acknowledged only; no forwarding or duplicate sending.</string>
+    <string name="chat_subagent_stopped_detail">User manually stopped this sub-agent in the UI; the task is incomplete.</string>
+    <string name="chat_subagent_deleted_detail">User deleted this sub-agent session; the task is incomplete and its conversation is no longer readable.</string>
+    <string name="chat_usage_header">| Metric | Today | Total |</string>
+    <string name="chat_usage_calls">| Calls | %1$d | %2$d |</string>
+    <string name="chat_usage_input_tokens">| Input tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_output_tokens">| Output tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_cache_tokens">| Cache hit tokens | %1$s | %2$s |</string>
+    <string name="chat_usage_cost">| Estimated cost | %1$s | %2$s |</string>
+    <string name="chat_goal_no_goal">No goal is set for this session. Use `/goal &lt;goal&gt;` to set one; the AI will loop autonomously until it succeeds, is blocked, or exhausts its budget.</string>
+    <string name="chat_goal_current">Current goal (%1$s, %2$d rounds so far):
+%3$s</string>
+    <string name="chat_goal_set">Goal set: %1$s
+The AI will loop autonomously (tools auto-approved, PLAN off) until it succeeds, is blocked, or exhausts its budget.
+Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
+    <string name="chat_goal_cleared">Current goal cleared.</string>
+    <string name="chat_goal_none">No goal is set for this session.</string>
+    <string name="chat_goal_paused">Goal paused. Use `/goal resume` to continue.</string>
+    <string name="chat_goal_resumed">Goal resumed; continuing autonomous loop.</string>
+    <string name="chat_goal_blocked_empty">No progress for %1$d consecutive turns; the goal is marked BLOCKED and stopped. Use `/goal resume` or `/goal clear`.</string>
+    <string name="chat_goal_budget_exhausted">Autonomous loop reached the budget limit (%1$d turns / %2$d tokens) and stopped. Use `/goal resume` or `/goal clear`.</string>
+    <string name="chat_rewind_more">…and %1$d more</string>
+    <string name="tts_system_unavailable">System TTS unavailable: no speech engine installed or initialization failed</string>
+    <string name="tts_online_failed">Online TTS failed: %1$s</string>
+    <string name="tts_http_failed">Request failed (HTTP not 200; check endpoint URL/API key/model)</string>
+    <string name="tts_network_error">Network error</string>
+    <string name="backup_unknown_exception">Unknown exception</string>
+    <string name="ftp_start_failed_port_occupied">Start failed; the port may be in use</string>
+    <string name="terminal_container_not_installed">Container not installed (missing rootfs/proot)</string>
+    <string name="terminal_not_remote_or_ssh_disconnected">Not in remote mode or SSH not connected</string>
+    <string name="plugin_permission_request_title">Plugin permission request: %1$s</string>
+    <string name="plugin_permission_request_summary">%1$s requires permission: %2$s</string>
+    <string name="plugin_permission_request_details">Once granted, the plugin can use this capability; \'Always allow\' remembers it (equivalent to declaring it in plugin.json), while \'This time only\' grants it temporarily.</string>
+    <string name="plugin_notify_permission_off">Notification permission is off: %1$s</string>
+    <string name="plugin_notify_failed">Notification failed: %1$s</string>
+    <string name="plugin_no_permission">no permission</string>
+    <string name="plugin_notification_channel_name">Plugin notifications</string>
+    <string name="plugin_notification_channel_desc">Notifications sent by script plugins</string>
+    <string name="plugin_err_all_files_permission">Requires \'All files access\' permission; enable it in system settings</string>
+    <string name="plugin_err_is_directory">Is a directory; specify a file path: %1$s</string>
+    <string name="plugin_err_file_not_found">File not found: %1$s</string>
+    <string name="plugin_err_read_failed">Read failed (not text or unsupported encoding): %1$s</string>
+    <string name="plugin_err_write_failed">Save failed: %1$s</string>
+    <string name="plugin_err_tool_system_unavailable">Tool system unavailable</string>
+    <string name="plugin_err_tool_not_found">Tool not found: %1$s</string>
+    <string name="plugin_err_tool_needs_auth">Tool requires authorization; the plugin cannot call it directly: %1$s</string>
+    <string name="plugin_err_arg_parse_failed">Argument parse failed: %1$s</string>
+    <string name="plugin_err_exec_failed">Execution failed: %1$s</string>
+    <string name="plugin_install_no_plugin_json">plugin.json not found in the archive</string>
+    <string name="plugin_install_missing_package">plugin.json is missing the package field</string>
+    <string name="plugin_install_missing_name">plugin.json is missing the name field</string>
+    <string name="plugin_install_missing_main">plugin.json is missing the main field</string>
+    <string name="plugin_install_bad_dir">The directory containing plugin.json is invalid</string>
+    <string name="apk_download_failed">Download failed</string>
+    <string name="apk_chunk_incomplete">Chunk %1$d is incomplete (%2$d/%3$d)</string>
+    <string name="apk_size_mismatch">Installer size mismatch (%1$d/%2$d)</string>
+    <string name="apk_checksum_failed">Installer checksum verification failed</string>
+    <string name="apk_range_download_failed">Range download failed with HTTP %1$d</string>
+    <string name="apk_empty_body">Empty response body</string>
+    <string name="apk_chunk_size_mismatch">Chunk size mismatch (%1$d/%2$d)</string>
+    <string name="phone_control_enabled">Phone control enabled</string>
+    <string name="phone_control_disabled">Phone control disabled</string>
+    <string name="phone_rule_applied">Rule applied: %1$s → %2$s</string>
+    <string name="phone_unlock_detail">Unlock permissions: system=%1$s password=%2$s app=%3$s</string>
+    <string name="phone_shizuku_enabled">Accessibility enabled via Shizuku</string>
+    <string name="phone_shizuku_failed">Shizuku authorization failed</string>
+    <string name="phone_root_enabled">Accessibility enabled via Root</string>
+    <string name="phone_root_failed">Root authorization failed</string>
+    <string name="phone_a11y_enabled">Accessibility service enabled</string>
+    <string name="phone_a11y_failed">Failed to enable accessibility service (missing system write permission)</string>
+    <string name="phone_screen_read">Screen read (%1$d characters)</string>
+    <string name="phone_a11y_not_enabled">Accessibility service is not enabled</string>
+    <string name="phone_reading_screen">Reading screen</string>
+    <string name="phone_overlay_channel_name">Phone control Dynamic Island</string>
+    <string name="phone_overlay_notification_title">AI is operating your phone</string>
+    <string name="phone_overlay_notification_text">Tap the Dynamic Island at the top to see the AI reasoning process</string>
+    <string name="phone_overlay_collapse">Collapse</string>
+    <string name="phone_overlay_stop">Stop</string>
+    <string name="phone_overlay_recent_action">Recent action</string>
+    <string name="phone_node_editable">text field</string>
+    <string name="phone_node_scrollable">list</string>
+    <string name="phone_node_clickable">button</string>
+    <string name="phone_node_default">node</string>
+    <string name="plugin_saved_path">Saved: %1$s</string>
 </resources>

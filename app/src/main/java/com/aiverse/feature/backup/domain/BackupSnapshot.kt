@@ -28,6 +28,12 @@ data class BackupSnapshot(
     val themeMode: String? = null,
     val themePresetId: String? = null,
     val dynamicColorEnabled: Boolean = false,
+    val codeFontSizeSp: Int = 13,
+    val codeWrapEnabled: Boolean = false,
+    val codeAutoFoldEnabled: Boolean = true,
+    val codeShowLineNumber: Boolean = true,
+    val userBubbleOpacity: Int = 100,
+    val assistantBubbleOpacity: Int = 100,
     val keepaliveEnabled: Boolean = false,
     val liveNotificationEnabled: Boolean = false,
     val screenOnEnabled: Boolean = false,
@@ -47,6 +53,8 @@ data class BackupSnapshot(
     val visionModel: String = "",
     val compactionProviderId: String = "",
     val compactionModel: String = "",
+    val optimizeProviderId: String = "",
+    val optimizeModel: String = "",
     val syncSettings: SyncSettingsSnapshot? = null,
     val memories: List<MemoryDto> = emptyList(),
     val favorites: List<FavoriteItemDto> = emptyList(),
@@ -70,6 +78,12 @@ data class BackupMetadata(
     val themeMode: String? = null,
     val themePresetId: String? = null,
     val dynamicColorEnabled: Boolean = false,
+    val codeFontSizeSp: Int = 13,
+    val codeWrapEnabled: Boolean = false,
+    val codeAutoFoldEnabled: Boolean = true,
+    val codeShowLineNumber: Boolean = true,
+    val userBubbleOpacity: Int = 100,
+    val assistantBubbleOpacity: Int = 100,
     val keepaliveEnabled: Boolean = false,
     val liveNotificationEnabled: Boolean = false,
     val screenOnEnabled: Boolean = false,
@@ -89,11 +103,14 @@ data class BackupMetadata(
     val visionModel: String = "",
     val compactionProviderId: String = "",
     val compactionModel: String = "",
+    val optimizeProviderId: String = "",
+    val optimizeModel: String = "",
     val syncSettings: SyncSettingsSnapshot? = null,
     val workspaces: List<WorkspaceBackupMeta> = emptyList(),
     val memories: List<MemoryDto> = emptyList(),
     val favorites: List<FavoriteItemDto> = emptyList(),
     val skills: List<SkillBackupMeta> = emptyList(),
+    val plugins: List<PluginBackupMeta> = emptyList(),
     val includesAppSettings: Boolean = themeMode != null
 )
 
@@ -103,6 +120,14 @@ data class SkillBackupMeta(
     val name: String,
     /** "GLOBAL" 或 "PROJECT"。 */
     val scope: String,
+    val fileCount: Int
+)
+
+/** 备份元数据中的一个脚本插件段：id + 名称 + 文件数（用于导入摘要）。 */
+@Serializable
+data class PluginBackupMeta(
+    val id: String,
+    val name: String,
     val fileCount: Int
 )
 
@@ -125,6 +150,12 @@ fun BackupSnapshot.toMetadata() = BackupMetadata(
     themeMode = themeMode,
     themePresetId = themePresetId,
     dynamicColorEnabled = dynamicColorEnabled,
+    codeFontSizeSp = codeFontSizeSp,
+    codeWrapEnabled = codeWrapEnabled,
+    codeAutoFoldEnabled = codeAutoFoldEnabled,
+    codeShowLineNumber = codeShowLineNumber,
+    userBubbleOpacity = userBubbleOpacity,
+    assistantBubbleOpacity = assistantBubbleOpacity,
     keepaliveEnabled = keepaliveEnabled,
     liveNotificationEnabled = liveNotificationEnabled,
     screenOnEnabled = screenOnEnabled,
@@ -144,10 +175,14 @@ fun BackupSnapshot.toMetadata() = BackupMetadata(
     visionModel = visionModel,
     compactionProviderId = compactionProviderId,
     compactionModel = compactionModel,
+    optimizeProviderId = optimizeProviderId,
+    optimizeModel = optimizeModel,
     syncSettings = syncSettings,
     memories = memories,
     favorites = favorites,
-    skills = skills
+    skills = skills,
+    // 旧格式快照（snapshot.json）无插件段，转元数据时插件为空。
+    plugins = emptyList()
 )
 
 @Serializable

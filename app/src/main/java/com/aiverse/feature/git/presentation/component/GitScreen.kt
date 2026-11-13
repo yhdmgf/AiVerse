@@ -368,7 +368,8 @@ fun GitScreen(
                             onClearSelection = viewModel::clearIssueSelection,
                             onSelectAll = viewModel::selectAllVisibleIssues,
                             onBulkClose = viewModel::bulkCloseSelected,
-                            onBulkAddLabels = viewModel::bulkAddLabelsToSelected
+                            onBulkAddLabels = viewModel::bulkAddLabelsToSelected,
+                            onBulkAssign = viewModel::bulkSetAssigneesToSelected
                         )
                     }
                 }

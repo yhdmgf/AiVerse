@@ -52,6 +52,8 @@ import com.aiverse.core.theme.ChatBubbleRole
 import com.aiverse.core.theme.ChatBubbleStyle
 import com.aiverse.core.theme.LocalAssistantBubbleStyle
 import com.aiverse.core.theme.LocalUserBubbleStyle
+import com.aiverse.core.theme.LocalAssistantBubbleOpacity
+import com.aiverse.core.theme.LocalUserBubbleOpacity
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 import compose.icons.feathericons.Copy
@@ -101,10 +103,16 @@ private fun chatBubbleStyleOf(role: ChatBubbleRole): ChatBubbleStyle = when (rol
     ChatBubbleRole.ASSISTANT -> LocalAssistantBubbleStyle.current
 }
 
-/** 聊天气泡底色（按所选聊天气泡样式返回）：用户与助手两侧可各自独立配置。 */
+/** 聊天气泡底色（按所选聊天气泡样式返回）：用户与助手两侧可各自独立配置，并应用各自气泡透明度。 */
 @Composable
-internal fun chatBubbleColor(role: ChatBubbleRole): Color =
-    chatBubbleColorFor(chatBubbleStyleOf(role))
+internal fun chatBubbleColor(role: ChatBubbleRole): Color {
+    val base = chatBubbleColorFor(chatBubbleStyleOf(role))
+    val opacity = when (role) {
+        ChatBubbleRole.USER -> LocalUserBubbleOpacity.current
+        ChatBubbleRole.ASSISTANT -> LocalAssistantBubbleOpacity.current
+    }
+    return base.copy(alpha = opacity / 100f)
+}
 
 /** 聊天气泡底色：按具体样式取值，供设置页预览复用同一推导。 */
 @Composable
@@ -158,31 +166,31 @@ internal fun chatBlockColorsFor(style: ChatBubbleStyle): Pair<Color?, Color?> {
 
 /** 聊天气泡描边（按所选聊天气泡样式返回）：仅白描边/漫画/心动有边，其余无。 */
 @Composable
-internal fun chatBubbleBorder(role: ChatBubbleRole): BorderStroke? {
-    val style = when (role) {
-        ChatBubbleRole.USER -> LocalUserBubbleStyle.current
-        ChatBubbleRole.ASSISTANT -> LocalAssistantBubbleStyle.current
-    }
-    return when (style) {
-        ChatBubbleStyle.CLASSIC_OUTLINE -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.onSurface)
-        ChatBubbleStyle.COMIC -> BorderStroke(2.dp, Color.Black)
-        ChatBubbleStyle.HEARTBEAT -> BorderStroke(1.5.dp, Color(0xFFBDBDBD))
-        // 无气泡样式：用户与助手两侧都不套容器（正文直接铺底），故统一无描边。
-        ChatBubbleStyle.NO_BUBBLE -> null
-        else -> null
-    }
+internal fun chatBubbleBorder(role: ChatBubbleRole): BorderStroke? =
+    chatBubbleBorderFor(chatBubbleStyleOf(role))
+
+/** 聊天气泡描边：按具体样式取值，供设置页预览复用同一推导（不依赖角色）。 */
+@Composable
+internal fun chatBubbleBorderFor(style: ChatBubbleStyle): BorderStroke? = when (style) {
+    ChatBubbleStyle.CLASSIC_OUTLINE -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.onSurface)
+    ChatBubbleStyle.COMIC -> BorderStroke(2.dp, Color.Black)
+    ChatBubbleStyle.HEARTBEAT -> BorderStroke(1.5.dp, Color(0xFFBDBDBD))
+    // 无气泡样式：用户与助手两侧都不套容器（正文直接铺底），故统一无描边。
+    ChatBubbleStyle.NO_BUBBLE -> null
+    else -> null
 }
 
 /** 聊天气泡圆角（按所选聊天气泡样式返回）：清新绿大圆角，其余按密度令牌 rMd（标准档 10dp）。 */
 @Composable
-internal fun chatBubbleShape(role: ChatBubbleRole): CornerBasedShape {
-    val style = when (role) {
-        ChatBubbleRole.USER -> LocalUserBubbleStyle.current
-        ChatBubbleRole.ASSISTANT -> LocalAssistantBubbleStyle.current
-    }
+internal fun chatBubbleShape(role: ChatBubbleRole): CornerBasedShape =
+    chatBubbleShapeFor(chatBubbleStyleOf(role))
+
+/** 聊天气泡圆角：按具体样式取值，供设置页预览复用同一推导（不依赖角色）。 */
+@Composable
+internal fun chatBubbleShapeFor(style: ChatBubbleStyle): CornerBasedShape {
     val t = LocalUIDensityTokens.current
     return if (style == ChatBubbleStyle.FRESH_GREEN) RoundedCornerShape(24.dp)
-    else RoundedCornerShape(t.rMd)
+    else RoundedCornerShape(t.bubbleCorner)
 }
 
 /** 聊天气泡阴影（按所选聊天气泡样式返回）：柔和投影有阴影，其余无。 */

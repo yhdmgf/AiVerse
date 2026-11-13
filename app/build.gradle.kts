@@ -475,6 +475,10 @@ dependencies {
     // Core Android（1.17.0 起提供 NotificationCompat 的实时通知推广接口 setRequestPromotedOngoing）
     implementation("androidx.core:core:1.17.0")
 
+    // 应用内音视频播放（issue #91）：ExoPlayer + PlayerView，视频用 PlayerView 自带控制器（进度条/全屏）
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
+
     // Web 服务器（网页端）：Ktor CIO，端口 7676，托管 web-ui 静态资源 + REST/SSE API
     implementation("io.ktor:ktor-server-core:3.5.2")
     implementation("io.ktor:ktor-server-cio:3.5.2")

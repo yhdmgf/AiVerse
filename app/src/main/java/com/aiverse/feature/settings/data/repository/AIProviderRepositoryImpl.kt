@@ -42,17 +42,25 @@ class AIProviderRepositoryImpl @Inject constructor(
             if (raw.isBlank()) emptyMap()
             else runCatching { json.decodeFromString<Map<String, String>>(raw) }.getOrDefault(emptyMap())
 
-        /** 解析多 Key 存储串：每行 `值|权重`；旧数据无 `|` 时权重取默认值。 */
+        /**
+         * 解析多 Key 存储串：每行 `值|权重|名称`，从左到右拆三段（首段 value、次段 weight、余段拼回 name，
+         * 允许名称含 `|`，但写入前 sanitized 已过滤）。兼容旧数据：无 `|` 时整行为值、权重/名称取默认；
+         * 仅两段 `值|权重` 时 name 置空；weight 解析失败取默认权重，并夹取到 [0, MAX_KEY_WEIGHT]。
+         */
         private fun parseProviderKeys(raw: String): List<ProviderKey> =
             raw.split("\n").mapNotNull { line ->
                 val trimmed = line.trim()
                 if (trimmed.isEmpty()) return@mapNotNull null
-                val sep = trimmed.lastIndexOf('|')
-                if (sep < 0) return@mapNotNull ProviderKey(trimmed)
-                val value = trimmed.substring(0, sep).trim()
+                val firstSep = trimmed.indexOf('|')
+                if (firstSep < 0) return@mapNotNull ProviderKey(trimmed)
+                val value = trimmed.substring(0, firstSep).trim()
                 if (value.isEmpty()) return@mapNotNull null
-                val weight = trimmed.substring(sep + 1).trim().toIntOrNull() ?: DEFAULT_KEY_WEIGHT
-                ProviderKey(value, weight.coerceIn(0, MAX_KEY_WEIGHT))
+                val rest = trimmed.substring(firstSep + 1)
+                val secondSep = rest.indexOf('|')
+                val weight = rest.substring(0, if (secondSep < 0) rest.length else secondSep).trim()
+                    .toIntOrNull() ?: DEFAULT_KEY_WEIGHT
+                val name = if (secondSep < 0) "" else rest.substring(secondSep + 1)
+                ProviderKey(value, weight.coerceIn(0, MAX_KEY_WEIGHT), name)
             }
     }
 
@@ -168,7 +176,7 @@ class AIProviderRepositoryImpl @Inject constructor(
             type = type.name,
             apiKey = KeystoreCipher.encryptString(apiKey),
             multiKeyEnabled = multiKeyEnabled,
-            apiKeys = KeystoreCipher.encryptString(apiKeys.joinToString("\n") { "${it.value}|${it.weight}" }),
+            apiKeys = KeystoreCipher.encryptString(apiKeys.joinToString("\n") { "${it.value}|${it.weight}|${it.name}" }),
             keyRotationStrategy = keyRotationStrategy.name,
             keyFailoverThreshold = keyFailoverThreshold,
             keyCooldownMinutes = keyCooldownMinutes,

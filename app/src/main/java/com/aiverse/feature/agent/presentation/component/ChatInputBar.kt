@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -95,6 +96,7 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalInputFontSizeSp
 import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.core.theme.glassOr
 import com.aiverse.core.ui.rememberImeBottomInset
 import com.aiverse.core.ui.PressableSurface
 import com.aiverse.feature.onboarding.domain.OnboardingStep
@@ -142,7 +144,6 @@ import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.Folder
 import compose.icons.feathericons.Globe
 import compose.icons.feathericons.Plus
-import compose.icons.feathericons.Trash
 import compose.icons.feathericons.Square
 import compose.icons.feathericons.Shield
 import compose.icons.feathericons.Zap
@@ -229,6 +230,10 @@ internal fun ChatInputBar(
     onOpenProviders: () -> Unit = {},
     /** 长按联网搜索图标时打开搜索提供商设置页。 */
     onOpenSearchProviders: () -> Unit = {},
+    /** 点击「优化输入」按钮：把输入框内容交给模型润色后填回。 */
+    onOptimizeInput: () -> Unit = {},
+    /** 长按「优化输入」按钮时打开默认模型配置页。 */
+    onOpenOptimizeModelSettings: () -> Unit = {},
     /** 点击输入区的 MCP 图标，直接打开 MCP 服务器设置页。 */
     onOpenMcp: () -> Unit = {},
     /** 待发送附件「应用内预览」：打开编辑器并直接进预览模式（容器路径）。 */
@@ -237,8 +242,6 @@ internal fun ChatInputBar(
     onRunModelTest: (suspend (AIProviderConfig, String) -> ModelTestResult)? = null,
     /** 输入框快捷栏可开关项快照。 */
     inputBarPrefs: InputBarPrefs = InputBarPrefs(),
-    /** 清空当前对话。 */
-    onClearChat: () -> Unit = {},
     /** 切换联网搜索工具启用状态。 */
     onToggleWebSearch: () -> Unit = {},
     /** 联网搜索工具当前是否启用。 */
@@ -513,28 +516,25 @@ internal fun ChatInputBar(
             }
 
             val hyperOS = LocalHyperOSStyle.current
-            val inputShape = if (hyperOS) RoundedCornerShape(20.dp) else RoundedCornerShape(Radius.lg)
+            val inputShape = RoundedCornerShape(densityTokens.fieldCorner)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
                         if (hyperOS) {
                             Modifier.shadow(
-                                elevation = 8.dp,
-                                shape = RoundedCornerShape(20.dp),
+                                elevation = densityTokens.elevationMd,
+                                shape = RoundedCornerShape(densityTokens.fieldCorner),
                                 clip = false,
-                                ambientColor = Color.Black.copy(alpha = 0.08f),
-                                spotColor = Color.Black.copy(alpha = 0.08f)
+                                ambientColor = Color.Black.copy(alpha = densityTokens.ambientAlpha),
+                                spotColor = Color.Black.copy(alpha = densityTokens.spotAlpha)
                             )
                         } else {
                             Modifier
                         }
                     )
                     .clip(inputShape)
-                    .background(
-                        if (hyperOS) MaterialTheme.colorScheme.surface
-                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
-                    )
+                    .background(glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.colorScheme.surface))
                     .border(
                         if (hyperOS) 0.5.dp else 1.dp,
                         if (hyperOS) MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
@@ -543,7 +543,7 @@ internal fun ChatInputBar(
                     )
                     .padding(
                         horizontal = if (hyperOS) 10.dp else Spacing.sm,
-                        vertical = if (hyperOS) 8.dp else Spacing.xs
+                        vertical = if (hyperOS) 6.dp else Spacing.xs / 2
                     )
             ) {
                 PendingAttachmentPreviewList(
@@ -636,18 +636,18 @@ internal fun ChatInputBar(
                         var modeMenuExpanded by remember { mutableStateOf(false) }
                         Box {
                             Surface(
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(densityTokens.buttonCorner),
                                 color = modeColor
                             ) {
                                 // 点击高亮裁剪进按钮圆角，不再方块溢出容器。
                                 PressableSurface(
                                     onClick = { modeMenuExpanded = !modeMenuExpanded },
-                                    shape = RoundedCornerShape(16.dp)
+                                    shape = RoundedCornerShape(densityTokens.buttonCorner)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .width(46.dp)
-                                            .padding(vertical = 4.dp),
+                                            .width(42.dp)
+                                            .height(36.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
@@ -731,7 +731,7 @@ internal fun ChatInputBar(
                                 }
                             }
                         }
-                        Spacer(Modifier.width(Spacing.xs))
+                        Spacer(Modifier.width(Spacing.xs / 2))
 
                         val capability = reasoningCapabilityOf(activeProvider, activeProvider?.effectiveModel.orEmpty(), modelMetadata)
                         val hasReasoningControl = !capability.isKnown ||
@@ -793,7 +793,7 @@ internal fun ChatInputBar(
                                                 hasRunningSessions = hasRunningSessions,
                                                 onSwitchConfirmed = onSwitchWorkspaceConfirmed,
                                                 openSignal = folderOpenSignal,
-                                                modifier = Modifier.size(36.dp),
+                                                modifier = Modifier.size(32.dp),
                                                 iconSize = 20.dp
                                             )
                                         },
@@ -814,7 +814,7 @@ internal fun ChatInputBar(
                                     labelRes = R.string.inputbar_action_mcp,
                                     onTrigger = { onOpenMcp() },
                                     buttonContent = @Composable {
-                                        IconButton(onClick = onOpenMcp, modifier = Modifier.size(36.dp)) {
+                                        IconButton(onClick = onOpenMcp, modifier = Modifier.size(32.dp)) {
                                             Icon(
                                                 FeatherIcons.Box,
                                                 contentDescription = stringResource(R.string.settings_mcp),
@@ -854,23 +854,6 @@ internal fun ChatInputBar(
                                         )
                                     }
                                 ))
-                                if (inputBarPrefs.showClear) add(QuickActionSlot(
-                                    action = InputBarQuickAction.CLEAR,
-                                    icon = FeatherIcons.Trash,
-                                    labelRes = R.string.inputbar_action_clear,
-                                    onTrigger = { onClearChat() },
-                                    buttonContent = @Composable {
-                                        IconButton(onClick = onClearChat, enabled = !isBusy, modifier = Modifier.size(36.dp)) {
-                                            Icon(
-                                                FeatherIcons.Trash,
-                                                contentDescription = stringResource(R.string.chat_clear_chat),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    },
-                                    hostContent = @Composable { }
-                                ))
                                 if (inputBarPrefs.showWebSearch) add(QuickActionSlot(
                                     action = InputBarQuickAction.WEB_SEARCH,
                                     icon = FeatherIcons.Globe,
@@ -880,7 +863,7 @@ internal fun ChatInputBar(
                                         // 单击切换联网搜索；长按跳「设置 → 搜索提供商」，与模型按钮长按跳供应商一致。
                                         Box(
                                             modifier = Modifier
-                                                .size(36.dp)
+                                                .size(32.dp)
                                                 .clip(CircleShape)
                                                 .combinedClickable(
                                                     onClick = onToggleWebSearch,
@@ -903,7 +886,7 @@ internal fun ChatInputBar(
                             val overflowItems = mutableListOf<QuickActionSlot>()
                             // 首帧测量完成前 itemWidths 为空，用预估宽度分配，避免把全部按钮塞进单行被裁剪
                             // （表现为按钮「隐藏」且无溢出入口）。
-                            val estimateW = with(density) { 36.dp.toPx() }.toInt()
+                            val estimateW = with(density) { 32.dp.toPx() }.toInt()
                             var used = 0
                             for (slot in quickSlots) {
                                 val w = itemWidths[slot.action] ?: estimateW
@@ -929,7 +912,7 @@ internal fun ChatInputBar(
                                 if (overflowItems.isNotEmpty()) {
                                     Box {
                                         // 溢出入口：MoreVert（···）图标，点开标准 DropdownMenu（图标+文字项）。
-                                        IconButton(onClick = { overflowExpanded = !overflowExpanded }, modifier = Modifier.size(36.dp)) {
+                                        IconButton(onClick = { overflowExpanded = !overflowExpanded }, modifier = Modifier.size(32.dp)) {
                                             Icon(
                                                 Icons.Default.MoreVert,
                                                 contentDescription = stringResource(R.string.chat_more_tools),
@@ -970,12 +953,34 @@ internal fun ChatInputBar(
                             }
                         }
                     }
-                    UploadIconButton(
-                        enabled = true,
-                        icon = FeatherIcons.Plus,
-                        contentDescription = stringResource(R.string.chat_add_attachment),
-                        onClick = { showAttachmentSheet = true }
-                    )
+                    if (inputBarPrefs.showOptimize) {
+                        // 优化输入：单击把输入框内容交给模型润色后填回（空文本无反应）；长按跳默认模型配置页。
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .combinedClickable(
+                                    onClick = { if (value.isNotBlank()) onOptimizeInput() },
+                                    onLongClick = onOpenOptimizeModelSettings
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = stringResource(R.string.chat_optimize_input),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    if (inputBarPrefs.showPlus) {
+                        UploadIconButton(
+                            enabled = true,
+                            icon = FeatherIcons.Plus,
+                            contentDescription = stringResource(R.string.chat_add_attachment),
+                            onClick = { showAttachmentSheet = true }
+                        )
+                    }
                     SendButton(canSend = canSend, hasContent = hasContent, isBusy = isBusy, onSend = onSend, onStop = onStop)
                 }
             }
@@ -1118,7 +1123,7 @@ internal fun UploadIconButton(
     IconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(36.dp)
+        modifier = Modifier.size(32.dp)
     ) {
         Icon(
             icon,

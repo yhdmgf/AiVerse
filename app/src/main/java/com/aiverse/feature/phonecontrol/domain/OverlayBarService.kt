@@ -211,13 +211,13 @@ class OverlayBarService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "手机控制灵动岛", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, getString(R.string.phone_overlay_channel_name), NotificationManager.IMPORTANCE_LOW)
             )
         }
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
-            .setContentTitle("AI 正在操作手机")
-            .setContentText("点开顶部灵动岛查看 AI 思考过程")
+            .setContentTitle(getString(R.string.phone_overlay_notification_title))
+            .setContentText(getString(R.string.phone_overlay_notification_text))
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, notification)
@@ -253,7 +253,7 @@ class OverlayBarService : Service() {
                 setPadding(0, 0, dp(12), 0)
             }
             val fold = TextView(context).apply {
-                text = "收起"
+                text = context.getString(R.string.phone_overlay_collapse)
                 setTextColor(0xFF9CA3AF.toInt())
                 textSize = 12f
                 setPadding(dp(8), dp(2), dp(8), dp(2))
@@ -265,7 +265,7 @@ class OverlayBarService : Service() {
             stepsContainer = LinearLayout(context).apply { orientation = VERTICAL }
 
             val stop = TextView(context).apply {
-                text = "停止"
+                text = context.getString(R.string.phone_overlay_stop)
                 setTextColor(0xFFEF4444.toInt())
                 textSize = 12f
                 setPadding(0, dp(6), 0, 0)
@@ -278,7 +278,7 @@ class OverlayBarService : Service() {
         }
 
         fun update(state: PhoneControlStatus.State) {
-            titleView.text = state.currentAction ?: "最近操作"
+            titleView.text = state.currentAction ?: context.getString(R.string.phone_overlay_recent_action)
             stepsContainer.removeAllViews()
             val steps = state.recentSteps
             steps.forEach { step ->
