@@ -147,7 +147,6 @@ jobs:
             --repo "$TARGET_REPO" \
             --title "AiVerse 测试版 $VER" \
             --notes "测试版构建（commit $SHA）。三架构 APK 见下方资产，按设备类型选择安装。测试版不代表最终版本，请勿二传。" \
-            --prerelease \
             "dist/AiVerse-universal-beta.apk" \
             "dist/AiVerse-arm64-beta.apk" \
             "dist/AiVerse-x86_64-beta.apk" \
