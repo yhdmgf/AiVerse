@@ -126,13 +126,14 @@ jobs:
           set -e
           SHA=$(git rev-parse --short HEAD)
 
-          # 取测试版仓库最新 release tag，按 1.0.x 递增（patch 满 99 进位到 2.0.0）
-          PREV=$(gh release view --repo "$TARGET_REPO" --json tagName -q .tagName 2>/dev/null || echo "")
+          # 枚举所有 tags 取最大版本号（比 gh release view 取 latest 更稳，避免首次/空 latest 误判），按 1.0.x 递增（patch 满 99 进位到 2.0.0）
+          PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
+                  | sed 's/^v//' | sort -V | tail -n1)
           echo "上一个版本: ${PREV:-无（首次发布）}"
           if [ -z "$PREV" ]; then
             MAJOR=1; MINOR=0; PATCH=0
           else
-            BASE=${PREV#v}; BASE=${BASE%%-*}
+            BASE=${PREV%%-*}
             IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
             MAJOR=${MAJOR:-1}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
           fi
@@ -141,6 +142,12 @@ jobs:
           if [ "$PATCH" -ge 100 ]; then PATCH=0; MINOR=0; MAJOR=$((MAJOR + 1)); fi
           VER="${MAJOR}.${MINOR}.${PATCH}"
           echo "本次发布版本: $VER"
+
+          # 兕底：若同 tag 的 release/tag 已存在（如上次构建残留），先删干净再建新，避免撞车失败
+          if gh release view "$VER" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "检测到已存在 release $VER，先删除（release + tag）后重建"
+            gh release delete "$VER" --repo "$TARGET_REPO" --yes --cleanup-tag
+          fi
 
           # 三个 APK 各自独立上传为 release 资产（文件名固定，不带版本号），附使用守则 txt
           gh release create "$VER" \
