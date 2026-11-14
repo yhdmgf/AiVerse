@@ -77,10 +77,44 @@ object SubAgentDigester {
         return PATH_LITERAL.find(toolArgs)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
     }
 
-    private fun truncate(text: String): String =
-        if (text.length <= EXCERPT_MAX_CHARS) {
-            text
+    private fun truncate(text: String): String {
+        val cleaned = toPlainText(text).ifBlank { text }
+        return if (cleaned.length <= EXCERPT_MAX_CHARS) {
+            cleaned
         } else {
-            text.take(EXCERPT_MAX_CHARS).trimEnd() + "…（已截断）"
+            cleaned.take(EXCERPT_MAX_CHARS).trimEnd() + "…（已截断）"
         }
+    }
+
+    /**
+     * 把 markdown 原文转成适合两行摘要的纯文本：
+     * - 去掉行首结构标记（标题 `#`、引用 `>`、无序列表 `-`/`*`/`+`、有序列表 `数字.`、代码围栏 ```）；
+     * - 去掉加粗 `**` 与行内代码反引号，链接/图片只留文字；
+     * - 折叠空行与行内连续空白，避免省略号落在空行上（原 `# 标题` 后自带空行导致孤立 `…`）。
+     *
+     * 刻意不删单个 `_`（如 snake_case、文件名、HTTP 字段）与不成对的单 `*`，防止误删正文里的技术字符。
+     */
+    private fun toPlainText(text: String): String =
+        text.lines()
+            .map(::stripLine)
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+            .replace(Regex("[ \\t]+"), " ")
+            .trim()
+
+    private fun stripLine(line: String): String {
+        var s = line.trim()
+        if (s.isEmpty()) return ""
+        if (s.startsWith("```")) return ""
+        s = s.replace(Regex("^>+\\s?"), "")
+        s = s.replace(Regex("^#{1,6}\\s+"), "")
+        s = s.replace(Regex("^[-*+]\\s+"), "")
+        s = s.replace(Regex("^\\d{1,3}[.)]\\s+"), "")
+        s = s.replace(Regex("(?<![A-Za-z0-9])\\*\\*([^*]+)\\*\\*(?![A-Za-z0-9])"), "$1")
+        s = s.replace("`", "")
+        s = s.replace(Regex("!\\[([^\\]]*)\\\\]\\([^)]*\\)"), "\$1")
+        s = s.replace(Regex("\\[([^\\]]*)\\\\]\\([^)]*\\)"), "\$1")
+        s = s.replace(Regex("(?<![A-Za-z0-9])\\*([^*\\s]+)\\*(?![A-Za-z0-9])"), "\$1")
+        return s.trim()
+    }
 }
