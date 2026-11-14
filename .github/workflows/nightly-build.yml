@@ -111,7 +111,7 @@ jobs:
           SHA=$(git rev-parse --short HEAD)
           echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- commit: `$SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- 构建: beta（正式签名 + R8，包名 com.aiverse.beta，与正式版独立共存）" >> "$GITHUB_STEP_SUMMARY"
           echo "- 三架构: universal / arm64 / x86_64" >> "$GITHUB_STEP_SUMMARY"
           echo "- 测试包不参与检查更新（无应用内升级，避免导向正式包）" >> "$GITHUB_STEP_SUMMARY"
@@ -161,6 +161,6 @@ jobs:
 
           echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 版本: `$VER`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- commit: `$SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 版本: \`$VER\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- commit: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- 发布: [yhdmgf/aiverse-beta Releases](https://github.com/yhdmgf/aiverse-beta/releases)" >> "$GITHUB_STEP_SUMMARY"
