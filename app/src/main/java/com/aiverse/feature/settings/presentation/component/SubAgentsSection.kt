@@ -42,7 +42,7 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.BatchDeleteConfirmDialog
 import com.aiverse.core.ui.ListSelectionState
 import com.aiverse.core.ui.SelectionActionBar
-import com.aiverse.core.ui.selectionActionBarHeight
+import com.aiverse.core.ui.selectionListBottomContentPadding
 import com.aiverse.core.ui.SelectionActionButton
 import com.aiverse.core.ui.SelectionActionIconButton
 import com.aiverse.core.ui.SwipeToDeleteRow
@@ -152,7 +152,7 @@ internal fun SubAgentsSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            contentPadding = PaddingValues(start = Spacing.md, end = Spacing.md, bottom = Spacing.xl + selectionActionBarHeight()),
+            contentPadding = PaddingValues(start = Spacing.md, end = Spacing.md, bottom = selectionListBottomContentPadding(selection.isActive)),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {
             item(key = "project-header", contentType = "header") {

@@ -137,6 +137,16 @@ fun SelectionToggleAction(selection: ListSelectionState, enabled: Boolean = true
 @Composable
 fun selectionActionBarHeight(): Dp = LocalUIDensityTokens.current.fieldHeight + Spacing.sm
 
+/** 普通页 / 仅多选栏页普通浏览的底部基础留白（随密度缩放）。 */
+@Composable
+fun listBottomContentPadding(): Dp = LocalUIDensityTokens.current.xl
+
+/** 仅多选栏页：多选激活时让位操作栏高度，否则统一基础留白（随密度缩放）。 */
+@Composable
+fun selectionListBottomContentPadding(selectionActive: Boolean): Dp =
+    if (selectionActive) LocalUIDensityTokens.current.xl + selectionActionBarHeight()
+    else listBottomContentPadding()
+
 /**
  * 底部浮动多选操作栏（原「列表顶部内联操作条」改为固定在屏幕底部的浮动栏）。
  *

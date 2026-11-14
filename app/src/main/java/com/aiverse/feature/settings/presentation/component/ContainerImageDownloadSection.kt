@@ -58,7 +58,7 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.BatchDeleteConfirmDialog
 import com.aiverse.core.ui.ListSelectionState
 import com.aiverse.core.ui.SelectionActionBar
-import com.aiverse.core.ui.selectionActionBarHeight
+import com.aiverse.core.ui.selectionListBottomContentPadding
 import com.aiverse.core.ui.SelectionActionIconButton
 import com.aiverse.core.ui.SwipeToDeleteRow
 import com.aiverse.feature.agent.domain.container.ContainerImageEntry
@@ -144,7 +144,7 @@ internal fun ContainerImageDownloadSection(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.lg)
-                .padding(bottom = Spacing.xl + selectionActionBarHeight())
+                .padding(bottom = selectionListBottomContentPadding(selection.isActive))
         ) {
         SettingsGroupHeader(text = stringResource(R.string.container_download_image))
         if (visibleCatalog.isEmpty()) {

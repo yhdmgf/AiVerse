@@ -62,6 +62,7 @@ import com.aiverse.core.ui.FloatingTabBar
 import com.aiverse.core.ui.FloatingTabItem
 import com.aiverse.core.ui.SwipeToDeleteRow
 import com.aiverse.core.ui.dialogTextFieldColors
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import com.aiverse.feature.backup.domain.BackupOptions
 import com.aiverse.feature.backup.domain.RestoreStats
 import com.aiverse.feature.backup.domain.WorkspaceBackupMeta
@@ -459,7 +460,7 @@ private fun LocalBackupTab(
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(horizontal = Spacing.lg)
-            .padding(bottom = 96.dp)
+            .padding(bottom = floatingTabBarContentBottomPadding())
     ) {
         SettingsGroupHeader(text = stringResource(R.string.backup_select_data))
         SettingsGroup {
@@ -612,7 +613,7 @@ private fun NetworkBackupTab(
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(horizontal = Spacing.lg)
-            .padding(bottom = 96.dp)
+            .padding(bottom = floatingTabBarContentBottomPadding())
     ) {
         if (targets.isEmpty()) {
             // 空态与 MCP / 凭据页统一：图标 + 标题 + 提示，新增入口收在右上角「+」。

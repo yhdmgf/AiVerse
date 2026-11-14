@@ -49,7 +49,7 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.BatchDeleteConfirmDialog
 import com.aiverse.core.ui.ListSelectionState
 import com.aiverse.core.ui.SelectionActionBar
-import com.aiverse.core.ui.selectionActionBarHeight
+import com.aiverse.core.ui.selectionListBottomContentPadding
 import com.aiverse.core.ui.SelectionActionButton
 import com.aiverse.core.ui.SelectionActionIconButton
 import com.aiverse.core.ui.SwipeToDeleteRow
@@ -107,7 +107,7 @@ internal fun ProvidersSection(
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .padding(horizontal = Spacing.md),
-            contentPadding = PaddingValues(top = Spacing.sm, bottom = Spacing.xl + selectionActionBarHeight()),
+            contentPadding = PaddingValues(top = Spacing.sm, bottom = selectionListBottomContentPadding(selection.isActive)),
             verticalArrangement = Arrangement.spacedBy(t.listCellGap)
         ) {
             itemsIndexed(

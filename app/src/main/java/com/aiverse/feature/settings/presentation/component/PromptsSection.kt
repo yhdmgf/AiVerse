@@ -50,7 +50,7 @@ import com.aiverse.core.ui.AppSwitch
 import com.aiverse.core.ui.BatchDeleteConfirmDialog
 import com.aiverse.core.ui.ListSelectionState
 import com.aiverse.core.ui.SelectionActionBar
-import com.aiverse.core.ui.selectionActionBarHeight
+import com.aiverse.core.ui.selectionListBottomContentPadding
 import com.aiverse.core.ui.SelectionActionIconButton
 import com.aiverse.core.ui.SwipeToDeleteRow
 import com.aiverse.feature.agent.domain.prompt.PromptFragment
@@ -207,9 +207,8 @@ private fun PromptList(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = Spacing.lg)
-            .padding(bottom = Spacing.xl + selectionActionBarHeight()),
-        contentPadding = PaddingValues(top = Spacing.xs),
+            .padding(horizontal = Spacing.lg),
+        contentPadding = PaddingValues(top = Spacing.xs, bottom = selectionListBottomContentPadding(selection.isActive)),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         itemsIndexed(

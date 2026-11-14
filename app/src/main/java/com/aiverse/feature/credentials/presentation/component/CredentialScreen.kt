@@ -54,6 +54,7 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.FloatingTabBar
 import com.aiverse.core.ui.FloatingTabItem
 import com.aiverse.core.ui.SwipeToDeleteRow
+import com.aiverse.core.ui.floatingTabBarContentBottomPadding
 import com.aiverse.feature.credentials.domain.model.GitCredential
 import com.aiverse.feature.credentials.presentation.CredentialViewModel
 import com.aiverse.feature.git.presentation.component.SectionHeader
@@ -146,7 +147,7 @@ fun CredentialScreen(
                             .padding(horizontal = Spacing.lg)
                             // 底部留出悬浮 tab 栏高度：滚动时内容可滚过 tab 区域被蒙版渐隐，
                             // 滚到底时最后一项停在 tab 上方不被遮挡。
-                            .padding(bottom = 70.dp)
+                            .padding(bottom = floatingTabBarContentBottomPadding())
                     ) {
                         GitUserIdentityCard(
                             initialName = state.userName,
@@ -180,13 +181,13 @@ fun CredentialScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = Spacing.xl)
-                                .padding(bottom = 70.dp)
+                                .padding(bottom = floatingTabBarContentBottomPadding())
                         )
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             state = credentialListState,
-                            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = 70.dp),
+                            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = floatingTabBarContentBottomPadding()),
                             verticalArrangement = Arrangement.spacedBy(Spacing.md)
                         ) {
                             item(key = "header") {

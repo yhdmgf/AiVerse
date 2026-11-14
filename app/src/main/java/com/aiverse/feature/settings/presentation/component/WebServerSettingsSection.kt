@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.AppSwitch
 import com.aiverse.core.ui.AppTextField
+import com.aiverse.core.ui.listBottomContentPadding
 import com.aiverse.feature.web.WebServerViewModel
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Eye
@@ -74,7 +75,7 @@ internal fun WebServerSettingsSection(viewModel: WebServerViewModel) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.lg)
-                .padding(top = Spacing.md, bottom = 96.dp),
+                .padding(top = Spacing.md, bottom = listBottomContentPadding()),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg)
         ) {
             SettingsGroup {
