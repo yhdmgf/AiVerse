@@ -77,12 +77,14 @@ private const val OTHER_SENTINEL = "\u0000__other__"
  * @param question 待回答的问题请求。
  * @param onConfirm 用户点击确认后回传答案。
  * @param onSkip 用户点击「补充」，返回空答案——表示用户想补充说明而非在预设选项中做选择。
+ * @param onIgnore 用户点击「忽略」，直接结束本次提问，工具以「被忽略」语义结束。
  */
 @Composable
 fun AskUserQuestionPanel(
     question: PendingUserQuestion,
     onConfirm: (UserQuestionAnswer) -> Unit,
     onSkip: () -> Unit,
+    onIgnore: () -> Unit,
     forceCollapse: Boolean = false
 ) {
     // 每个问题的已选 label 集合
@@ -105,7 +107,9 @@ fun AskUserQuestionPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            // 内嵌于消息列表（列表 contentPadding 已提供水平留白），此处仅保留垂直间距，
+            // 避免与列表 padding 叠加导致面板比消息气泡/输入框窄。
+            .padding(vertical = Spacing.xs),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(Radius.md),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -180,14 +184,20 @@ fun AskUserQuestionPanel(
                     Spacer(Modifier.height(Spacing.md))
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.End),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.Start),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        AgentActionButton(
+                            text = stringResource(R.string.ask_ignore),
+                            onClick = onIgnore,
+                            tone = AgentActionTone.Neutral,
+                            pill = true
+                        )
                         AgentActionButton(
                             text = stringResource(R.string.ask_supplement),
                             onClick = onSkip,
                             tone = AgentActionTone.Neutral,
-                            compact = true
+                            pill = true
                         )
                         AgentActionButton(
                             text = stringResource(R.string.ask_confirm),
@@ -204,7 +214,7 @@ fun AskUserQuestionPanel(
                                 onConfirm(UserQuestionAnswer(answers))
                             },
                             tone = AgentActionTone.Success,
-                            compact = true
+                            pill = true
                         )
                     }
                 }

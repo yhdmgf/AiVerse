@@ -176,13 +176,15 @@ class AskUserQuestionTool @Inject constructor(
         // 挂起，等待用户在 UI 做出选择
         val answer = questionManager.awaitAnswer(pending)
 
-        FileLogger.d(TAG, "ask_user_question 用户已回答: ${answer.answers.size} 条")
+        FileLogger.d(TAG, "ask_user_question 用户已回答: ${answer.answers.size} 条，resolution=${answer.resolution}")
 
-        // 将用户回答序列化为文本，喂回给模型
-        val resultText = buildString {
-            if (answer.answers.isEmpty()) {
-                append("用户未选择预设选项，将补充说明。请根据用户后续补充的内容继续。")
-            } else {
+        // 将用户回答序列化为文本，喂回给模型；按处理结果分支生成不同语义
+        val resultText = when (answer.resolution) {
+            QuestionResolution.IGNORED ->
+                "用户忽略了此提问，本工具已结束。请基于已有信息继续，或等待用户下一条指令。"
+            QuestionResolution.SUPPLEMENT ->
+                "用户未选择预设选项，将补充说明。请根据用户后续补充的内容继续。"
+            QuestionResolution.SUBMITTED -> buildString {
                 for (a in answer.answers) {
                     append("「${a.question}」= ")
                     val parts = mutableListOf<String>()
@@ -199,8 +201,8 @@ class AskUserQuestionTool @Inject constructor(
                     }
                     append("\n")
                 }
-            }
-        }.trim()
+            }.trim()
+        }
 
         return ToolResult.Success(JsonPrimitive(resultText))
     }

@@ -122,6 +122,7 @@ import com.aiverse.core.ui.readableContentMaxWidth
 import com.aiverse.core.ui.rememberImageViewerState
 import com.aiverse.core.ui.rememberViewerDecodeSpec
 import com.aiverse.feature.agent.domain.permission.ToolPermissionPolicyEngine
+import com.aiverse.feature.agent.domain.tool.question.QuestionResolution
 import com.aiverse.feature.agent.domain.tool.question.UserQuestionAnswer
 import com.aiverse.feature.agent.presentation.AgentUIMessage
 import com.aiverse.feature.agent.presentation.AgentUIState
@@ -2017,7 +2018,20 @@ fun AIChatPanel(
                                     AskUserQuestionPanel(
                                         question = question,
                                         onConfirm = { answer -> viewModel.resolveUserQuestion(question.id, answer) },
-                                        onSkip = { viewModel.resolveUserQuestion(question.id, UserQuestionAnswer(emptyList())) },
+                                        // 「补充」：未选预设选项，稍后补充——保持 SUPPLEMENT 语义
+                                        onSkip = {
+                                            viewModel.resolveUserQuestion(
+                                                question.id,
+                                                UserQuestionAnswer(emptyList(), QuestionResolution.SUPPLEMENT)
+                                            )
+                                        },
+                                        // 「忽略」：直接结束本次提问，工具以「被忽略」语义结束
+                                        onIgnore = {
+                                            viewModel.resolveUserQuestion(
+                                                question.id,
+                                                UserQuestionAnswer(emptyList(), QuestionResolution.IGNORED)
+                                            )
+                                        },
                                         forceCollapse = dashboardCollapseActive
                                     )
                                 }

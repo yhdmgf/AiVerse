@@ -202,7 +202,7 @@ class AskUserQuestionToolTest {
         val deferredResult = async { tool.execute(args) }
         val pending = manager.pendingQuestion.filterNotNull().first()
 
-        manager.resolve(pending.id, UserQuestionAnswer(emptyList()))
+        manager.resolve(pending.id, UserQuestionAnswer(emptyList(), QuestionResolution.SUPPLEMENT))
 
         val result = deferredResult.await()
         assertTrue(result is ToolResult.Success)

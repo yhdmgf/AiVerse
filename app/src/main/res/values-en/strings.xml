@@ -924,6 +924,7 @@
     <!-- Ask User Question -->
     <string name="ask_confirm_title">AI needs your confirmation</string>
     <string name="ask_supplement">Supplement</string>
+    <string name="ask_ignore">Ignore</string>
     <string name="ask_confirm">Confirm</string>
     <string name="ask_custom_answer">Enter a custom answer</string>
     <string name="ask_input_hint">Please enter…</string>

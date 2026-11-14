@@ -40,12 +40,27 @@ data class QuestionOption(
 )
 
 /**
+ * 用户对一次 ask_user_question 的处理结果。
+ *
+ * @property SUBMITTED 用户在预设选项中做出选择并确认。
+ * @property SUPPLEMENT 用户点了「补充」，未选预设选项，稍后补充说明。
+ * @property IGNORED 用户点了「忽略」，直接结束本次提问，不提供任何回答。
+ */
+enum class QuestionResolution {
+    SUBMITTED,
+    SUPPLEMENT,
+    IGNORED
+}
+
+/**
  * 用户对一次 ask_user_question 的全部回答。
  *
- * @param answers 每个问题对应一个 [SingleAnswer]。若用户点了「补充」，此列表为空。
+ * @param answers 每个问题对应一个 [SingleAnswer]。若用户点了「补充」或「忽略」，此列表为空。
+ * @param resolution 本次提问的处理结果，工具侧据此生成不同语义的结果文本。
  */
 data class UserQuestionAnswer(
-    val answers: List<SingleAnswer>
+    val answers: List<SingleAnswer>,
+    val resolution: QuestionResolution = QuestionResolution.SUBMITTED
 )
 
 /**

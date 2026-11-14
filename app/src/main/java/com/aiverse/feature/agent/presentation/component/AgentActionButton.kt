@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
@@ -36,9 +38,25 @@ internal fun AgentActionButton(
     /** 紧凑版：标准按钮高度（40dp）、文字适中（labelLarge），用于信息密集面板（如 AskUserQuestionPanel）。
      *  较普通版（44dp）略矮但仍是清晰可点的标准尺寸，避免上一版 36dp 极小文字按钮带来的「太小、难点」问题。
      *  默认 false 保持原 44dp。 */
-    compact: Boolean = false
+    compact: Boolean = false,
+    /** 胶囊版：最低一档高度（走密度 token chipHeight，基准 32dp）+ 全圆角，用于权限/提问面板的操作行，
+     *  避免三个等宽大按钮占满整行。开启后覆盖 compact 的高度/圆角/字号。默认 false 向后兼容。 */
+    pill: Boolean = false
 ) {
-    val shape = RoundedCornerShape(Radius.sm)
+    val density = LocalUIDensityTokens.current
+    // 三档高度/圆角/水平内边距/字号全部走密度 token 与主题字体，不写死魔数 dp。
+    val shape = RoundedCornerShape(if (pill) density.rPill else Radius.sm)
+    val buttonHeight: Dp = when {
+        pill -> density.chipHeight
+        compact -> 40.dp
+        else -> 44.dp
+    }
+    val horizontalPadding = if (pill) Spacing.md else if (compact) Spacing.sm else Spacing.xs
+    val textStyle = when {
+        pill -> MaterialTheme.typography.labelMedium
+        compact -> MaterialTheme.typography.labelLarge
+        else -> MaterialTheme.typography.bodyLarge
+    }
     val success = MaterialTheme.semanticColors.success
     val (container, content, border) = when (tone) {
         AgentActionTone.Success -> Triple(
@@ -60,12 +78,12 @@ internal fun AgentActionButton(
 
     Box(
         modifier = modifier
-            .height(if (compact) 40.dp else 44.dp)
+            .height(buttonHeight)
             .clip(shape)
             .background(container)
             .border(1.dp, border, shape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = if (compact) Spacing.sm else Spacing.xs),
+            .padding(horizontal = horizontalPadding),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -73,10 +91,10 @@ internal fun AgentActionButton(
             color = content,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
-            // 两档字号统一从 MaterialTheme.typography 取（紧凑档 labelLarge、普通档 bodyLarge），
+            // 三档字号统一从 MaterialTheme.typography 取（胶囊 labelMedium、紧凑 labelLarge、普通 bodyLarge），
             // 二者同属主题字体体系，跟随同一套字体缩放（系统字号/应用界面字体大小）。
-            // 不再用 LocalTextStyle.current（环境继承、可被外部覆盖），消除两档字号来源不一致。
-            style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyLarge
+            // 不再用 LocalTextStyle.current（环境继承、可被外部覆盖），消除各档字号来源不一致。
+            style = textStyle
         )
     }
 }

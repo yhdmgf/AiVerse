@@ -1240,7 +1240,9 @@ internal fun ToolPermissionPanel(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.lg, vertical = Spacing.xs)
+            // 内嵌于消息列表（列表 contentPadding 已提供水平留白），此处仅保留垂直间距，
+            // 避免与列表 padding 叠加导致面板比消息气泡/输入框窄。
+            .padding(vertical = Spacing.xs)
             .graphicsLayer { alpha = panelAlpha },
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(Radius.md),
@@ -1379,28 +1381,27 @@ internal fun ToolPermissionPanel(
                     )
 
                     Spacer(Modifier.height(Spacing.sm))
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    // 左对齐胶囊按钮行：不再各 weight(1f) 平分整行，改为按内容自适应宽度，
+                    // 避免三个等宽大按钮占满整行、按钮偏大。
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.Start)) {
                         AgentActionButton(
                             text = stringResource(R.string.chat_perm_deny),
                             onClick = { onChoice(PermissionChoice.REJECT) },
-                            modifier = Modifier.weight(1f),
                             tone = AgentActionTone.Danger,
-                            compact = true
+                            pill = true
                         )
                         AgentActionButton(
                             text = stringResource(R.string.chat_perm_always_allow),
                             onClick = { onChoice(PermissionChoice.ALWAYS) },
-                            modifier = Modifier.weight(1f),
                             enabled = canRemember,
                             tone = AgentActionTone.Neutral,
-                            compact = true
+                            pill = true
                         )
                         AgentActionButton(
                             text = stringResource(R.string.common_allow),
                             onClick = { onChoice(PermissionChoice.ONCE) },
-                            modifier = Modifier.weight(1f),
                             tone = AgentActionTone.Success,
-                            compact = true
+                            pill = true
                         )
                     }
                 }
