@@ -64,7 +64,7 @@ jobs:
           # 说明 txt：测试版声明 + 包含的三个 APK + 本次 commit
           SHA=$(git rev-parse --short HEAD)
           BUILD_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
-          cat > "dist/-使用守则.txt" <<EOF
+          cat > "dist/使用说明.txt" <<EOF
           AiVerse 测试版（Beta）安装说明
           =================================
 
@@ -101,8 +101,8 @@ jobs:
           EOF
           # heredoc 正文必须与 run: | 块缩进一致（顶格会破坏 YAML），
           # 故写入后再剥掉行首 10 空格，让 txt 内容真正顶格。
-          sed -i 's/^          //' "dist/-使用守则.txt"
-          touch -d "1949-10-01 00:00:00" "dist/-使用守则.txt"
+          sed -i 's/^          //' "dist/使用说明.txt"
+          touch -d "1949-10-01 00:00:00" "dist/使用说明.txt"
 
           ls -la dist/
 
@@ -115,7 +115,7 @@ jobs:
           echo "- 构建: beta（正式签名 + R8，包名 com.aiverse.beta，与正式版独立共存）" >> "$GITHUB_STEP_SUMMARY"
           echo "- 三架构: universal / arm64 / x86_64" >> "$GITHUB_STEP_SUMMARY"
           echo "- 测试包不参与检查更新（无应用内升级，避免导向正式包）" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 下载: 下方三个 APK 资产（按设备类型选）+ -使用守则.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 下载: 下方三个 APK 资产（按设备类型选）+ 使用说明.txt" >> "$GITHUB_STEP_SUMMARY"
 
       # 三架构 APK 各自独立 + 测试版说明 txt，作为测试版仓库 Release 的资产。
       - name: 发布到测试版仓库 Releases
@@ -149,7 +149,7 @@ jobs:
             gh release delete "$VER" --repo "$TARGET_REPO" --yes --cleanup-tag
           fi
 
-          # 三个 APK 各自独立上传为 release 资产（文件名固定，不带版本号），附使用守则 txt
+          # 三个 APK 各自独立上传为 release 资产（文件名固定，不带版本号），附使用说明 txt
           gh release create "$VER" \
             --repo "$TARGET_REPO" \
             --title "AiVerse 测试版 $VER" \
@@ -157,7 +157,7 @@ jobs:
             "dist/AiVerse-universal-beta.apk" \
             "dist/AiVerse-arm64-beta.apk" \
             "dist/AiVerse-x86_64-beta.apk" \
-            "dist/-使用守则.txt"
+            "dist/使用说明.txt"
 
           echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
