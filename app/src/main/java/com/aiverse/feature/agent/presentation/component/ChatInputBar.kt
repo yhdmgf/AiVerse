@@ -1424,7 +1424,7 @@ internal fun ErrorBubble(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            .padding(vertical = Spacing.xs),
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(Radius.md),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)

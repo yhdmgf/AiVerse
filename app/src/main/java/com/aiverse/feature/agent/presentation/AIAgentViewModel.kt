@@ -277,15 +277,16 @@ class AIAgentViewModel @Inject constructor(
     }
 
     /**
-     * 消息流内的失败错误（Issue #55）：按「失败那轮最后一条助手回复」的消息 id 关联（id → 错误文本），
-     * UI 在对应助手消息下方渲染错误气泡并随消息流滚动，取代原先常驻输入框上方的横幅。
+     * 消息流内的失败错误（Issue #55/#100）：按消息 id 关联（id → 错误文本），id 可以是
+     * 「失败那轮最后一条助手回复」的消息 id，或失败发生在助手产出前时「触发失败的用户消息」的 id；
+     * UI 在对应消息下方渲染错误气泡并随消息流滚动，取代原先常驻输入框上方的横幅。
      */
     private val _messageErrors = MutableStateFlow<Map<String, String>>(emptyMap())
     val messageErrors: StateFlow<Map<String, String>> = _messageErrors.asStateFlow()
 
     /**
-     * 无法关联到具体回复的失败（失败发生在任何助手内容产出之前，如鉴权/连接失败）：
-     * 按会话关联（sessionId → 错误文本），UI 渲染在当前会话消息流末尾。
+     * 连用户消息都关联不到的失败（如内部续跑轮失败）的兜底：按会话关联（sessionId → 错误文本），
+     * UI 渲染在当前会话消息流末尾（Issue #100：产出前失败优先挂触发它的用户消息下）。
      */
     private val _unattachedErrors = MutableStateFlow<Map<String, String>>(emptyMap())
     val unattachedErrors: StateFlow<Map<String, String>> = _unattachedErrors.asStateFlow()
@@ -318,14 +319,23 @@ class AIAgentViewModel @Inject constructor(
     }
 
     /**
-     * 记录一次请求失败到消息流：能定位到失败回复时挂在其消息 id 下，否则挂到会话末尾。
-     * [assistantMessageId] 为 null 表示失败时本轮还没有任何助手内容产出。
+     * 记录一次请求失败到消息流：能定位到失败回复时挂在其消息 id 下；
+     * 否则若本轮用户消息已落库则挂在触发它的用户消息下（Issue #100）；
+     * 实在关联不到任何消息时挂到会话末尾兜底。
+     * [assistantMessageId] 非 null 表示失败时本轮已有助手内容产出（挂对应回复下）；
+     * [userMsgId] 非 null 表示本轮触发的用户消息已落库（挂该用户消息下）。
      */
-    private fun recordTurnError(sessionId: String, text: String, assistantMessageId: String?) {
-        if (assistantMessageId != null) {
-            _messageErrors.value = _messageErrors.value + (assistantMessageId to text)
-        } else {
-            _unattachedErrors.value = _unattachedErrors.value + (sessionId to text)
+    private fun recordTurnError(sessionId: String, text: String, assistantMessageId: String?, userMsgId: String?) {
+        when {
+            assistantMessageId != null -> {
+                _messageErrors.value = _messageErrors.value + (assistantMessageId to text)
+            }
+            userMsgId != null -> {
+                _messageErrors.value = _messageErrors.value + (userMsgId to text)
+            }
+            else -> {
+                _unattachedErrors.value = _unattachedErrors.value + (sessionId to text)
+            }
         }
     }
 
@@ -2499,6 +2509,10 @@ class AIAgentViewModel @Inject constructor(
         // 失败发生在任何助手内容产出之前时保持 null，错误改挂会话消息流末尾。
         // 声明在 try 外：catch 分支也需要读取。
         var lastAssistantMsgId: String? = null
+        // 本轮触发失败的用户消息 id（Issue #100）：失败发生在助手内容产出前时把错误关联到它，
+        // 渲染在触发它的用户消息下方；仅当本轮用户消息已落库时才设置（内部续跑轮不落库，
+        // 保持 null 走会话末尾兜底）。声明在 try 外：catch 分支也需要读取。
+        var lastUserMsgId: String? = null
         try {
             var failed = false
             // 必须在插入本次用户消息之前读取历史：workflow 会自己 add(userRequest)，避免重复。
@@ -2529,6 +2543,7 @@ class AIAgentViewModel @Inject constructor(
                         agentNotificationCenter.ack(sessionId, notificationSeqs)
                     }
                 }
+                lastUserMsgId = userMsgId
                 checkpointManager.createCheckpoint(sessionId, userMsgId, request)
                 if (isFirst && !skipTitleUpdate) {
                     sessionUseCase.updateTitle(sessionId, sessionUseCase.deriveTitle(request))
@@ -2542,6 +2557,7 @@ class AIAgentViewModel @Inject constructor(
             } else {
                 messagePersistenceUseCase.persist(sessionId, MessageRole.USER, modelRequest, id = userMsgId,
                     attachments = inputAttachments)
+                lastUserMsgId = userMsgId
             }
             messagePersistenceUseCase.invalidateHistory(sessionId)
             sessionUseCase.touch(sessionId, messagePersistenceUseCase.nextTimestamp())
@@ -2805,7 +2821,7 @@ class AIAgentViewModel @Inject constructor(
                         setCompacting(sessionId, false)
                         val errorText = describeFailure(event)
                         setAgentState(sessionId, AgentUIState.Error(errorText))
-                        recordTurnError(sessionId, errorText, lastAssistantMsgId)
+                        recordTurnError(sessionId, errorText, lastAssistantMsgId, lastUserMsgId)
                         // 子代理会话失败时通知父会话
                         if (isSub) {
                             sessionUseCase.getSessionById(sessionId)?.parentId?.let { parentId ->
@@ -2882,7 +2898,7 @@ class AIAgentViewModel @Inject constructor(
              FileLogger.e(TAG, "executeAgentRequestStream 失败: request=$request", e)
              val errorText = e.toUserMessage(context)
              setAgentState(sessionId, AgentUIState.Error(errorText))
-             recordTurnError(sessionId, errorText, lastAssistantMsgId)
+             recordTurnError(sessionId, errorText, lastAssistantMsgId, lastUserMsgId)
              _completedSessions.value = _completedSessions.value - sessionId
              // 子会话在 workflow 之外失败（如历史构建异常）：通知父会话并释放并发名额。
              // 不补这一手，父代理会一直等一条永不到来的完成通知，名额也泄漏到进程重启。
