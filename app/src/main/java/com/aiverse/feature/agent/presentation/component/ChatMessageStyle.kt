@@ -180,18 +180,38 @@ internal fun chatBubbleBorderFor(style: ChatBubbleStyle): BorderStroke? = when (
     else -> null
 }
 
-/** 聊天气泡圆角（按所选聊天气泡样式返回）：清新绿大圆角，其余按密度令牌 rMd（标准档 10dp）。 */
+/** 气泡圆角半径：清新绿固定 24dp，其余按密度令牌 bubbleCorner（标准档 10dp）。 */
 @Composable
-internal fun chatBubbleShape(role: ChatBubbleRole): CornerBasedShape =
-    chatBubbleShapeFor(chatBubbleStyleOf(role))
+private fun chatBubbleCornerRadius(style: ChatBubbleStyle): Dp =
+    if (style == ChatBubbleStyle.FRESH_GREEN) 24.dp else LocalUIDensityTokens.current.bubbleCorner
+
+/**
+ * 聊天气泡圆角（按所选聊天气泡样式 + 长消息分块位置返回）。
+ *
+ * 长回复拆块后每条 chunk 是独立气泡（块间零间距），按位置裁角，避免中间那道缝读成两条消息：
+ * 首块圆上两角、末块圆下两角、中间块直角；非分块或单块（header 与 footer 同真）保持四角全圆。
+ */
+@Composable
+internal fun chatBubbleShape(
+    role: ChatBubbleRole,
+    isChunkHeader: Boolean = true,
+    isChunkFooter: Boolean = true,
+): CornerBasedShape {
+    val radius = chatBubbleCornerRadius(chatBubbleStyleOf(role))
+    val top = if (isChunkHeader) radius else 0.dp
+    val bottom = if (isChunkFooter) radius else 0.dp
+    return RoundedCornerShape(
+        topStart = top,
+        topEnd = top,
+        bottomStart = bottom,
+        bottomEnd = bottom,
+    )
+}
 
 /** 聊天气泡圆角：按具体样式取值，供设置页预览复用同一推导（不依赖角色）。 */
 @Composable
-internal fun chatBubbleShapeFor(style: ChatBubbleStyle): CornerBasedShape {
-    val t = LocalUIDensityTokens.current
-    return if (style == ChatBubbleStyle.FRESH_GREEN) RoundedCornerShape(24.dp)
-    else RoundedCornerShape(t.bubbleCorner)
-}
+internal fun chatBubbleShapeFor(style: ChatBubbleStyle): CornerBasedShape =
+    RoundedCornerShape(chatBubbleCornerRadius(style))
 
 /** 聊天气泡阴影（按所选聊天气泡样式返回）：柔和投影有阴影，其余无。 */
 @Composable

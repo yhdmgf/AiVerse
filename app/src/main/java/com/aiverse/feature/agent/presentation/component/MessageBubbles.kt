@@ -487,7 +487,11 @@ internal fun AgentMessageItem(
                                 }
                             } else {
                                 Surface(
-                                    shape = chatBubbleShape(ChatBubbleRole.ASSISTANT),
+                                    shape = chatBubbleShape(
+                                        ChatBubbleRole.ASSISTANT,
+                                        isChunkHeader = isChunkHeader,
+                                        isChunkFooter = isChunkFooter,
+                                    ),
                                     color = chatBubbleColor(ChatBubbleRole.ASSISTANT),
                                     border = chatBubbleBorder(ChatBubbleRole.ASSISTANT),
                                     shadowElevation = chatBubbleShadowElevation(ChatBubbleRole.ASSISTANT),
