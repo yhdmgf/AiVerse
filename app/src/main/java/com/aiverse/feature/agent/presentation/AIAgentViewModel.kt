@@ -90,6 +90,7 @@ import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.feature.agent.domain.workflow.AgentEvent
 import com.aiverse.feature.agent.domain.workflow.OptimizeResult
+import com.aiverse.feature.agent.domain.repository.InstalledAppRepository
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -200,6 +201,7 @@ class AIAgentViewModel @Inject constructor(
     private val agentDefinitionRepository: AgentDefinitionRepository,
     private val todoItemDao: TodoItemDao,
     val fileAccess: FileAccessProvider,
+    val installedAppRepository: InstalledAppRepository,
     private val fileChangeHub: FileChangeHub,
     private val inputBarSettingsRepository: InputBarSettingsRepository,
     private val balanceSettingsRepository: BalanceSettingsRepository,

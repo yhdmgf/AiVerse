@@ -133,6 +133,7 @@ import com.aiverse.feature.agent.presentation.OptimizeEvent
 import com.aiverse.feature.agent.presentation.QueuedRequest
 import com.aiverse.feature.agent.presentation.hasVisibleContent
 import com.aiverse.feature.agent.presentation.component.LocalChatFileAccess
+import com.aiverse.feature.agent.domain.model.InstalledApp
 import com.aiverse.feature.onboarding.domain.OnboardingStep
 import com.aiverse.feature.onboarding.presentation.onboardingTarget
 import com.aiverse.feature.settings.presentation.SettingsViewModel
@@ -1026,6 +1027,7 @@ fun AIChatPanel(
     }
     val canUploadFiles = projectRoot.isNotBlank() && activeModelMetadata?.supportsTools == true
     val canUploadImages = projectRoot.isNotBlank()
+    var showAppUploadSheet by remember { mutableStateOf(false) }
     val reasoningEffort by viewModel.currentSessionReasoningEffort.collectAsStateWithLifecycle()
 
     // 上下文用量占比与「是否估算」标记：驱动顶栏用量圆环（原在快捷栏，现固定顶栏）。
@@ -1248,6 +1250,46 @@ fun AIChatPanel(
                 else ->
                     Toast.makeText(context, uploadSuccessMessage(context, successCount), Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    // 导出已安装应用为附件：单 APK 直传，含分包先打 .apks(zip)。落盘后与其它附件一样进入待发送列表。
+    fun handleExportApp(app: InstalledApp) {
+        if (projectRoot.isBlank()) {
+            Toast.makeText(context, emptyWorkspaceMessage(context), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!hasAttachmentSlots(pendingAttachments.size)) {
+            Toast.makeText(context, maxAttachmentMessage(context, MAX_PENDING_ATTACHMENTS), Toast.LENGTH_SHORT).show()
+            return
+        }
+        scope.launch {
+            Toast.makeText(
+                context,
+                context.getString(R.string.chat_upload_app_exporting, app.label),
+                Toast.LENGTH_SHORT
+            ).show()
+            runCatching { exportInstalledApp(context, app, viewModel.fileAccess) }
+                .onSuccess { attachment ->
+                    viewModel.addPendingAttachment(attachment)
+                    val messageRes = if (app.hasSplits) {
+                        R.string.chat_upload_app_split_hint
+                    } else {
+                        null
+                    }
+                    if (messageRes != null) {
+                        Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, uploadSuccessMessage(context, 1), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .onFailure {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.chat_upload_app_export_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
         }
     }
 
@@ -2196,6 +2238,7 @@ fun AIChatPanel(
                 canUploadFiles = canUploadFiles,
                 canUploadImages = canUploadImages,
                 onUploadFile = { filePicker.launch(arrayOf("*/*")) },
+                onUploadApp = { showAppUploadSheet = true },
                 onUploadImage = {
                     imagePicker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -2252,6 +2295,18 @@ fun AIChatPanel(
                     .onboardingTarget(OnboardingStep.SEND_MESSAGE)
             )
             } // 悬浮层结束
+
+            // 「上传应用」弹层：列出已安装应用，选中后导出为附件（与文件/图片附件同链路）。
+            if (showAppUploadSheet) {
+                AppUploadSheet(
+                    repository = viewModel.installedAppRepository,
+                    onDismiss = { showAppUploadSheet = false },
+                    onExport = { app ->
+                        showAppUploadSheet = false
+                        handleExportApp(app)
+                    }
+                )
+            }
 
             // 授权确认面板已内嵌进会话流末尾（见上方 LazyColumn 的 __permission__ item），
             // 不再单独绝对定位悬浮在输入框上方。

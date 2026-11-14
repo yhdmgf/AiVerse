@@ -1153,6 +1153,13 @@
     <string name="chat_queue_drag">拖拽排序</string>
     <string name="chat_upload_file">上传文件</string>
     <string name="chat_upload_image">上传图片</string>
+    <string name="chat_upload_app">上传应用</string>
+    <string name="chat_upload_app_title">选择应用</string>
+    <string name="chat_upload_app_search_hint">搜索应用名或包名</string>
+    <string name="chat_upload_app_empty">没有匹配的应用</string>
+    <string name="chat_upload_app_exporting">正在导出 %1$s…</string>
+    <string name="chat_upload_app_export_failed">导出应用失败</string>
+    <string name="chat_upload_app_split_hint">该应用含分包，已打包为 .apks 完整包</string>
     <string name="chat_remove_attachment">移除附件</string>    <string name="chat_no_models_hint">暂无可用模型，请在「AI 供应商」中添加</string>
     <string name="chat_stop">停止</string>
     <string name="chat_send">发送</string>

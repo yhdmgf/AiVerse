@@ -1153,6 +1153,13 @@
     <string name="chat_queue_drag">Drag to reorder</string>
     <string name="chat_upload_file">Upload File</string>
     <string name="chat_upload_image">Upload Image</string>
+    <string name="chat_upload_app">Upload App</string>
+    <string name="chat_upload_app_title">Select App</string>
+    <string name="chat_upload_app_search_hint">Search by name or package</string>
+    <string name="chat_upload_app_empty">No matching apps</string>
+    <string name="chat_upload_app_exporting">Exporting %1$s…</string>
+    <string name="chat_upload_app_export_failed">Failed to export app</string>
+    <string name="chat_upload_app_split_hint">App has split APKs; exported as a full .apks bundle</string>
     <string name="chat_remove_attachment">Remove attachment</string>    <string name="chat_no_models_hint">No models available, add one in "AI Vendors"</string>
     <string name="chat_stop">Stop</string>
     <string name="chat_send">Send</string>

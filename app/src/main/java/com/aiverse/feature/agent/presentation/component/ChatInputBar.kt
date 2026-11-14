@@ -205,6 +205,7 @@ internal fun ChatInputBar(
     canUploadFiles: Boolean,
     canUploadImages: Boolean,
     onUploadFile: () -> Unit,
+    onUploadApp: () -> Unit,
     onUploadImage: () -> Unit,
     onTakePhoto: () -> Unit,
     slashCommands: List<SlashCommand> = emptyList(),
@@ -1021,6 +1022,10 @@ internal fun ChatInputBar(
             onUploadFile = {
                 showAttachmentSheet = false
                 onUploadFile()
+            },
+            onUploadApp = {
+                showAttachmentSheet = false
+                onUploadApp()
             },
             onUploadImage = {
                 showAttachmentSheet = false

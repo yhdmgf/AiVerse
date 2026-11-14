@@ -19,6 +19,14 @@
     <!-- 无障碍服务写入：由 shizuku/sui/root/adb 授予 WRITE_SECURE_SETTINGS 后开启无障碍（手机控制）。 -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
 
+    <!-- 「上传应用」附件菜单需查询带 LAUNCHER 入口的已安装应用；按包可见性用 <queries> 精确声明（不申请 QUERY_ALL_PACKAGES）。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".AIEditorApp"
         android:allowBackup="false"

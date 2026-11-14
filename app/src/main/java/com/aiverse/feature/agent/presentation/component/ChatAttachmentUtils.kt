@@ -6,12 +6,17 @@ import android.provider.OpenableColumns
 import com.aiverse.R
 import com.aiverse.core.util.ImageDownscaler
 import com.aiverse.feature.agent.domain.model.AgentImage
+import com.aiverse.feature.agent.domain.model.InstalledApp
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import androidx.compose.runtime.staticCompositionLocalOf
 import java.io.File
+import java.io.BufferedOutputStream
+import java.io.FileOutputStream
 import java.util.Base64
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -242,6 +247,66 @@ internal suspend fun copyUriToWorkspace(
         sizeBytes = sizeBytes,
         image = image
     )
+}
+
+/**
+ * 把已安装应用导出为附件：单 APK 直接流式上传；含 split 的应用先在本地缓存打成 `.apks`(zip)
+ * 完整包再流式上传，保证导出的包可直接安装。落盘目录与其它附件一致。
+ */
+internal suspend fun exportInstalledApp(
+    context: Context,
+    app: InstalledApp,
+    fileAccess: FileAccessProvider
+): PendingUploadAttachment = withContext(Dispatchers.IO) {
+    val attachmentsDir = "${WorkspacePathMapper.CONTAINER_ROOT}/.aiverse/attachments"
+    val sourceFiles = (listOfNotNull(app.sourceDir) + app.splitSourceDirs)
+        .map { File(it) }
+        .filter { it.exists() && it.isFile }
+    if (sourceFiles.isEmpty()) error(uploadFallbackError(context))
+
+    // 仅当确实存在多个包文件时才打包 .apks（zip）；否则一律直传单文件 .apk，
+    // 保证扩展名与字节内容恒一致：hasSplits=true 但 split 文件缺失/被过滤只剩 base 时，
+    // 不能把裸 base.apk 伪装成 .apks（安装器无法识别）。
+    val bundleAsApks = app.hasSplits && sourceFiles.size > 1
+    val extension = if (bundleAsApks) "apks" else "apk"
+    val baseName = sanitizeUploadFileName("${app.label}.$extension")
+    val fileName = uniqueUploadName(fileAccess, attachmentsDir, baseName)
+    val containerPath = "$attachmentsDir/$fileName"
+    val mimeType = "application/vnd.android.package-archive"
+
+    val tmpZip: File?
+    val payload: File
+    if (!bundleAsApks) {
+        tmpZip = null
+        payload = sourceFiles.first()
+    } else {
+        tmpZip = File.createTempFile("export_app_", ".apks", context.cacheDir)
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(tmpZip))).use { zos ->
+            sourceFiles.forEach { file ->
+                zos.putNextEntry(ZipEntry(file.name))
+                file.inputStream().use { it.copyTo(zos) }
+                zos.closeEntry()
+            }
+        }
+        payload = tmpZip
+    }
+
+    try {
+        val sizeBytes = payload.inputStream().use { input ->
+            fileAccess.writeStream(containerPath, input, overwrite = true)
+        }
+        val localFile = fileAccess.copyToLocal(containerPath)
+        PendingUploadAttachment(
+            fileName = fileName,
+            containerPath = containerPath,
+            localPath = localFile.absolutePath,
+            mimeType = mimeType,
+            sizeBytes = sizeBytes,
+            image = null
+        )
+    } finally {
+        tmpZip?.delete()
+    }
 }
 
 private fun Context.displayName(uri: Uri): String {

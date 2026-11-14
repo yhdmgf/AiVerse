@@ -76,6 +76,7 @@ import com.aiverse.core.ui.decodeSampledBitmap
 import com.aiverse.feature.agent.presentation.QueuedRequest
 import com.aiverse.core.ui.ExpandableChevronIcon
 import compose.icons.FeatherIcons
+import compose.icons.feathericons.Package
 import compose.icons.feathericons.Camera
 import compose.icons.feathericons.ChevronDown
 import compose.icons.feathericons.ChevronUp
@@ -511,6 +512,7 @@ internal fun AttachmentSheet(
     canUploadFiles: Boolean,
     canUploadImages: Boolean,
     onUploadFile: () -> Unit,
+    onUploadApp: () -> Unit,
     onUploadImage: () -> Unit,
     onTakePhoto: () -> Unit,
     onDismiss: () -> Unit
@@ -539,6 +541,12 @@ internal fun AttachmentSheet(
                 title = stringResource(com.aiverse.R.string.chat_upload_file),
                 enabled = canUploadFiles,
                 onClick = onUploadFile
+            )
+            AttachmentSheetItem(
+                icon = FeatherIcons.Package,
+                title = stringResource(com.aiverse.R.string.chat_upload_app),
+                enabled = canUploadFiles,
+                onClick = onUploadApp
             )
             AttachmentSheetItem(
                 icon = FeatherIcons.Image,
