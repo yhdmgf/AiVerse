@@ -48,8 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
@@ -84,7 +82,6 @@ import androidx.navigation.navArgument
 import com.aiverse.core.theme.AIEditorTheme
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.FileTreeDisplayPrefs
-import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.UIDensity
 import com.aiverse.core.ui.BetaWatermark
 import com.aiverse.core.ui.ImageSource
@@ -1202,7 +1199,6 @@ fun AppNavigation(
             }
         }
     } else {
-        val t = LocalUIDensityTokens.current
         ModalNavigationDrawer(
             drawerState = drawerState,
             // 仅在聊天页启用手势滑出；其他页面禁止（但已打开时始终可关闭）。
@@ -1212,15 +1208,10 @@ fun AppNavigation(
                     drawerShape = RectangleShape,
                     drawerContainerColor = settingsPageBackground(),
                     drawerTonalElevation = 0.dp,
-                    modifier = Modifier
-                        .width(drawerWidth())
-                        .shadow(
-                            elevation = t.elevationMd,
-                            shape = RectangleShape,
-                            clip = false,
-                            ambientColor = Color.Black.copy(alpha = t.ambientAlpha),
-                            spotColor = Color.Black.copy(alpha = t.spotAlpha)
-                        )
+                    // 不在 sheet 上叠 .shadow(clip=false)：这层 RenderNode 图形修饰会干扰 ModalNavigationDrawer
+                    // 自带 scrim 的合成（表现为手势滑出不变暗、点 ☰ 暗一下即恢复）。抽屉层次感交给
+                    // drawerTonalElevation / drawerContainerColor 与 scrim 本身，宽度仍走 drawerWidth()。
+                    modifier = Modifier.width(drawerWidth())
                 ) {
                     drawerBody()
                 }
