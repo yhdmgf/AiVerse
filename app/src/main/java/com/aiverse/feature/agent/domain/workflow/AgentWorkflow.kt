@@ -128,9 +128,22 @@ interface AgentWorkflow {
     suspend fun generateCommitMessage(diff: String): String?
 
     /**
-     * 把输入框内容交给模型润色后返回润色后的文本（供「优化输入」快捷按钮）。
+     * 把输入框内容交给模型润色后返回润色结果（供「优化输入」快捷按钮）。
      * 默认跟随当前聊天模型；若配置了优化输入专用模型且可用则用之。
-     * 输入为空、生成失败或取不到结果时返回 null。
+     * 输入为空或模型返回空文本返回 [OptimizeResult.NoChange]；润色成功返回 [OptimizeResult.Success]。
+     * 请求失败通过异常上抛（调用方捕获后转为用户提示），不在此静默。
      */
-    suspend fun optimizeInput(sessionId: String, text: String): String?
+    suspend fun optimizeInput(sessionId: String, text: String): OptimizeResult
+}
+
+/**
+ * 「优化输入」结果。
+ * 请求失败不在此表示，由调用方捕获异常后转为用户提示。
+ */
+sealed interface OptimizeResult {
+    /** 润色成功，[text] 为润色后的文本（非空）。 */
+    data class Success(val text: String) : OptimizeResult
+
+    /** 无实质改动：输入为空，或模型返回空/原文已足够好，无需回填。 */
+    data object NoChange : OptimizeResult
 }

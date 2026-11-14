@@ -771,6 +771,10 @@
     <string name="chat_open_sidebar">Open sidebar</string>
     <string name="chat_add_attachment">Add attachment</string>
     <string name="chat_optimize_input">Optimize Input</string>
+    <string name="chat_optimize_stop">Stop optimizing</string>
+    <string name="chat_optimize_success">Optimized</string>
+    <string name="chat_optimize_undo">Undo</string>
+    <string name="chat_optimize_failed">Optimize failed</string>
     <string name="chat_web_search_toggle">Web search</string>
     <string name="chat_more_tools">More tools</string>
     <string name="chat_balance_icon">Balance</string>

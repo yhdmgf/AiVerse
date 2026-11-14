@@ -39,6 +39,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -75,6 +76,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -232,6 +234,10 @@ internal fun ChatInputBar(
     onOpenSearchProviders: () -> Unit = {},
     /** 点击「优化输入」按钮：把输入框内容交给模型润色后填回。 */
     onOptimizeInput: () -> Unit = {},
+    /** 点击「优化输入」按钮的停止态：取消正在进行的优化任务。 */
+    onCancelOptimize: () -> Unit = {},
+    /** 优化输入是否进行中：进行时按钮显示进度环，点击改为停止。 */
+    isOptimizing: Boolean = false,
     /** 长按「优化输入」按钮时打开默认模型配置页。 */
     onOpenOptimizeModelSettings: () -> Unit = {},
     /** 点击输入区的 MCP 图标，直接打开 MCP 服务器设置页。 */
@@ -652,7 +658,7 @@ internal fun ChatInputBar(
                                     ) {
                                         Text(
                                             text = stringResource(currentMode.labelRes),
-                                            style = MaterialTheme.typography.labelSmall.copy(
+                                            style = MaterialTheme.typography.labelMedium.copy(
                                                 fontWeight = FontWeight.Bold,
                                                 color = modeTextColor
                                             )
@@ -955,22 +961,40 @@ internal fun ChatInputBar(
                     }
                     if (inputBarPrefs.showOptimize) {
                         // 优化输入：单击把输入框内容交给模型润色后填回（空文本无反应）；长按跳默认模型配置页。
+                        // 优化中：显示进度环，点击停止；非优化中显示 ✨，点击触发优化。
+                        val optimizeLabel = if (isOptimizing) {
+                            stringResource(R.string.chat_optimize_stop)
+                        } else {
+                            stringResource(R.string.chat_optimize_input)
+                        }
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
+                                .semantics { contentDescription = optimizeLabel }
                                 .combinedClickable(
-                                    onClick = { if (value.isNotBlank()) onOptimizeInput() },
+                                    onClick = {
+                                        if (isOptimizing) onCancelOptimize()
+                                        else if (value.isNotBlank()) onOptimizeInput()
+                                    },
                                     onLongClick = onOpenOptimizeModelSettings
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = stringResource(R.string.chat_optimize_input),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            if (isOptimizing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                     if (inputBarPrefs.showPlus) {

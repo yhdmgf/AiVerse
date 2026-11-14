@@ -120,6 +120,18 @@ data class LlmCallEvent(
 )
 
 /**
+ * 「优化输入」的一次性 UI 事件（由 AIChatPanel 收集并展示 Snackbar）。
+ */
+@Immutable
+sealed interface OptimizeEvent {
+    /** 优化成功并回填：展示「已优化」+「撤销」，撤销可恢复被覆盖的旧草稿。 */
+    data object Success : OptimizeEvent
+
+    /** 优化失败：[reason] 为失败原因（可空，用于日志/调试）。 */
+    data class Failure(val reason: String) : OptimizeEvent
+}
+
+/**
  * 网络请求重试状态（仅用于 UI 实时展示「正在重试 (N/M)...」提示）。
  * [error] 为触发重试的错误摘要，UI 据此展示具体原因（如 429/500/网络断开）。
  * 与 [AgentUIState] 解耦：重试是 Streaming 的子状态，不改变顶层 agent 状态机。

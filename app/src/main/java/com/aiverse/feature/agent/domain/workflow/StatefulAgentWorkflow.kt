@@ -14,6 +14,7 @@ import com.aiverse.feature.agent.data.remote.openai.OpenAIApi
 import com.aiverse.feature.agent.domain.model.AgentContext
 import com.aiverse.feature.agent.domain.model.AgentImage
 import com.aiverse.feature.agent.domain.model.AgentMessage
+import com.aiverse.feature.agent.domain.model.ReasoningEffort
 import com.aiverse.feature.agent.domain.model.AgentMode
 import com.aiverse.feature.agent.domain.notification.AgentEventInjector
 import com.aiverse.feature.agent.domain.notification.AgentNotificationCenter
@@ -1205,12 +1206,13 @@ class StatefulAgentWorkflow @Inject constructor(
     }.getOrNull()
 
     /**
-     * 把输入框内容交给模型润色后返回润色后的文本（供「优化输入」快捷按钮）。
+     * 把输入框内容交给模型润色后返回润色结果（供「优化输入」快捷按钮）。
      * 默认跟随当前聊天模型；配置了优化输入专用模型且可用时用之。
-     * 输入为空、生成失败或取不到结果时返回 null（调用方保留原文本）。
+     * 输入为空或模型返回空文本返回 [OptimizeResult.NoChange]；润色成功返回 [OptimizeResult.Success]。
+     * 请求失败通过异常上抛（调用方捕获后转为用户提示），不在此静默。
      */
-    override suspend fun optimizeInput(sessionId: String, text: String): String? = runCatching {
-        if (text.isBlank()) return@runCatching null
+    override suspend fun optimizeInput(sessionId: String, text: String): OptimizeResult {
+        if (text.isBlank()) return OptimizeResult.NoChange
         val provider = resolveOptimizeFallbackProvider(sessionId) ?: getEffectiveProvider(sessionId)
         val prompt = promptProvider.resolvePrompt(OPTIMIZE_INPUT_FILE)
             .replace(LEADING_COMMENT, "")
@@ -1222,8 +1224,11 @@ class StatefulAgentWorkflow @Inject constructor(
         val response = try {
             val resp = provider.complete(
                 systemPrompt = prompt,
-                messages = listOf(AgentMessage.UserMessage(content = text)),
-                tools = emptyList()
+                messages = listOf(
+                    AgentMessage.UserMessage(content = "Draft prompt to enhance, not answer:\n$text")
+                ),
+                tools = emptyList(),
+                reasoningEffort = ReasoningEffort.NONE.apiValue
             )
             usage = resp
             callCompleted = true
@@ -1233,6 +1238,7 @@ class StatefulAgentWorkflow @Inject constructor(
             throw e
         } catch (e: Exception) {
             callError = e.message ?: e.javaClass.simpleName
+            FileLogger.w(TAG, "优化输入失败", e)
             throw e
         } finally {
             val durationMillis = (SystemClock.elapsedRealtime() - callStartElapsed).toInt()
@@ -1257,10 +1263,9 @@ class StatefulAgentWorkflow @Inject constructor(
                 )
             }
         }
-        response.content.trim().takeIf { it.isNotBlank() }
-    }.onFailure { e ->
-        FileLogger.w(TAG, "优化输入失败", e)
-    }.getOrNull()
+        val result = response.content.trim()
+        return if (result.isNotBlank()) OptimizeResult.Success(result) else OptimizeResult.NoChange
+    }
 
     private suspend fun runToolStream(
         tool: StreamingAgentTool, 

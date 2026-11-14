@@ -771,6 +771,10 @@
     <string name="chat_open_sidebar">打开侧边栏</string>
     <string name="chat_add_attachment">添加附件</string>
     <string name="chat_optimize_input">优化输入</string>
+    <string name="chat_optimize_stop">停止优化</string>
+    <string name="chat_optimize_success">已优化</string>
+    <string name="chat_optimize_undo">撤销</string>
+    <string name="chat_optimize_failed">优化失败</string>
     <string name="chat_web_search_toggle">联网搜索</string>
     <string name="chat_more_tools">更多工具</string>
     <string name="chat_balance_icon">余额</string>

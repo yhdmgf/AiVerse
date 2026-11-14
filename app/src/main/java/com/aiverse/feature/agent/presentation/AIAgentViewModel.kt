@@ -89,6 +89,7 @@ import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.feature.agent.domain.workflow.AgentEvent
+import com.aiverse.feature.agent.domain.workflow.OptimizeResult
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -394,6 +395,17 @@ class AIAgentViewModel @Inject constructor(
         editor.apply()
     }
 
+    /** 优化输入进行中的 Job；连点先 cancel 再重新 launch，单 Job 防并发。 */
+    private var optimizeJob: Job? = null
+    /** 优化输入是否进行中（驱动按钮 loading/停止态）。 */
+    private val _isOptimizing = MutableStateFlow(false)
+    val isOptimizing: StateFlow<Boolean> = _isOptimizing.asStateFlow()
+    /** 优化输入的一次性事件（成功/失败），UI 收集后展示 Snackbar。 */
+    private val _optimizeEvents = MutableSharedFlow<OptimizeEvent>(extraBufferCapacity = 4)
+    val optimizeEvents: SharedFlow<OptimizeEvent> = _optimizeEvents.asSharedFlow()
+    /** 最近一次成功回填前的旧草稿，供「撤销」恢复。 */
+    private var lastOptimizedOriginal: String? = null
+
     /**
      * 「优化输入」：把当前输入框草稿交给模型润色后回填（空草稿不发请求，失败保留原文本）。
      * 配置了优化输入专用模型则用之，否则跟随当前聊天模型（见 AgentWorkflow.optimizeInput）。
@@ -402,12 +414,42 @@ class AIAgentViewModel @Inject constructor(
         val id = _currentSessionId.value ?: return
         val text = inputDraft.value
         if (text.isBlank()) return
-        viewModelScope.launch {
-            val optimized = agentWorkflow.optimizeInput(id, text)
-            if (!optimized.isNullOrBlank()) {
-                updateInputDraft(optimized)
+        // 优化进行中再次点击 = 取消当前任务（既可中途停止，也防重复并发）。
+        optimizeJob?.cancel()
+        _isOptimizing.value = true
+        optimizeJob = viewModelScope.launch {
+            try {
+                when (val result = agentWorkflow.optimizeInput(id, text)) {
+                    is OptimizeResult.Success -> {
+                        lastOptimizedOriginal = text
+                        updateInputDraft(result.text)
+                        _optimizeEvents.tryEmit(OptimizeEvent.Success)
+                    }
+                    OptimizeResult.NoChange -> Unit // 无实质改动，不打扰
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                FileLogger.w(TAG, "优化输入失败", e)
+                _optimizeEvents.tryEmit(OptimizeEvent.Failure(e.message ?: e.javaClass.simpleName))
+            } finally {
+                // 仅当仍是当前 job 时清除标志：连点取消后新 job 接管，旧 job 的 finally 不误清。
+                if (optimizeJob == coroutineContext[Job]) {
+                    _isOptimizing.value = false
+                }
             }
         }
+    }
+
+    /** 取消正在进行的「优化输入」任务（按钮停止态）。 */
+    fun cancelOptimize() {
+        optimizeJob?.cancel()
+    }
+
+    /** 撤销最近一次「优化输入」回填，恢复被覆盖的旧草稿。 */
+    fun undoOptimize() {
+        val original = lastOptimizedOriginal ?: return
+        updateInputDraft(original)
     }
 
     fun clearInputDraft() {

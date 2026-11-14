@@ -51,6 +51,10 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -124,6 +128,7 @@ import com.aiverse.feature.agent.presentation.AgentUIState
 import com.aiverse.feature.agent.presentation.AIAgentViewModel
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.MessageRole
+import com.aiverse.feature.agent.presentation.OptimizeEvent
 import com.aiverse.feature.agent.presentation.QueuedRequest
 import com.aiverse.feature.agent.presentation.hasVisibleContent
 import com.aiverse.feature.agent.presentation.component.LocalChatFileAccess
@@ -1143,6 +1148,32 @@ fun AIChatPanel(
         }
     }
 
+    // 「优化输入」状态与一次性事件：按钮 loading/停止态 + 成功（可撤销）/失败 Snackbar。
+    val isOptimizing by viewModel.isOptimizing.collectAsStateWithLifecycle()
+    val optimizeSnackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        viewModel.optimizeEvents.collect { event ->
+            when (event) {
+                OptimizeEvent.Success -> {
+                    val action = optimizeSnackbarHostState.showSnackbar(
+                        message = context.getString(R.string.chat_optimize_success),
+                        actionLabel = context.getString(R.string.chat_optimize_undo),
+                        duration = SnackbarDuration.Short
+                    )
+                    if (action == SnackbarResult.ActionPerformed) {
+                        viewModel.undoOptimize()
+                    }
+                }
+                is OptimizeEvent.Failure -> {
+                    optimizeSnackbarHostState.showSnackbar(
+                        message = context.getString(R.string.chat_optimize_failed),
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+    }
+
     // AI 一轮任务完成后刷新面板：让脚本拿到最终 agentState（result/idle/error），
     // 否则面板状态会一直停在「生成中」。busy→非busy 每轮只发生一次（Result 后再置 Idle 属
     // 非busy→非busy，不会重复触发），故这里触发的刷新恰好落在最终状态上。
@@ -2116,6 +2147,9 @@ fun AIChatPanel(
             // 阻塞式确认面板（权限 / askUserQuestion / 计划审批）已内嵌进上方会话流末尾，
             // 不再挤在输入框上方——键盘弹起时它们可随列表滚动，不再被压缩高度。
 
+            // 「优化输入」Snackbar：显示在输入框上方，不遮挡消息与输入框。
+            SnackbarHost(hostState = optimizeSnackbarHostState)
+
             ChatInputBar(
                 value = inputText,
                 onValueChange = viewModel::updateInputDraft,
@@ -2187,6 +2221,8 @@ fun AIChatPanel(
                 onOpenSearchProviders = onOpenSearchProviders,
                 onOpenMcp = onOpenMcp,
                 onOptimizeInput = { viewModel.optimizeInput() },
+                onCancelOptimize = { viewModel.cancelOptimize() },
+                isOptimizing = isOptimizing,
                 onOpenOptimizeModelSettings = onOpenOptimizeModelSettings,
                 onOpenInEditor = onOpenInEditor,
                 // 主页模型弹层的「测试」按钮：直接复用设置页的连通性测试链路，状态由弹层自己持有。
