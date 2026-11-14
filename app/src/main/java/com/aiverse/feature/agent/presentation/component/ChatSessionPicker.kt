@@ -23,6 +23,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,8 @@ import compose.icons.FeatherIcons
  * 单条会话行：短按选中，长按弹出功能菜单（置顶/重命名/导出/删除）。供侧边栏历史记录列表复用。
  * 置顶会话显示浅蓝背景（primaryContainer）。
  * [trailing] 用于行尾额外控件（如子代理展开箭头），它自己的点击不应触发整行选中。
+ * [triState] 非空时勾选框渲染为三态（主代理行按子代理选中比例显示 On/Indeterminate/Off），
+ * 为空时退回二态 [checked]/[onCheckedChange]。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -56,6 +60,7 @@ fun ChatSessionRow(
     trailing: (@Composable () -> Unit)? = null,
     selectionMode: Boolean = false,
     checked: Boolean = false,
+    triState: ToggleableState? = null,
     onCheckedChange: ((Boolean) -> Unit)? = null
 ) {
     Row(
@@ -75,14 +80,27 @@ fun ChatSessionRow(
             CompositionLocalProvider(
                 LocalMinimumInteractiveComponentSize provides 0.dp
             ) {
-                Checkbox(
-                    checked = checked,
-                    onCheckedChange = onCheckedChange,
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.primary,
-                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                if (triState != null) {
+                    TriStateCheckbox(
+                        state = triState,
+                        onClick = onCheckedChange?.let { cb ->
+                            { cb(triState != ToggleableState.On) }
+                        },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary,
+                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                )
+                } else {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = onCheckedChange,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary,
+                            uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
             }
             Spacer(Modifier.width(Spacing.sm))
         }

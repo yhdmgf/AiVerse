@@ -87,6 +87,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -395,10 +396,20 @@ fun ChatDrawerContent(
                     selectionMode = isSelectionMode,
                     selectedSessionIds = selectedSessionIds,
                     onToggleSelectSession = { s ->
-                        if (s.id in selectedSessionIds) {
+                        val subSessions = subSessionsByParent[s.id].orEmpty()
+                        if (subSessions.isNotEmpty()) {
+                            // 主代理：级联选中/取消其全部子代理。主代理自身 id 不进出选中集合，
+                            // 避免批量删除含主代理 id 时级联删掉全部子代理（含用户取消勾选想保留的）。
                             selectedSessionIds.remove(s.id)
+                            val allSelected = subSessions.all { it.id in selectedSessionIds }
+                            subSessions.forEach { sub ->
+                                if (allSelected) selectedSessionIds.remove(sub.id)
+                                else selectedSessionIds.add(sub.id)
+                            }
                         } else {
-                            selectedSessionIds.add(s.id)
+                            // 叶子（子代理行 / 无子代理的主代理）：保持单个 toggle。
+                            if (s.id in selectedSessionIds) selectedSessionIds.remove(s.id)
+                            else selectedSessionIds.add(s.id)
                         }
                     },
                     onSelect = onSelect,
@@ -693,6 +704,7 @@ private fun SessionListContent(
                     val isExecuting = state is AgentUIState.Loading || state is AgentUIState.Streaming
                     val subSessions = subSessionsByParent[session.id].orEmpty()
                     val expanded = session.id in expandedIds
+                    val subSelectedCount = subSessions.count { it.id in selectedSessionIds }
                     ChatSessionRow(
                         session = session,
                         selected = if (selectionMode) false else session.id == currentSessionId,
@@ -701,6 +713,13 @@ private fun SessionListContent(
                         pinned = session.isPinned,
                         selectionMode = selectionMode,
                         checked = session.id in selectedSessionIds,
+                        triState = if (subSessions.isEmpty()) null else {
+                            when {
+                                subSelectedCount == subSessions.size -> ToggleableState.On
+                                subSelectedCount > 0 -> ToggleableState.Indeterminate
+                                else -> ToggleableState.Off
+                            }
+                        },
                         onCheckedChange = { onToggleSelectSession(session) },
                         onClick = {
                             if (selectionMode) {
