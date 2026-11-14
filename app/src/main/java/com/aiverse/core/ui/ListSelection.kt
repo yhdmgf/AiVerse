@@ -1,6 +1,7 @@
 package com.aiverse.core.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -17,15 +18,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -37,6 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.R
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.glassBorderOr
+import com.aiverse.core.theme.glassOr
 import com.aiverse.core.theme.semanticColors
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.CheckSquare
@@ -150,15 +157,17 @@ fun selectionListBottomContentPadding(selectionActive: Boolean): Dp =
 /**
  * 底部浮动多选操作栏（原「列表顶部内联操作条」改为固定在屏幕底部的浮动栏）。
  *
- * 布局：左侧「已选 N 项」，中间常用动作（[primaryActions] 平铺外露），右侧「⋯」更多菜单
- * （全选/取消全选 + [moreActions] 追加的低频动作）。底部空间充足，「已选 N 项」用
- * [TextOverflow.Ellipsis] 不换行，窄屏也不会再被动作挤折行。
+ * 布局：最左侧三态全选 checkbox，随后「已选 N 项」，中间常用动作（[primaryActions] 平铺外露），
+ * 右侧「⋯」更多菜单（[moreActions] 追加的低频动作，仅在 [moreActionsAvailable] 时显示）。
+ * 底部空间充足，「已选 N 项」用 [TextOverflow.Ellipsis] 不换行，窄屏也不会再被动作挤折行。
  *
  * 调用约定：
  * - 放在 Box 内并用 `Modifier.align(Alignment.BottomCenter)` 贴底；外层 Box 负责底部安全区
  *   （`navigationBarsPadding()`）。
- * - 全选/取消全选默认收进「⋯」菜单第一项；低频动作（重连、分享等）经 [moreActions] 追加，
- *   菜单项建议用图标+文字（遵循项目「溢出收纳 ⋯ 菜单」约定）。
+ * - [allSelected] 必须代表「全部可见项已选」，三态 checkbox 状态由它推导
+ *   （全选 → On，部分已选 → Indeterminate，未选 → Off）。
+ * - 低频动作（重连、分享等）经 [moreActions] 追加，菜单项建议用图标+文字
+ *   （遵循项目「溢出收纳 ⋯ 菜单」约定）。
  * - 退出多选：顶栏多选开关（[SelectionToggleAction]）/ 返回键（[BackHandler]）即可，底部栏不再单设退出。
  *
  * [primaryActions] 里的动作建议用 [SelectionActionButton]（文字）与 [SelectionActionIconButton]（图标），
@@ -172,6 +181,7 @@ fun SelectionActionBar(
     onToggleSelectAll: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    moreActionsAvailable: Boolean = false,
     moreActions: @Composable ColumnScope.() -> Unit = {},
     primaryActions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -187,7 +197,8 @@ fun SelectionActionBar(
             .padding(horizontal = Spacing.lg)
             .height(selectionActionBarHeight()),
         shape = RoundedCornerShape(t.rLg),
-        color = MaterialTheme.semanticColors.cardSurface,
+        color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface),
+        border = BorderStroke(1.dp, glassBorderOr(MaterialTheme.semanticColors.surfaceGlassBorder)),
         shadowElevation = 8.dp,
         tonalElevation = 2.dp
     ) {
@@ -197,6 +208,24 @@ fun SelectionActionBar(
                 .padding(horizontal = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 三态全选：全选 → On，部分已选 → Indeterminate，未选 → Off（由 allSelected / selectedCount 推导）。
+            val triState = when {
+                allSelected -> ToggleableState.On
+                selectedCount > 0 -> ToggleableState.Indeterminate
+                else -> ToggleableState.Off
+            }
+            val selectAllLabel = stringResource(
+                if (allSelected) R.string.common_deselect_all else R.string.common_select_all
+            )
+            TriStateCheckbox(
+                state = triState,
+                onClick = onToggleSelectAll,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.semantics { contentDescription = selectAllLabel }
+            )
             Text(
                 text = stringResource(R.string.common_selected_count, selectedCount),
                 style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
@@ -206,45 +235,26 @@ fun SelectionActionBar(
                 modifier = Modifier.weight(1f)
             )
             primaryActions()
-            // 「⋯」更多：全选/取消全选 + 页面低频动作（重连、分享等）
-            Box {
-                IconButton(
-                    onClick = { moreExpanded = true },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        FeatherIcons.MoreHorizontal,
-                        contentDescription = stringResource(R.string.common_more),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                DropdownMenu(
-                    expanded = moreExpanded,
-                    onDismissRequest = { moreExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    FeatherIcons.CheckSquare,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(Spacing.sm))
-                                Text(
-                                    stringResource(
-                                        if (allSelected) R.string.common_deselect_all else R.string.common_select_all
-                                    )
-                                )
-                            }
-                        },
-                        onClick = {
-                            moreExpanded = false
-                            onToggleSelectAll()
-                        }
-                    )
-                    moreActions()
+            // 「⋯」更多：页面低频动作（重连、分享等），仅在页面声明有低频动作时显示。
+            if (moreActionsAvailable) {
+                Box {
+                    IconButton(
+                        onClick = { moreExpanded = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            FeatherIcons.MoreHorizontal,
+                            contentDescription = stringResource(R.string.common_more),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = moreExpanded,
+                        onDismissRequest = { moreExpanded = false }
+                    ) {
+                        moreActions()
+                    }
                 }
             }
         }

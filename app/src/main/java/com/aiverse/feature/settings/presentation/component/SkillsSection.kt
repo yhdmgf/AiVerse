@@ -262,7 +262,8 @@ internal fun SkillsSection(
                         enabled = enabled,
                         onClick = { onBatchExport(selectedEntries) }
                     )
-                }
+                },
+                moreActionsAvailable = true
             ) {
                 SelectionActionButton(
                     text = stringResource(R.string.common_batch_enable),

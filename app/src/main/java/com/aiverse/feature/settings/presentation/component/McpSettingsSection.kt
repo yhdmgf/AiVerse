@@ -221,7 +221,8 @@ internal fun McpSection(
                         },
                         onClick = { onBatchReconnect(targets.map { it.first }) }
                     )
-                }
+                },
+                moreActionsAvailable = true
             ) {
                 val enabled = selection.selectedCount > 0
                 val targets = selection.selectedKeys.mapNotNull { keyToTarget[it] }
