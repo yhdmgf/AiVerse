@@ -3245,7 +3245,11 @@ class AIAgentViewModel @Inject constructor(
         fileMentionJob?.cancel()
         _fileMentionState.value = FileMentionState.Loading
         fileMentionJob = viewModelScope.launch {
-            val result = fileMentionRepository.loadFiles(_currentWorkspace.value)
+            // @ 清单与侧边栏文件树保持一致：跟随「显示隐藏文件」偏好，同步读取一次当前值。
+            val showHiddenFiles = appearanceSettingsRepository.fileTreeDisplayPrefsFlow
+                .first()
+                .showHiddenFiles
+            val result = fileMentionRepository.loadFiles(_currentWorkspace.value, showHiddenFiles)
             _fileMentionState.value = when (result) {
                 is FileMentionRepository.LoadResult.Success -> FileMentionState.Ready(result.files)
                 FileMentionRepository.LoadResult.Unavailable -> FileMentionState.Unavailable

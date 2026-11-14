@@ -6,6 +6,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -69,5 +70,39 @@ class FileMentionRepositoryTest {
     @Test
     fun loadFiles_blankPath_returnsUnavailable() = runTest {
         assertTrue(repository.loadFiles("") is FileMentionRepository.LoadResult.Unavailable)
+    }
+
+    @Test
+    fun loadFiles_command_alwaysSearchesHiddenAndSkipsVcsIgnore() = runTest {
+        var command: String? = null
+        coEvery { engine.runCommandSyncIfReady(any(), any(), any()) } answers {
+            command = firstArg()
+            CommandResult("", 0)
+        }
+        repository.loadFiles("/root/workspace")
+        command!!.let {
+            assertTrue(it.contains("--files"))
+            assertTrue(it.contains("--hidden"))
+            assertTrue(it.contains("--no-ignore-vcs"))
+            // 生成物 / 依赖 / VCS 目录始终排除（glob 用单引号包裹，避免 shell 展开 `!` / `*`）。
+            assertTrue(it.contains("--glob '!**/.git/**'"))
+            assertTrue(it.contains("--glob '!**/node_modules/**'"))
+            assertTrue(it.contains("--glob '!**/build/**'"))
+            // 显示隐藏文件时不应出现点文件排除规则。
+            assertFalse(it.contains("!**/.*"))
+        }
+    }
+
+    @Test
+    fun loadFiles_hiddenFilesDisabled_excludesDotfiles() = runTest {
+        var command: String? = null
+        coEvery { engine.runCommandSyncIfReady(any(), any(), any()) } answers {
+            command = firstArg()
+            CommandResult("", 0)
+        }
+        repository.loadFiles("/root/workspace", showHiddenFiles = false)
+        command!!.let {
+            assertTrue(it.contains("--glob '!**/.*'"))
+        }
     }
 }

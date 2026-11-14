@@ -14,14 +14,20 @@ class FileMentionRepository @Inject constructor(
 ) {
 
     /**
-     * 拉取工作区文件清单。走 `rg --files`：默认遵守 .gitignore，
-     * 自动剪掉 `.git` / `build` 等生成物目录，避免大仓库全量遍历。
+     * 拉取工作区文件清单。走 `rg --files`，与侧边栏文件树保持一致：
+     * 始终搜索隐藏文件并忽略 .gitignore / .ignore（`--hidden --no-ignore-vcs`），
+     * 否则 `.env`、`.github/` 这类既点开头又被忽略的文件搜不到；
+     * 生成物与依赖目录改用 [EXCLUDED_GLOBS] 手动排除，避免大仓库全量遍历。
+     * [showHiddenFiles] 关闭时（与侧边栏「显示隐藏文件」偏好一致）额外排除点文件 / 点目录。
      * 容器未就绪（本地未初始化 / 远程未装 rg）时返回 [LoadResult.Unavailable]。
      */
-    suspend fun loadFiles(projectPath: String): LoadResult {
+    suspend fun loadFiles(
+        projectPath: String,
+        showHiddenFiles: Boolean = true
+    ): LoadResult {
         if (projectPath.isBlank()) return LoadResult.Unavailable
         val result = commandEngine.runCommandSyncIfReady(
-            command = RG_FILES_COMMAND,
+            command = buildFilesCommand(showHiddenFiles),
             projectPath = projectPath,
             timeoutMs = TIMEOUT_MS
         ) ?: return LoadResult.Unavailable
@@ -84,9 +90,76 @@ class FileMentionRepository @Inject constructor(
     }
 
     private companion object {
-        const val RG_FILES_COMMAND = "rg --files --color never"
+        const val RG_FILES_BASE_COMMAND = "rg --files --color never --hidden --no-ignore-vcs"
         const val TIMEOUT_MS = 10_000L
         const val MAX_FILES = 20_000
+
+        /** 始终排除的生成物 / 依赖 / VCS 目录；rg 遵守 gitignore 时不出现，故手动排除。 */
+        private val EXCLUDED_GLOBS = listOf(
+            "**/.git/**",
+            "**/.svn/**",
+            "**/.hg/**",
+            "**/node_modules/**",
+            "**/build/**",
+            "**/target/**",
+            "**/dist/**",
+            "**/out/**",
+            "**/.gradle/**",
+            "**/.idea/**",
+            "**/.vscode/**",
+            "**/.cache/**",
+            "**/.venv/**",
+            "**/venv/**",
+            "**/__pycache__/**",
+            "**/.mypy_cache/**",
+            "**/.pytest_cache/**",
+            "**/Pods/**",
+            "**/.dart_tool/**",
+            "**/.expo/**",
+            "**/DerivedData/**"
+        )
+
+        /**
+         * 恒定排除的敏感文件（不受 [showHiddenFiles] 影响）。@ 选中即作为附件/上下文
+         * 送入模型，而 `--hidden --no-ignore-vcs` 会把 `.env` / `local.properties` /
+         * 密钥与证书等原本被 gitignore 藏起的凭据文件曝进候选，故在此兕底。
+         */
+        private val SENSITIVE_GLOBS = listOf(
+            "**/.env",
+            "**/.env.*",
+            "**/local.properties",
+            "**/*.jks",
+            "**/*.keystore",
+            "**/*.pem",
+            "**/*.key",
+            "**/*.pfx",
+            "**/*.p12",
+            "**/id_rsa",
+            "**/id_rsa.*",
+            "**/id_ed25519",
+            "**/id_ed25519.*",
+            "**/.git-credentials",
+            "**/.netrc",
+            "**/.npmrc",
+            "**/.pypirc",
+            "**/.htpasswd",
+            "**/.aws/**",
+            "**/*serviceAccountKey*.json"
+        )
+
+        /** 按隐藏文件偏好拼装 rg 命令。生成物与敏感文件排除项恒定生效；关闭隐藏文件时
+         * 追加排除所有点开头的文件与目录的 glob，与侧边栏关闭「显示隐藏文件」时一致。
+         * glob 参数含感叹号与星号，用单引号包裹避免被 shell 展开。 */
+        fun buildFilesCommand(showHiddenFiles: Boolean): String = buildString {
+            append(RG_FILES_BASE_COMMAND)
+            for (glob in EXCLUDED_GLOBS + SENSITIVE_GLOBS) {
+                append(" --glob '")
+                append("!")
+                append(glob)
+                append("'")
+            }
+            if (!showHiddenFiles) append(" --glob '!**/.*'")
+        }
 
         /** 菜单一次最多展示的匹配条数。 */
         const val MAX_RESULTS = 50
