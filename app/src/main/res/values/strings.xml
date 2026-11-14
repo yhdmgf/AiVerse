@@ -138,6 +138,8 @@
     <string name="settings_welcome_entry_action_terminal">打开终端</string>
     <string name="settings_welcome_entry_action_git">查看 Git 改动</string>
     <string name="settings_welcome_entry_action_fill">填充提示词</string>
+    <string name="settings_welcome_entry_action_browser">打开浏览器</string>
+    <string name="settings_welcome_entry_action_history">打开历史会话</string>
     <string name="settings_welcome_entry_prompt">提示词</string>
     <string name="settings_welcome_entry_prompt_hint">点击后填入输入框的提示词</string>
     <string name="settings_welcome_entry_icon">图标</string>

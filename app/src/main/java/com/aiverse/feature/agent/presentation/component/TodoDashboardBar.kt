@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.glassOr
+import com.aiverse.core.theme.semanticColors
 import com.aiverse.feature.agent.domain.model.TodoItem
 import com.aiverse.feature.agent.domain.model.TodoStatus
 import com.aiverse.core.ui.ExpandableChevronIcon
@@ -102,7 +104,7 @@ fun TodoDashboardBar(
     }
     if (dismissed) return
 
-    val cardBgColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
+    val cardBgColor = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.colorScheme.surface)
     val borderColor = MaterialTheme.colorScheme.outlineVariant
 
     Surface(

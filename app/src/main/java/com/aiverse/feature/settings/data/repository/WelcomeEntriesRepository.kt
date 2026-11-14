@@ -51,6 +51,26 @@ class WelcomeEntriesRepository @Inject constructor(
     fun load(): List<WelcomeEntry> = _entries.value
 
     /**
+     * 导出当前快照为 JSON 字符串（供备份应用设置）。
+     * 空列表时返回 null（视为无可备份内容，保持与其它设置段一致）。
+     */
+    fun entriesJsonSnapshot(): String? {
+        val current = _entries.value
+        if (current.isEmpty()) return null
+        return runCatching { json.encodeToString(current) }.getOrNull()
+    }
+
+    /**
+     * 从备份的 JSON 字符串恢复欢迎卡片（写入 SharedPreferences 并发布到 [entries]）。
+     * 解析失败时静默忽略（保留当前状态），与 [loadFromPrefs] 的容错策略一致。
+     */
+    fun restoreFromJson(json: String) {
+        runCatching { this.json.decodeFromString<List<WelcomeEntry>>(json) }
+            .getOrNull()
+            ?.let { persist(it) }
+    }
+
+    /**
      * 新增欢迎卡片。
      *
      * 达到 [MAX_ENTRIES] 上限时拒绝并返回 false（调用方可据此提示）；否则追加到末尾并返回 true。

@@ -54,7 +54,6 @@ import com.aiverse.feature.settings.data.repository.DEFAULT_QUICK_ACTION_ORDER
 import com.aiverse.feature.settings.data.repository.InputBarQuickAction
 import com.aiverse.feature.settings.data.repository.BackgroundMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
-import com.aiverse.feature.settings.domain.model.WelcomeEntry
 import com.aiverse.feature.agent.presentation.component.chatBubbleColorFor
 import com.aiverse.feature.agent.presentation.component.chatBubbleTextColorFor
 import compose.icons.FeatherIcons
@@ -125,8 +124,6 @@ internal fun AppearanceSettingsSection(
     exportedThemeJson: String?,
     inputBarPrefs: InputBarPrefs,
     onInputBarPrefsChange: (InputBarPrefs) -> Unit,
-    welcomeEntries: List<WelcomeEntry>,
-    onOpenWelcomeEntriesSheet: () -> Unit,
     codeFontSizeSp: Int,
     codeWrapEnabled: Boolean,
     codeAutoFoldEnabled: Boolean,
@@ -379,20 +376,6 @@ internal fun AppearanceSettingsSection(
                 )
                 if (index < DEFAULT_QUICK_ACTION_ORDER.lastIndex) SettingsDivider()
             }
-        }
-
-        SettingsGroupHeader(text = stringResource(R.string.settings_welcome_entries))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.MessageSquare,
-                title = stringResource(R.string.settings_welcome_entries),
-                subtitle = stringResource(
-                    R.string.settings_welcome_entries_count,
-                    welcomeEntries.size,
-                    WELCOME_ENTRIES_MAX
-                ),
-                onClick = onOpenWelcomeEntriesSheet
-            )
         }
 
         SettingsGroupHeader(text = stringResource(R.string.settings_appearance_theme_package))

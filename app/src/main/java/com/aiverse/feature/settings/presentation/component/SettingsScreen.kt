@@ -100,6 +100,7 @@ import com.aiverse.feature.settings.data.repository.AppThemeMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
 import com.aiverse.feature.settings.domain.model.AIProviderConfig
 import com.aiverse.feature.settings.domain.model.ModelMetadata
+import com.aiverse.feature.settings.domain.model.WelcomeEntry
 import com.aiverse.feature.settings.presentation.SettingsViewModel
 import com.aiverse.feature.settings.presentation.ShizukuViewModel
 import com.aiverse.feature.phonecontrol.presentation.AccessibilityGrantScreen
@@ -673,9 +674,9 @@ fun SettingsScreen(
             themeMode = themeMode,
             terminalSettings = terminalSettings,
             currentLanguageDisplayName = currentLanguageDisplayName,
+            welcomeEntries = welcomeEntries,
+            onOpenWelcomeEntriesSheet = { showWelcomeEntriesSheet = true },
             onOpenTerminalSettingsSheet = { showTerminalSettingsSheet = true },
-            userBubbleStyle = userBubbleStyle,
-            assistantBubbleStyle = assistantBubbleStyle,
             onOpenLanguageSheet = { showLanguageSheet = true },
             onOpenManual = {
                 context.startActivity(
@@ -1208,7 +1209,6 @@ fun SettingsScreen(
                     onSetFileMutedColoring = { viewModel.setFileMutedColoring(it) },
                     onOpenThemeSheet = { showThemeSheet = true },
                     onOpenBackgroundSheet = { showBackgroundSheet = true },
-                    onOpenWelcomeEntriesSheet = { showWelcomeEntriesSheet = true },
                     onOpenUserBubbleStyleSheet = { showUserBubbleStyleSheet = true },
                     onOpenAssistantBubbleStyleSheet = { showAssistantBubbleStyleSheet = true },
                     onSetChatFontSizeSp = { viewModel.setChatFontSizeSp(it) },
@@ -1237,8 +1237,7 @@ fun SettingsScreen(
                         }
                     },
                     inputBarPrefs = inputBarPrefs,
-                    onInputBarPrefsChange = { viewModel.updateInputBarPrefs(it) },
-                    welcomeEntries = welcomeEntries
+                    onInputBarPrefsChange = { viewModel.updateInputBarPrefs(it) }
                 )
                 SettingsSection.AppearanceDensity -> DensitySettingsSection(
                     uiDensity = uiDensity,
@@ -2103,8 +2102,8 @@ internal fun SettingsMenu(
     themeMode: AppThemeMode,
     terminalSettings: TerminalSettings,
     currentLanguageDisplayName: String,
-    userBubbleStyle: ChatBubbleStyle,
-    assistantBubbleStyle: ChatBubbleStyle,
+    welcomeEntries: List<WelcomeEntry>,
+    onOpenWelcomeEntriesSheet: () -> Unit,
     onOpenTerminalSettingsSheet: () -> Unit,
     onOpenLanguageSheet: () -> Unit,
     onOpenManual: () -> Unit,
@@ -2130,9 +2129,20 @@ internal fun SettingsMenu(
             )
             SettingsDivider()
             SettingsRow(
+                icon = FeatherIcons.MessageSquare,
+                title = stringResource(R.string.settings_welcome_entries),
+                subtitle = stringResource(
+                    R.string.settings_welcome_entries_count,
+                    welcomeEntries.size,
+                    WELCOME_ENTRIES_MAX
+                ),
+                onClick = onOpenWelcomeEntriesSheet
+            )
+            SettingsDivider()
+            SettingsRow(
                 icon = FeatherIcons.Sliders,
                 title = stringResource(R.string.settings_appearance),
-                subtitle = "${stringResource(themeMode.labelRes)} · ${stringResource(userBubbleStyle.labelRes)}",
+                subtitle = stringResource(themeMode.labelRes),
                 onClick = { onOpen(SettingsSection.Appearance) }
             )
             SettingsDivider()

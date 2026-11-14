@@ -11,12 +11,16 @@ import kotlinx.serialization.Serializable
  * - [OPEN_TERMINAL]：打开终端。
  * - [OPEN_GIT]：打开 Git（版本控制页）。
  * - [FILL_PROMPT]：把 [WelcomeEntry.promptText] 填入输入框（可再编辑后发送）。
+ * - [OPEN_BROWSER]：打开内置浏览器。
+ * - [OPEN_HISTORY]：打开历史会话。
  */
 @Serializable
 enum class WelcomeEntryAction {
     OPEN_TERMINAL,
     OPEN_GIT,
-    FILL_PROMPT
+    FILL_PROMPT,
+    OPEN_BROWSER,
+    OPEN_HISTORY
 }
 
 /**

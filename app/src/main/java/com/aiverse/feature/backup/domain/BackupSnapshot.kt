@@ -56,6 +56,8 @@ data class BackupSnapshot(
     val optimizeProviderId: String = "",
     val optimizeModel: String = "",
     val syncSettings: SyncSettingsSnapshot? = null,
+    /** 自定义快捷入口（欢迎卡片）的 JSON 编码列表；null 表示旧备份无此字段或未备份应用设置，导入时忽略。 */
+    val welcomeEntriesJson: String? = null,
     val memories: List<MemoryDto> = emptyList(),
     val favorites: List<FavoriteItemDto> = emptyList(),
     val skills: List<SkillBackupMeta> = emptyList()
@@ -106,6 +108,8 @@ data class BackupMetadata(
     val optimizeProviderId: String = "",
     val optimizeModel: String = "",
     val syncSettings: SyncSettingsSnapshot? = null,
+    /** 自定义快捷入口（欢迎卡片）的 JSON 编码列表；null 表示旧备份无此字段或未备份应用设置，导入时忽略。 */
+    val welcomeEntriesJson: String? = null,
     val workspaces: List<WorkspaceBackupMeta> = emptyList(),
     val memories: List<MemoryDto> = emptyList(),
     val favorites: List<FavoriteItemDto> = emptyList(),
@@ -178,6 +182,7 @@ fun BackupSnapshot.toMetadata() = BackupMetadata(
     optimizeProviderId = optimizeProviderId,
     optimizeModel = optimizeModel,
     syncSettings = syncSettings,
+    welcomeEntriesJson = welcomeEntriesJson,
     memories = memories,
     favorites = favorites,
     skills = skills,

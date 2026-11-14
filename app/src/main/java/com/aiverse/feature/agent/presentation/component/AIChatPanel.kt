@@ -712,6 +712,7 @@ fun AIChatPanel(
     onNavigateToTerminal: () -> Unit = {},
     onNavigateToGit: () -> Unit = {},
     onNavigateToBrowser: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
     settingsViewModel: SettingsViewModel? = null,
     workspaceViewModel: WorkspaceViewModel? = null,
     onOpenDrawer: () -> Unit,
@@ -1919,6 +1920,8 @@ fun AIChatPanel(
                         welcomeEntries = welcomeEntries,
                         onNavigateToTerminal = onNavigateToTerminal,
                         onNavigateToGit = onNavigateToGit,
+                        onNavigateToBrowser = onNavigateToBrowser,
+                        onNavigateToHistory = onNavigateToHistory,
                         onFillPrompt = { prompt ->
                             // 仅当输入框为空时填入提示词（不自动发送）。
                             if (inputText.isBlank()) {

@@ -54,6 +54,7 @@ import com.aiverse.feature.settings.data.repository.ScreenOnSettingsRepository
 import com.aiverse.feature.settings.data.repository.LogSettingsRepository
 import com.aiverse.feature.settings.data.repository.SyncSettingsRepository
 import com.aiverse.feature.settings.data.repository.ThemeSettingsRepository
+import com.aiverse.feature.settings.data.repository.WelcomeEntriesRepository
 import com.aiverse.feature.settings.data.repository.VisionModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.OptimizeInputModelSettingsRepository
 import com.aiverse.feature.workspace.data.local.dao.RemoteConnectionDao
@@ -113,7 +114,8 @@ class BackupManagerImpl @Inject constructor(
     private val memoryRepository: MemoryRepository,
     private val favoriteRepository: FavoriteRepository,
     private val skillRepository: SkillRepository,
-    private val pluginRepository: PluginRepository
+    private val pluginRepository: PluginRepository,
+    private val welcomeEntriesRepository: WelcomeEntriesRepository
 ) : BackupManager {
 
     private val json = Json {
@@ -404,6 +406,7 @@ class BackupManagerImpl @Inject constructor(
         optimizeProviderId = if (options.appSettings) optimizeInputModelSettingsRepository.getOptimizeInputProviderId() else "",
         optimizeModel = if (options.appSettings) optimizeInputModelSettingsRepository.getOptimizeInputModel() else "",
         syncSettings = if (options.appSettings) syncSettingsRepository.snapshot() else null,
+        welcomeEntriesJson = if (options.appSettings) welcomeEntriesRepository.entriesJsonSnapshot() else null,
         workspaces = if (options.workspaceFiles) collectWorkspaceMetas() else emptyList(),
         memories = if (options.memories) collectMemories() else emptyList(),
         favorites = if (options.favorites) favoriteRepository.getAllOnce().map { it.toDto() } else emptyList(),
@@ -769,6 +772,7 @@ class BackupManagerImpl @Inject constructor(
                 optimizeInputModelSettingsRepository.setOptimizeInputModel(meta.optimizeProviderId, meta.optimizeModel)
             }
             meta.syncSettings?.let { syncSettingsRepository.restore(it) }
+            meta.welcomeEntriesJson?.let { welcomeEntriesRepository.restoreFromJson(it) }
         }
 
         if (meta.memories.isNotEmpty()) {

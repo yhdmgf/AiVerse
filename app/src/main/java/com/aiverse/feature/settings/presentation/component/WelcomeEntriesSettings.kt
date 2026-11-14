@@ -26,7 +26,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -116,6 +120,8 @@ internal fun WelcomeEntryAction.labelRes(): Int = when (this) {
     WelcomeEntryAction.OPEN_TERMINAL -> R.string.settings_welcome_entry_action_terminal
     WelcomeEntryAction.OPEN_GIT -> R.string.settings_welcome_entry_action_git
     WelcomeEntryAction.FILL_PROMPT -> R.string.settings_welcome_entry_action_fill
+    WelcomeEntryAction.OPEN_BROWSER -> R.string.settings_welcome_entry_action_browser
+    WelcomeEntryAction.OPEN_HISTORY -> R.string.settings_welcome_entry_action_history
 }
 
 /**
@@ -515,22 +521,41 @@ internal fun WelcomeEntryEditSheet(
                 colors = dialogTextFieldColors()
             )
 
-            Text(
-                text = stringResource(R.string.settings_welcome_entry_action),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             // stringResource 不能在非组合 lambda 里调用，提前在当前组合作用域取好标签。
-            val actionLabels = WelcomeEntryAction.entries.map { entryAction ->
-                stringResource(entryAction.labelRes())
+            val actionOptions = WelcomeEntryAction.entries.map { entryAction ->
+                entryAction to stringResource(entryAction.labelRes())
             }
-            SegmentedTabs(
-                selected = WelcomeEntryAction.entries.indexOf(action).coerceAtLeast(0),
-                labels = actionLabels,
-                onSelect = { index ->
-                    WelcomeEntryAction.entries.getOrNull(index)?.let { action = it }
+            var actionExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = actionExpanded,
+                onExpandedChange = { actionExpanded = it }
+            ) {
+                AppTextField(
+                    value = actionOptions.firstOrNull { it.first == action }?.second.orEmpty(),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = stringResource(R.string.settings_welcome_entry_action),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = actionExpanded) },
+                    colors = dialogTextFieldColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = actionExpanded,
+                    onDismissRequest = { actionExpanded = false }
+                ) {
+                    actionOptions.forEach { (entryAction, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                action = entryAction
+                                actionExpanded = false
+                            }
+                        )
+                    }
                 }
-            )
+            }
 
             if (action == WelcomeEntryAction.FILL_PROMPT) {
                 AppTextField(

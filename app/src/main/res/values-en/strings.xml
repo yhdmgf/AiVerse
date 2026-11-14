@@ -180,6 +180,8 @@
     <string name="settings_welcome_entry_action_terminal">Open Terminal</string>
     <string name="settings_welcome_entry_action_git">View Git Changes</string>
     <string name="settings_welcome_entry_action_fill">Fill Prompt</string>
+    <string name="settings_welcome_entry_action_browser">Open browser</string>
+    <string name="settings_welcome_entry_action_history">Open history</string>
     <string name="settings_welcome_entry_prompt">Prompt</string>
     <string name="settings_welcome_entry_prompt_hint">Prompt filled into the input on tap</string>
     <string name="settings_welcome_entry_icon">Icon</string>

@@ -98,6 +98,8 @@ import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalInputFontSizeSp
 import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.core.theme.glassBorderOr
+import com.aiverse.core.theme.glassOr
 import com.aiverse.core.theme.glassOr
 import com.aiverse.core.ui.rememberImeBottomInset
 import com.aiverse.core.ui.PressableSurface
@@ -1425,9 +1427,9 @@ internal fun ErrorBubble(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = Spacing.xs),
-        color = MaterialTheme.colorScheme.surface,
+        color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(Radius.md),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, glassBorderOr(MaterialTheme.semanticColors.surfaceGlassBorder))
     ) {
         // 折叠态收紧留白：上下内边距用 sm 而非 md，行内按钮收紧到 30dp，整卡高度贴近单行文字。
         Column(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)) {

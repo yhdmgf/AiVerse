@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -66,10 +67,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -712,13 +715,14 @@ internal fun RemoteConnectingPlaceholder(
  * 新对话页空状态：提示语 + 已启用快捷入口卡片网格（welcome entry）。
  *
  * 入口全部为空或全部禁用时仅显示提示语；否则在提示语下方渲染卡片网格。
- * 已启用入口正常显示；disabled 入口仍显示但置灰、点击无动作。
- * 网格列数：入口数 ≤4 时 2 列，>4 时最多 3 列（6 个 = 3×2）。
+ * 仅显示已启用入口；disabled 入口不渲染。网格固定每行最多 2 个（卡片横排：图标在左、文案在右）。
  *
  * @param bottomReserve 底部输入区留白（用于垂直居中偏移）。
- * @param welcomeEntries 可配置快捷入口列表（含 disabled；全禁用时整体不显示网格）。
+ * @param welcomeEntries 可配置快捷入口列表（仅渲染 enabled 项；全禁用时整体不显示网格）。
  * @param onNavigateToTerminal OPEN_TERMINAL 入口点击回调。
  * @param onNavigateToGit OPEN_GIT 入口点击回调。
+ * @param onNavigateToBrowser OPEN_BROWSER 入口点击回调。
+ * @param onNavigateToHistory OPEN_HISTORY 入口点击回调。
  * @param onFillPrompt FILL_PROMPT 入口点击回调，入参为填充提示词（是否填入由调用方决策）。
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -729,9 +733,11 @@ internal fun WelcomeState(
     welcomeEntries: List<WelcomeEntry> = emptyList(),
     onNavigateToTerminal: () -> Unit = {},
     onNavigateToGit: () -> Unit = {},
+    onNavigateToBrowser: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
     onFillPrompt: (String) -> Unit = {}
 ) {
-    val hasEnabled = remember(welcomeEntries) { welcomeEntries.any { it.enabled } }
+    val enabledEntries = remember(welcomeEntries) { welcomeEntries.filter { it.enabled } }
     BoxWithConstraints(
         modifier = modifier.padding(Spacing.xl),
         contentAlignment = Alignment.Center
@@ -747,20 +753,24 @@ internal fun WelcomeState(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             modifier = Modifier.offset(y = animatedOffset)
         ) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_monochrome),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.size(60.dp)
+            )
             Text(
                 text = stringResource(R.string.chat_placeholder),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(Modifier.height(Spacing.sm))
             Text(
                 text = stringResource(R.string.chat_input_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // 入口非空且至少有一个启用时显示网格；全部禁用则只保留提示语。
-            // 已启用入口正常显示；disabled 入口仍显示但置灰、点击无动作（见 WelcomeEntryCard）。
-            if (welcomeEntries.isNotEmpty() && hasEnabled) {
+            // 仅渲染已启用入口；全部禁用则只保留提示语。
+            if (enabledEntries.isNotEmpty()) {
                 Spacer(Modifier.height(Spacing.md))
                 FlowRow(
                     modifier = Modifier
@@ -768,9 +778,9 @@ internal fun WelcomeState(
                         .widthIn(max = 480.dp),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    maxItemsInEachRow = if (welcomeEntries.size <= 4) 2 else 3
+                    maxItemsInEachRow = 2
                 ) {
-                    welcomeEntries.forEach { entry ->
+                    enabledEntries.forEach { entry ->
                         WelcomeEntryCard(
                             entry = entry,
                             enabled = entry.enabled,
@@ -779,6 +789,8 @@ internal fun WelcomeState(
                                 when (entry.action) {
                                     WelcomeEntryAction.OPEN_TERMINAL -> onNavigateToTerminal()
                                     WelcomeEntryAction.OPEN_GIT -> onNavigateToGit()
+                                    WelcomeEntryAction.OPEN_BROWSER -> onNavigateToBrowser()
+                                    WelcomeEntryAction.OPEN_HISTORY -> onNavigateToHistory()
                                     WelcomeEntryAction.FILL_PROMPT -> onFillPrompt(entry.promptText)
                                 }
                             }
@@ -809,27 +821,28 @@ private fun WelcomeEntryCard(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         contentPadding = PaddingValues(Spacing.md)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             WelcomeEntryIcon(entry)
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (entry.subtitle.isNotBlank()) {
+            Column {
                 Text(
-                    text = entry.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (entry.subtitle.isNotBlank()) {
+                    Text(
+                        text = entry.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
