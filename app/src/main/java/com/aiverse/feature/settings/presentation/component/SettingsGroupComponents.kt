@@ -1,6 +1,7 @@
 package com.aiverse.feature.settings.presentation.component
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,6 +45,7 @@ import com.aiverse.R
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.theme.LocalIconColorful
+import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.glassOr
 import com.aiverse.core.theme.glassBorderOr
@@ -123,7 +125,9 @@ internal fun SettingsGroupHeader(text: String) {
 }
 
 /** 白色/深色分组圆角卡片容器：内部按行排布，行间用 [SettingsDivider] 分隔。
- *  磨砂铺开：背景改为半透明玻璃表面色 + 1dp 玻璃描边 + 轻阴影，圆角统一读密度 token。 */
+ *  磨砂铺开：背景改为半透明玻璃表面色 + 1dp 玻璃描边 + 轻阴影，圆角统一读密度 token。
+ *  浅色玻璃例外：描边已降为柔和浅色发丝线，若再叠阴影会与描边形成「两层框」（issue #106），
+ *  故浅色玻璃下去掉阴影只留一层边；深色玻璃与非玻璃档仍用 [UIDensityTokens.elevationSm] 不变。 */
 @Composable
 internal fun SettingsGroup(
     modifier: Modifier = Modifier,
@@ -131,12 +135,17 @@ internal fun SettingsGroup(
 ) {
     val t = LocalUIDensityTokens.current
     val semantic = MaterialTheme.semanticColors
+    val dark = isSystemInDarkTheme()
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = t.cardShape,
         color = glassOr(semantic.surfaceGlass, semantic.cardSurface),
         border = BorderStroke(1.dp, glassBorderOr(semantic.surfaceGlassBorder)),
-        shadowElevation = t.elevationSm
+        shadowElevation = if (LocalSurfaceGlassStyle.current && !dark) {
+            0.dp
+        } else {
+            t.elevationSm
+        }
     ) {
         Column(content = content)
     }

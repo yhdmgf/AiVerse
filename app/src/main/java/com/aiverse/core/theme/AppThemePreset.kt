@@ -335,18 +335,21 @@ private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean, glass: Boole
     val overlayAlpha = if (dark) 0.20f else 0.15f
     // 磨砂铺开基准：浅色 0.85 / 深色 0.86；轻量玻璃档（glass=true）沿用 HyperOS 种子、半透明磨砂铺开。
     // 深色玻璃必须更实：alpha 0.70 太透明，叠在底下亮内容/背景上会透出亮部、形成「中间白、边缘不均」
-    // 的观感；提到 0.86（对齐非玻璃深色基准）让深色玻璃保持「深色为主、均匀磨砂」。浅色玻璃本身偏白，
-    // 透出浅色内容影响小，保留 0.70 轻透。
+    // 的观感；提到 0.86（对齐非玻璃深色基准）让深色玻璃保持「深色为主、均匀磨砂」。
+    // 浅色玻璃：设置页等纯色背景上，alpha 0.70 的白叠在 #F5F5F6 底色上有效色约 #FCFCFC、与底色几乎无差，
+    // 呈现的是「发灰」而非「通透」（底下没有内容可透，半透明只是把卡片颜色变脏）。提到 0.90 让卡片成为
+    // 干净近白实面，观感对齐默认档的干净层次；真玻璃感仍只在独立弹层窗口（见 AdaptiveModalBottomSheet）。
     val surfaceGlassAlpha = when {
-        glass -> if (dark) 0.86f else 0.70f
+        glass -> if (dark) 0.86f else 0.90f
         dark -> 0.86f
         else -> 0.85f
     }
-    // 玻璃档描边：不用偏黑的 outlineVariant（深色下呈明显黑边、压内容），改用近前景色（onSurface）的
-    // 低不透明度模拟玻璃边缘反光——浅色为半透明黑、深色为半透明白，观感是柔和发丝线而非黑框。
+    // 玻璃档描边：深色下用近前景色（onSurface=白）的低不透明度模拟玻璃边缘反光，观感是柔和发丝线。
+    // 浅色下原用半透明黑（onSurface@0.30），在浅色卡片上是一条明显的深灰细线，叠加卡片阴影后像「两层框」
+    // （issue #106）；改用 outlineVariant 系浅描边并把不透明度降到 0.15，只留一层柔和边。
     // 非玻璃档保持原 outlineVariant 逻辑不变。
     val glassBorderAlpha = when {
-        glass -> if (dark) 0.22f else 0.30f
+        glass -> if (dark) 0.22f else 0.15f
         dark -> 0.45f
         else -> 0.60f
     }
@@ -376,10 +379,11 @@ private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean, glass: Boole
         capsuleSurface = lerp(seed.surfaceVariant, seed.onSurface, 0.07f),
         buttonMutedBg = lerp(seed.surfaceVariant, seed.onSurface, 0.03f),
         surfaceGlass = seed.surface.copy(alpha = surfaceGlassAlpha),
-        surfaceGlassBorder = if (glass) {
-            seed.onSurface.copy(alpha = glassBorderAlpha)
-        } else {
-            seed.outlineVariant.copy(alpha = glassBorderAlpha)
+        surfaceGlassBorder = when {
+            // 深色玻璃：保留半透明白发丝线（onSurface=白），观感与既有深色档一致。
+            glass && dark -> seed.onSurface.copy(alpha = glassBorderAlpha)
+            // 浅色玻璃：改浅描边色（outlineVariant），消除深灰细线；非玻璃档同样走 outlineVariant。
+            else -> seed.outlineVariant.copy(alpha = glassBorderAlpha)
         }
     )
 }
