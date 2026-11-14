@@ -110,7 +110,6 @@ import com.aiverse.feature.phonecontrol.presentation.UnlockScreen
 import com.aiverse.feature.settings.presentation.SkillImportState
 import com.aiverse.feature.settings.presentation.SkillUiEntry
 import com.aiverse.feature.agent.domain.skill.SkillImportError
-import com.aiverse.feature.agent.domain.skill.SkillParser
 import com.aiverse.feature.agent.domain.skill.SkillScope
 import com.aiverse.feature.settings.presentation.SubAgentUiEntry
 import compose.icons.FeatherIcons
@@ -1002,19 +1001,12 @@ fun SettingsScreen(
                                             section = SettingsSection.SkillEditor
                                         }
                                     )
-                                    // 分享：把技能完整 markdown（含 frontmatter）发出去，朋友可直接重新导入
+                                    // 分享：把整个技能目录打包 zip 走系统分享（与批量分享一致，脚本/资源不丢）
                                     DropdownMenuItem(
                                         text = { SkillMenuRow(FeatherIcons.Share2, stringResource(R.string.skills_share)) },
                                         onClick = {
                                             skillMoreExpanded = false
-                                            val text = SkillParser.serialize(
-                                                name = entry.name,
-                                                description = entry.description,
-                                                requiredTools = entry.requiredTools,
-                                                instructions = entry.instructions,
-                                                fileWhitelist = entry.fileWhitelist
-                                            )
-                                            skillShareExport.shareText(text, context.getString(R.string.skills_share_chooser))
+                                            shareSkillEntries(listOf(entry))
                                         }
                                     )
                                     // 导出：把技能目录打包 zip，用 SAF 存到本地
@@ -2156,6 +2148,7 @@ internal fun SettingsMenu(
                     )
                 }
             )
+            SettingsDivider()
             SettingsRow(
                 icon = FeatherIcons.Globe,
                 title = stringResource(R.string.settings_language),

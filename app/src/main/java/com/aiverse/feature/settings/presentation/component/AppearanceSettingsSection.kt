@@ -592,12 +592,12 @@ private fun BubbleOpacityRow(
                 color = MaterialTheme.semanticColors.subtleText
             )
         }
+        // 不设 steps：连续轨道与「蒙版强度」等其它百分比滑块保持同一套样式（末端单圆点、无密排刻度）。
         Slider(
             value = local.toFloat(),
             onValueChange = { local = it.roundToInt() },
             onValueChangeFinished = { onSet(local) },
-            valueRange = AppearanceFontRanges.OPACITY_MIN.toFloat()..AppearanceFontRanges.OPACITY_MAX.toFloat(),
-            steps = (AppearanceFontRanges.OPACITY_MAX - AppearanceFontRanges.OPACITY_MIN - 1)
+            valueRange = AppearanceFontRanges.OPACITY_MIN.toFloat()..AppearanceFontRanges.OPACITY_MAX.toFloat()
         )
         BubblePreviewBlock(style = style, opacity = local)
     }
