@@ -3,6 +3,7 @@ package com.aiverse.feature.settings.data.remote
 import android.content.Context
 import android.os.Build
 import com.aiverse.R
+import com.aiverse.core.markdown.GithubFlavoredMarkdown
 import com.aiverse.feature.settings.data.repository.UpdateChannel
 import com.aiverse.feature.settings.presentation.component.compareVersions
 import com.aiverse.feature.settings.presentation.component.parseVersionTag
@@ -114,30 +115,17 @@ class UpdateCheckService @Inject constructor(
         val notes = release.notes.trim()
         return VersionUpdate(
             tag = release.rawTag,
+            // GitHub Release 的 body 本身就是 Markdown，这里不再洗成纯文本：
+            // 只做 GitHub 扩展语法的补全（告警块、#issue / GH-issue / owner/repo#issue / @user
+            // 自动链接），标题、列表、表格、代码块交给渲染器处理。
             changelog = if (notes.isEmpty()) {
                 context.getString(R.string.about_no_changelog)
             } else {
-                cleanMarkdown(notes)
+                GithubFlavoredMarkdown.prepare(notes, RELEASE_REPO)
             },
             asset = selectUpdateAsset(release.assets, release.rawTag, preferredAbiToken(Build.SUPPORTED_ABIS.toList()))
         )
     }
-
-    /** 轻量清理 markdown：去掉行首标题符与粗体标记，删除 GitHub 自动生成的标题/链接行与表格行，保留纯文本便于直接阅读。 */
-    private fun cleanMarkdown(text: String): String = text
-        .lines()
-        .map { it.trimEnd().replace("**", "") }
-        .map { it.replace(Regex("^#{1,6}\\s+"), "") }
-        .filterNot { line ->
-            val t = line.trim()
-            t.startsWith("What's Changed") ||
-                t.startsWith("What's New") ||
-                t.startsWith("Full Changelog:") ||
-                t.startsWith("|")
-        }
-        .joinToString("\n")
-        .replace(Regex("\n{3,}"), "\n\n")
-        .trim()
 
     private data class ReleaseInfo(
         val version: String,
@@ -166,6 +154,9 @@ class UpdateCheckService @Inject constructor(
 
     private companion object {
         const val GITHUB_RELEASES_API = "https://api.github.com/repos/yhdmgf/AiVerse/releases"
+
+        /** 裸 `#123` / `GH-123` 自动链接需要仓库坐标。 */
+        val RELEASE_REPO = GithubFlavoredMarkdown.RepoRef("yhdmgf", "AiVerse")
         const val SHA256_PREFIX = "sha256:"
         val SHARED_CLIENT by lazy {
             okhttp3.OkHttpClient.Builder()
