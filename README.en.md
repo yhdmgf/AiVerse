@@ -12,11 +12,6 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
   <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/alpine-linux"><img src="https://img.shields.io/badge/topic-alpine--linux-0078D6.svg" alt="Topic: alpine-linux" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/aiverse"><img src="https://img.shields.io/badge/topic-aiverse-0078D6.svg" alt="Topic: aiverse" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/agent"><img src="https://img.shields.io/badge/topic-agent-0078D6.svg" alt="Topic: agent" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/android"><img src="https://img.shields.io/badge/topic-android-0078D6.svg" alt="Topic: android" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/mcp"><img src="https://img.shields.io/badge/topic-mcp-0078D6.svg" alt="Topic: mcp" /></a>
 </p>
 
 <p align="center">
@@ -84,6 +79,31 @@ There is nothing to set up beforehand: install the app, configure a model under 
 - **Appearance & language** — Light/dark themes, preset color schemes, Material You colors, custom background images, and a bilingual (Chinese/English) UI
 - **Network proxy** — Configure a global proxy and per-provider proxies separately
 - **Backup & Restore** — Encrypted export/import of provider configs, credentials, chat history and workspace files
+
+## Plugin System
+
+AiVerse has a powerful plugin system that allows third-party developers to extend the app with new capabilities. A plugin is a packaged zip file that, once installed, can add new tools, skills, and providers to the AI, create new UI entry points in settings, sidebars, and chat menus, or connect new MCP servers. All plugins are managed under "Settings → Plugins".
+
+### What Plugins Can Do
+
+- **New AI Tools**: Register callable tools that appear in the AI's tool list and are invoked like built-in tools
+- **Skills & Sub-agents**: Add standard workflows (skills) or specialized roles (sub-agents) for specific task types
+- **New UI Entry Points**: Add entry points in settings, sidebar bottom, chat menus, file tree long-press menus, etc.
+- **MCP Servers**: Connect external tools via MCP, started/stopped with the plugin
+- **AI Providers**: Add a new provider with a "Plugin" tag in "Settings → AI Providers"
+- **Overlay, Backup Integration, etc.**: Some plugins may request overlay windows, participate in backups, or invoke Shizuku
+
+### Three Installation Methods
+
+1. **From zip Package**: Get the plugin zip, go to "Settings → Plugins", tap "+" in the top right, and select the zip
+2. **From Plugin Store**: Switch to the "Store" tab, browse or search for plugins, and tap Install
+3. **Development Directory (Live Reload)**: Enable developer mode, and plugin directories under `~/.aiverse/plugin-dev/` will automatically appear; file changes are automatically repackaged and replaced
+
+### Plugin Security
+
+Plugins come from third-party developers, so please verify the source is trustworthy before installing. Plugins run as isolated processes (Node or Python) in the container with file read/write, network access, and command execution capabilities. The store performs security audits, and the host provides permission controls (Shizuku commands, overlay windows, and backup read/write can be authorized individually).
+
+> 📖 **Learn More**: Check out the [Plugin Installation & Usage Guide](https://www.aivapp.cn/guide/scripts) or [Plugin Development Guide](https://www.aivapp.cn/advanced/plugin-dev) to learn how to install, use, or develop plugins.
 
 ## Getting Started
 
