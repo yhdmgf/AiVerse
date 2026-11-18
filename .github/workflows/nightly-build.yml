@@ -26,32 +26,66 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 早退检测：放在所有步骤之前，上次测试版构建的 commit 与本次 HEAD 相同则跳过整个 job
+      # （不只跳过 build，连 JDK / 迁移对账 / 插件对账 / 还原签名一并跳过），避免对同一提交重复跑。
+      # 判定来源：测试版仓库 yhdmgf/aiverse-beta 最新 release body 里的「commit xxx」，与 git rev-parse HEAD 比对。
+      - name: 早退检测（与上次构建同 commit 则跳过）
+        id: earlycheck
+        env:
+          GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
+          TARGET_REPO: yhdmgf/aiverse-beta
+        run: |
+          set -e
+          SHA=$(git rev-parse HEAD)
+          PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
+                  | sed 's/^v//' | sort -V | tail -n1 || true)
+          PREV_SHA=""
+          if [ -n "$PREV" ]; then
+            PREV_BODY=$(gh release view "$PREV" --repo "$TARGET_REPO" --json body -q .body 2>/dev/null || true)
+            if [ -n "$PREV_BODY" ]; then
+              PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
+            fi
+          fi
+          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$SHA" ]; then
+            echo "上次构建 commit $SHA 与本次 HEAD 相同，跳过整个构建"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "需要构建（上次=${PREV_SHA:-无} 本次=$SHA）"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up JDK
+        if: steps.earlycheck.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: 迁移对账
+        if: steps.earlycheck.outputs.skip != 'true'
         run: python3 scripts/check_migrations.py
 
       # 插件 host 方法表对账：宿主 PluginRuntimeManager 的 host.* 分支与
       # plugins/sdk/types/host.d.ts 的 HostMethodMap 必须一一对应，改宿主忘改 SDK 会在这里被拦。
       - name: Check plugin host methods
+        if: steps.earlycheck.outputs.skip != 'true'
         run: node scripts/check-host-methods.mjs
 
       # 插件页面桥对账：PluginWebBridge / PluginOverlayBridge 的 dispatch 分支与
       # assets/plugin-ui/aicode.js 的 call(...) 必须一一对应，否则运行期 METHOD_UNKNOWN。
       - name: Check plugin page bridge
+        if: steps.earlycheck.outputs.skip != 'true'
         run: node scripts/check-page-bridge.mjs
 
       # 插件清单校验：用 plugins/schema/plugin.schema.json 校验仓库内所有 plugin.json，
       # 字段写错在 CI 就暴露，不用等装到设备上被 PluginManifestParser 拒绝。
       - name: Check plugin manifests
+        if: steps.earlycheck.outputs.skip != 'true'
         run: node scripts/check-plugin-manifests.mjs
 
       # beta 继承 release 的签名配置，需先从仓库 Secrets 还原签名密钥（与 android-release.yml 一致，不入库）。
       - name: 还原 release 签名（从仓库 Secrets 注入）
+        if: steps.earlycheck.outputs.skip != 'true'
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -63,40 +97,14 @@ jobs:
           printf 'storeFile=AiVerse.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > app/keystore.properties
 
-      # 哈希检测：上次构建的 commit 与本次 HEAD 相同则跳过本次构建（避免对同一提交重复构建/发布）
-      - name: 检测是否需要构建
-        id: check
-        env:
-          GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
-          TARGET_REPO: yhdmgf/aiverse-beta
-        run: |
-          set -e
-          SHA=$(git rev-parse HEAD)
-          PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
-                  | sed 's/^v//' | sort -V | tail -n1)
-          PREV_SHA=""
-          if [ -n "$PREV" ]; then
-            PREV_BODY=$(gh release view "$PREV" --repo "$TARGET_REPO" --json body -q .body 2>/dev/null || true)
-            if [ -n "$PREV_BODY" ]; then
-              PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
-            fi
-          fi
-          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$SHA" ]; then
-            echo "上次构建 commit $SHA 与本次 HEAD 相同，跳过构建"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "需要构建（上次=${PREV_SHA:-无} 本次=$SHA）"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       # 三架构 beta 包：universal（通用，含 arm+x86 两套镜像）/ armsolo（arm64 真机）/ x86solo（x86_64 模拟器）
       - name: 构建 beta 测试包（三架构，正式签名）
-        if: steps.check.outputs.skip != 'true'
+        if: steps.earlycheck.outputs.skip != 'true'
         run: |
           ./gradlew :app:assembleUniversalBeta :app:assembleArmsoloBeta :app:assembleX86soloBeta
 
       - name: 收集产物
-        if: steps.check.outputs.skip != 'true'
+        if: steps.earlycheck.outputs.skip != 'true'
         run: |
           set -e
           mkdir -p dist
@@ -150,7 +158,7 @@ jobs:
           ls -la dist/
 
       - name: 输出构建信息到运行摘要
-        if: steps.check.outputs.skip != 'true'
+        if: steps.earlycheck.outputs.skip != 'true'
         run: |
           SHA=$(git rev-parse --short HEAD)
           echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
@@ -163,7 +171,7 @@ jobs:
 
       # 三架构 APK 各自独立 + 测试版说明 txt，作为测试版仓库 Release 的资产。
       - name: 发布到测试版仓库 Releases
-        if: steps.check.outputs.skip != 'true'
+        if: steps.earlycheck.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
           TARGET_REPO: yhdmgf/aiverse-beta
