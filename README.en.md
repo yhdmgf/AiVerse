@@ -6,12 +6,11 @@
     <br />
     <a href="README.md">中文</a> · <a href="README.en.md">English</a>
   </p>
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
-  <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
+  <p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
+    <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
+    <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
+  </p>
 </p>
 
 <p align="center">
@@ -102,8 +101,6 @@ AiVerse has a powerful plugin system that allows third-party developers to exten
 ### Plugin Security
 
 Plugins come from third-party developers, so please verify the source is trustworthy before installing. Plugins run as isolated processes (Node or Python) in the container with file read/write, network access, and command execution capabilities. The store performs security audits, and the host provides permission controls (Shizuku commands, overlay windows, and backup read/write can be authorized individually).
-
-> 📖 **Learn More**: Check out the [Plugin Installation & Usage Guide](https://www.aivapp.cn/guide/scripts) or [Plugin Development Guide](https://www.aivapp.cn/advanced/plugin-dev) to learn how to install, use, or develop plugins.
 
 ## Getting Started
 
