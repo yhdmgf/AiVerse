@@ -21,6 +21,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.aiverse.R
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.ui.markdown.githubAlertBlockQuote
+import com.aiverse.feature.agent.presentation.component.MarkdownContent
 import com.aiverse.feature.settings.presentation.UpdateCheckUiState
 
 /**
@@ -154,18 +156,27 @@ internal fun UpdateCheckDialog(
     }
 }
 
-/** 更新日志正文：限高可滚动，避免超长 changelog 把弹窗撑出屏幕。 */
+/**
+ * 更新日志正文：按 Markdown 渲染。
+ *
+ * GitHub Release 的 body 是 Markdown（标题、列表、表格、代码块、`> [!NOTE]` 告警块），
+ * 以前这里用 `Text` 直接显示，导致正文满是 `#`、`**`、`-` 之类原始符号。现在复用聊天页
+ * 的 Markdown 渲染器，链接点开走系统浏览器；高度按 320dp 封顶后可滚动，避免超长
+ * changelog 把弹窗撑出屏幕。
+ */
 @Composable
 private fun ChangelogText(changelog: String) {
-    Text(
+    MarkdownContent(
         text = changelog,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 320.dp)
             .verticalScroll(rememberScrollState())
             .padding(end = Spacing.xs),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        compact = true,
+        // GitHub 的 > [!NOTE] 等告警块渲染成带图标的卡片；非告警引用块仍走库默认样式。
+        blockQuote = githubAlertBlockQuote(),
     )
 }
 

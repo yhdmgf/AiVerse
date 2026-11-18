@@ -55,6 +55,7 @@ import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
 import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.compose.Markdown
+import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.components.MarkdownComponents
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBackground
@@ -143,7 +144,9 @@ internal fun MarkdownContent(
     /** 代码块自动折叠：超过阈值行数时折叠，可点击展开。 */
     codeAutoFoldEnabled: Boolean = false,
     /** 代码块显示行号。 */
-    codeShowLineNumber: Boolean = false
+    codeShowLineNumber: Boolean = false,
+    /** 引用块自定义渲染（GitHub 告警卡片等）；null 时走渲染库默认样式，聊天页观感不变。 */
+    blockQuote: (@Composable (MarkdownComponentModel) -> Unit)? = null
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val semantic = MaterialTheme.semanticColors
@@ -339,85 +342,102 @@ internal fun MarkdownContent(
             }
 
             // markdownComponents 是 @Composable（内部自带记忆化），不能套 remember，直接调用。
-            val mdComponents = markdownComponents(
+            // 各组件先落到局部变量，避免「是否自定义引用块」两个分支重复整段 lambda。
+            val textComponent: @Composable (MarkdownComponentModel) -> Unit = { model ->
                 // 正文文本节点：技术关键词（函数/类/变量/API）与核心短语（结论/报错/失败等）高亮，
                 // 用 SpanStyle 着色加粗，不改文本结构，一眼定位重点。
-                text = { model ->
-                    val keywordColor = MaterialTheme.colorScheme.primary
-                    val emphasizeColor = MaterialTheme.colorScheme.error
-                    val readColor = MaterialTheme.colorScheme.primary
-                    MarkdownBasicText(
-                        text = remember(model.content, keywordColor, emphasizeColor, readProgress, readColor, text) {
-                            val base = highlightTechnicalKeywords(model.content, keywordColor, emphasizeColor)
-                            if (readProgress != null && model.content.isNotEmpty()) {
-                                // 按节点在源文本的偏移近似定位已读范围，给节点内已读字符着色。
-                                val srcProgress = (text.length * readProgress).toInt()
-                                val readInNode = (srcProgress - model.node.startOffset)
-                                    .coerceIn(0, model.content.length)
-                                if (readInNode > 0) {
-                                    buildAnnotatedString {
-                                        append(base)
-                                        addStyle(SpanStyle(color = readColor), 0, readInNode)
-                                    }
-                                } else base
+                val keywordColor = MaterialTheme.colorScheme.primary
+                val emphasizeColor = MaterialTheme.colorScheme.error
+                val readColor = MaterialTheme.colorScheme.primary
+                MarkdownBasicText(
+                    text = remember(model.content, keywordColor, emphasizeColor, readProgress, readColor, text) {
+                        val base = highlightTechnicalKeywords(model.content, keywordColor, emphasizeColor)
+                        if (readProgress != null && model.content.isNotEmpty()) {
+                            // 按节点在源文本的偏移近似定位已读范围，给节点内已读字符着色。
+                            val srcProgress = (text.length * readProgress).toInt()
+                            val readInNode = (srcProgress - model.node.startOffset)
+                                .coerceIn(0, model.content.length)
+                            if (readInNode > 0) {
+                                buildAnnotatedString {
+                                    append(base)
+                                    addStyle(SpanStyle(color = readColor), 0, readInNode)
+                                }
                             } else base
-                        },
-                        style = model.typography.paragraph
+                        } else base
+                    },
+                    style = model.typography.paragraph
+                )
+            }
+            // 外层 SelectionContainer（MessageBubbles）统一负责选区；超长助手消息已由
+            // AIChatPanel 拆成多条有界 item，不存在超长单 item 的选区树/交互失效问题。
+            val codeFenceComponent: @Composable (MarkdownComponentModel) -> Unit = { model ->
+                MarkdownCodeFence(
+                    content = model.content,
+                    node = model.node,
+                ) { code, language, style ->
+                    SafeMarkdownHighlightedCode(
+                        code, language, style, highlightsBuilder, showHeader = true,
+                        wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
                     )
-                },
-                // 外层 SelectionContainer（MessageBubbles）统一负责选区；超长助手消息已由
-                // AIChatPanel 拆成多条有界 item，不存在超长单 item 的选区树/交互失效问题。
-                codeFence = {
-                    MarkdownCodeFence(
-                        content = it.content,
-                        node = it.node,
-                    ) { code, language, style ->
-                        SafeMarkdownHighlightedCode(
-                            code, language, style, highlightsBuilder, showHeader = true,
-                            wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
-                        )
-                    }
-                },
-                codeBlock = {
-                    MarkdownCodeBlock(
-                        content = it.content,
-                        node = it.node,
-                    ) { code, language, style ->
-                        SafeMarkdownHighlightedCode(
-                            code, language, style, highlightsBuilder, showHeader = true,
-                            wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
-                        )
-                    }
-                },
-                // 库默认 maxLines=1 + Ellipsis，单元格长文会被截断；这里放开为完整多行显示。
-                table = {
-                    MarkdownTable(
-                        content = it.content,
-                        node = it.node,
-                        style = it.typography.table,
-                        headerBlock = { content, header, tableWidth, style ->
-                            MarkdownTableHeader(
-                                content = content,
-                                header = header,
-                                tableWidth = tableWidth,
-                                style = style,
-                                maxLines = Int.MAX_VALUE,
-                                overflow = TextOverflow.Clip,
-                            )
-                        },
-                        rowBlock = { content, header, tableWidth, style ->
-                            MarkdownTableRow(
-                                content = content,
-                                header = header,
-                                tableWidth = tableWidth,
-                                style = style,
-                                maxLines = Int.MAX_VALUE,
-                                overflow = TextOverflow.Clip,
-                            )
-                        },
+                }
+            }
+            val codeBlockComponent: @Composable (MarkdownComponentModel) -> Unit = { model ->
+                MarkdownCodeBlock(
+                    content = model.content,
+                    node = model.node,
+                ) { code, language, style ->
+                    SafeMarkdownHighlightedCode(
+                        code, language, style, highlightsBuilder, showHeader = true,
+                        wrapEnabled = codeWrapEnabled, autoFold = codeAutoFoldEnabled, showLineNumber = codeShowLineNumber
                     )
-                },
-            )
+                }
+            }
+            // 库默认 maxLines=1 + Ellipsis，单元格长文会被截断；这里放开为完整多行显示。
+            val tableComponent: @Composable (MarkdownComponentModel) -> Unit = { model ->
+                MarkdownTable(
+                    content = model.content,
+                    node = model.node,
+                    style = model.typography.table,
+                    headerBlock = { content, header, tableWidth, style ->
+                        MarkdownTableHeader(
+                            content = content,
+                            header = header,
+                            tableWidth = tableWidth,
+                            style = style,
+                            maxLines = Int.MAX_VALUE,
+                            overflow = TextOverflow.Clip,
+                        )
+                    },
+                    rowBlock = { content, header, tableWidth, style ->
+                        MarkdownTableRow(
+                            content = content,
+                            header = header,
+                            tableWidth = tableWidth,
+                            style = style,
+                            maxLines = Int.MAX_VALUE,
+                            overflow = TextOverflow.Clip,
+                        )
+                    },
+                )
+            }
+
+            // 只在使用方显式提供引用块渲染时才覆盖：聊天页传 null，引用块保持库默认样式。
+            val mdComponents = if (blockQuote != null) {
+                markdownComponents(
+                    text = textComponent,
+                    codeFence = codeFenceComponent,
+                    codeBlock = codeBlockComponent,
+                    table = tableComponent,
+                    blockQuote = blockQuote,
+                )
+            } else {
+                markdownComponents(
+                    text = textComponent,
+                    codeFence = codeFenceComponent,
+                    codeBlock = codeBlockComponent,
+                    table = tableComponent,
+                )
+            }
 
             // 防护：流式中间态（streamingCacheKey != null）、空白内容、解析出空 AST
             // （顶层无任何块）都不进入第三方渲染库——该库 0.41.0 对不完整的 Markdown AST
