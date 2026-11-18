@@ -24,7 +24,13 @@ class PhoneControlStatus @Inject constructor(
         /** 当前操作描述（如「正在读屏」），无则 null。 */
         val currentAction: String? = null,
         /** 最近几步操作（倒序，最新在前）。 */
-        val recentSteps: List<String> = emptyList()
+        val recentSteps: List<String> = emptyList(),
+        /** 最近一次操作是否已结束（悬浮条据此进入可展开的结果态）。 */
+        val finished: Boolean = false,
+        /** 最近一次操作的结果摘要，无则 null。 */
+        val resultSummary: String? = null,
+        /** 最近一次操作是否成功；null 表示未知/未上报。 */
+        val success: Boolean? = null
     )
 
     private val _state = MutableStateFlow(State())
@@ -38,14 +44,39 @@ class PhoneControlStatus @Inject constructor(
         _state.value = prev.copy(
             active = true,
             currentAction = action,
-            recentSteps = (listOf(action) + prev.recentSteps).take(maxSteps)
+            recentSteps = (listOf(action) + prev.recentSteps).take(maxSteps),
+            finished = false,
+            resultSummary = null,
+            success = null
         )
         OverlayBarService.show(context)
     }
 
-    /** 当前操作完成（保留最近步骤，供点开查看；悬浮球不自动隐藏）。 */
+    /** 当前操作完成（保留最近步骤与结果摘要，供点开查看；悬浮球不自动隐藏）。 */
     fun end() {
-        _state.value = _state.value.copy(active = false, currentAction = null)
+        val prev = _state.value
+        _state.value = prev.copy(
+            active = false,
+            currentAction = null,
+            finished = true,
+            resultSummary = prev.currentAction ?: prev.recentSteps.firstOrNull(),
+            success = prev.success
+        )
+    }
+
+    /**
+     * 以明确的结果结束本轮操作：置完成态并结束 active，供悬浮条展示结果卡片。
+     * [success] 为 null 表示未上报成败（按普通完成处理）。
+     */
+    fun finish(summary: String?, success: Boolean?) {
+        val prev = _state.value
+        _state.value = prev.copy(
+            active = false,
+            currentAction = null,
+            finished = true,
+            resultSummary = summary ?: prev.currentAction ?: prev.recentSteps.firstOrNull(),
+            success = success
+        )
     }
 
     /** 清空并隐藏灵动岛。 */

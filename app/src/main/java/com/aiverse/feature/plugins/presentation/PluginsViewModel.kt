@@ -62,15 +62,20 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -198,7 +203,10 @@ class PluginsViewModel @Inject constructor(
     private val systemService: PluginSystemService,
     private val introspectionService: PluginIntrospectionService,
     private val toolService: PluginToolService,
+    private val permissionService: com.aiverse.feature.plugins.runtime.PluginPermissionService,
+    private val sessionSourceService: com.aiverse.feature.plugins.runtime.PluginSessionHostService,
     private val httpService: PluginHttpService,
+    private val providerService: com.aiverse.feature.plugins.runtime.PluginProviderService,
     private val memoryToggleRepository: MemoryToggleRepository
 ) : ViewModel() {
 
@@ -248,6 +256,10 @@ class PluginsViewModel @Inject constructor(
 
     private val _importState = MutableStateFlow<PluginImportState>(PluginImportState.Idle)
     val importState: StateFlow<PluginImportState> = _importState.asStateFlow()
+
+    /** 已安装插件导出结果：成功给打包好的 zip 文件（供界面层 FileProvider 分享），失败给原因。 */
+    private val _exportResult = MutableSharedFlow<Result<File>>(extraBufferCapacity = 1)
+    val exportResult: SharedFlow<Result<File>> = _exportResult.asSharedFlow()
 
     private val _dependencyStates = MutableStateFlow<Map<String, PluginDependencyUiState>>(emptyMap())
     val dependencyStates: StateFlow<Map<String, PluginDependencyUiState>> = _dependencyStates.asStateFlow()
@@ -358,6 +370,33 @@ class PluginsViewModel @Inject constructor(
                     (current as? PluginImportState.Preview)?.copy(installing = false, error = result.error) ?: current
                 }
             }
+        }
+    }
+
+    /** 把已安装插件打包为可再导入的 zip（`plugin.json` 在包根），拷到 cacheDir/share 供系统分享。 */
+    fun exportPlugin(pluginId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val installed = plugins.value.firstOrNull { it.id == pluginId }
+                    ?: error("插件未安装: $pluginId")
+                val dir = manager.pluginDir(pluginId)
+                if (!dir.isDirectory) error("插件目录缺失: $pluginId")
+                val shareDir = File(context.cacheDir, "share").apply { mkdirs() }
+                val version = installed.manifest?.version?.toString() ?: "unknown"
+                val out = File(shareDir, "${pluginId}_${version}.zip")
+                val root = dir.canonicalFile
+                ZipOutputStream(out.outputStream().buffered()).use { zos ->
+                    root.walkTopDown().filter { it.isFile }.forEach { file ->
+                        // 条目名取相对插件目录的路径，保证 plugin.json 落在 zip 根，能被 import 重新识别
+                        val entryName = file.canonicalFile.relativeTo(root).invariantSeparatorsPath
+                        zos.putNextEntry(ZipEntry(entryName))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+                out
+            }
+            _exportResult.tryEmit(result)
         }
     }
 
@@ -810,7 +849,10 @@ class PluginsViewModel @Inject constructor(
             systemService = systemService,
             introspectionService = introspectionService,
             toolService = toolService,
+            permissionService = permissionService,
+            sessionSourceService = sessionSourceService,
             httpService = httpService,
+            providerService = providerService,
             environment = pageEnvironment,
             theme = theme,
             onClosePage = onClosePage,

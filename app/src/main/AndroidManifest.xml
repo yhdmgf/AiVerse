@@ -101,6 +101,30 @@
             </intent-filter>
         </activity>
 
+        <!-- 通过协议直接导入插件（测试）：`aiverse://?url=<zip直链>` 或 `aiverse://plugin?url=<zip直链>`。
+             无 host 的 `aiverse://?url=` 必须单独用 scheme-only 过滤器（不能与 host 过滤器混在同一个 intent-filter，
+             否则 Android 匹配不可靠、打不开）；`aiverse://plugin` 用独立的 host 过滤器。
+             auth/backup 有更具体的 host+path 过滤器，对本 app 自定义 scheme 的匹配优先级更高，互不冲突。 -->
+        <activity
+            android:name=".feature.plugins.presentation.PluginImportActivity"
+            android:exported="true"
+            android:theme="@style/Theme.AICode">
+            <!-- 无 host：aiverse://?url=<zip直链> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aiverse" />
+            </intent-filter>
+            <!-- 有 host：aiverse://plugin?url=<zip直链> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aiverse" android:host="plugin" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name=".feature.workspace.data.provider.WorkspaceDocumentsProvider"
             android:authorities="${applicationId}.documents"

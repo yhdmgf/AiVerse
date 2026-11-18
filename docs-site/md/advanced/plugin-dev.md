@@ -75,7 +75,7 @@ demo-kit/
 | MCP 配置 | 256 KiB |
 | 清单图标位图（`.png` / `.webp`） | 256 KiB |
 
-包内不得放入可执行原生代码：`.so` / `.dex` / `.apk` / `.jar` / `.wasm` / `.class` 一类产物不属于声明式插件内容，请勿打包。ZIP 里的符号链接与权限位会被忽略，所有条目都以普通文件写出，不会在磁盘生成链接或可执行文件。
+不要把可执行原生产物（`.so` / `.dex` / `.apk` / `.jar` / `.wasm` / `.class` 一类）打进包里——它们不属于声明式插件内容，客户端安装与商店审核都不保证放行。ZIP 里的符号链接与权限位会被忽略，所有条目都以普通文件写出，不会在磁盘生成链接或可执行文件。
 
 ### 商店下载限制
 
@@ -317,7 +317,7 @@ demo-kit/
 
 `page` 与 `handler` 必须且只能出现一个。每个插件**最多声明 2 条** `uiEntries`（`backup.data` 槽位最多 1 条），超出在安装时拒绝。动作入口返回 `{message}` 时宿主用 toast 显示。
 
-**12 个槽位：**
+**13 个槽位（12 个界面槽 + 1 个数据槽）：**
 
 | `slot` | 位置 | 限制 |
 | --- | --- | --- |
@@ -389,7 +389,37 @@ demo-kit/
 | `backup.export.before` | 一次完整备份写入归档前 | observe（需 `backup`） |
 | `backup.import.finished` | 一次还原成功后 | observe（需 `backup`） |
 
-`agent.tool.before` 可返回 `decision: "deny"` 阻止执行，或 `arguments` 改写参数（改写后宿主会重新走完整权限判断）。`agent.tool.after` 可改写成功结果的 `data`。`agent.http.before` 可改写 `url` / `headers` / `body`；其敏感请求头在 payload 中只以占位符出现，插件原样回传占位符且请求仍发往原 origin 时，宿主才恢复真实值。
+`agent.tool.before` 可返回 `decision: "deny"` 阻止执行，或 `arguments` 改写参数（改写后宿主会重新走完整权限判断），或 `delegate: {handler}` 选择插件执行方。`agent.tool.after` 可改写成功结果的 `data`。`agent.http.before` 可改写 `url` / `headers` / `body`；其敏感请求头在 payload 中只以占位符出现，插件原样回传占位符且请求仍发往原 origin 时，宿主才恢复真实值。
+
+### 委托工具执行
+
+声明 `agent.tool.before`、`mode: "transform"` 的插件可以返回 `delegate: {handler: "tools.remote"}`。before handler 只能选择执行方，不应在这里执行工具或产生工具副作用。宿主收齐最终参数并重新完成权限与模式检查后，才调用选中的执行 handler；`decision: "allow"` 也不能跳过检查。委托执行受原工具相同的权限边界约束，不扩大 PLAN 或 DENY 的权限。
+
+多个 hook 按原顺序处理，首个合法委托固定归属其插件、版本与 handler；后续 hook 仍可改参数或拒绝，但不能抢占执行方。执行时使用最终参数。宿主生成独立执行标识并绑定运行、工具调用与插件，不能指定其他插件。插件停用、更新、执行错误、超时或取消均不会回退本地工具。委托保留原工具卡片、进度与 started/finished 通知，但不创建本地文件修改检查点。插件不得代审已委托给自身执行的原生工具调用。
+
+使用 SDK 的 `toolDelegate` 包装执行 handler：异步生成器 `yield` 进度文本，`return` 最终 JSON 数据，抛异常表示失败。需要取消的网络请求、子进程等应监听 `signal` 并终止实际工作；宿主取消等待不等于能强制终止插件的任意外部副作用。
+
+```ts
+import { definePlugin, toolDelegate } from '@jieapi/plugin-sdk';
+
+definePlugin({ handlers: {
+  'hooks.route': (payload) => payload.toolName === 'readFile'
+    ? { delegate: { handler: 'tools.remote' } }
+    : {},
+  'tools.remote': toolDelegate(async function* ({ arguments: args, signal }) {
+    yield 'Reading remote file';
+    const response = await fetch(String(args.path), { signal });
+    if (!response.ok) throw new Error(`Read failed: ${response.status}`);
+    return { content: await response.text() };
+  })
+} });
+```
+
+非 SDK 实现使用同一 handler 的 `start` / `next` / `cancel` 操作：请求包含 `executionId`、`runId`、`callId`、`toolName`，只有 start 包含最终 `arguments`。响应必须回传相同 executionId，格式为 `{type: "progress", chunk}`、`{type: "pending"}`、`{type: "completed", data}` 或 `{type: "error", message}`。next 应长轮询约 25 秒，单次 RPC 上限 35 秒；同一 executionId 不得重复启动或并发读取。SDK 每次只拉取一个增量，限制单条进度为 64 Ki 字符，避免无界队列。完成、失败或取消后的执行标识在当前进程内保留 31 分钟用于拒绝重复启动；进程重启不保证跨进程去重，执行方仍应对外部副作用使用业务幂等标识。宿主总执行上限 30 分钟，异常或取消后最多等待 2 秒发送 cancel；SDK 通过 AbortSignal 通知执行方并清理状态。
+
+### 主动授权请求
+
+插件可以通过 `hostCall('host.permissions.request', ...)` 请求 App 原生单次授权卡片；请求绑定来源插件与会话，不产生永久授权，也不能覆盖宿主工具的 DENY/PLAN。页面对应 `aicode.permissions.request(options)` / `cancel(requestId)`。卡片由 App 固定标注插件来源，返回 `allow` / `deny` / `cancel`，默认等待 2 分钟，可用 `timeoutMs` 设置 1 秒至 10 分钟；超时、工作区切换、会话移除或插件停用时取消。
 
 `plugin.installed` / `plugin.enabled` 异步派发；`plugin.uninstalled` / `plugin.disabled` 在状态变更前同步等待（单次最多约 10 秒），给插件清理自己数据的机会，但插件不能阻止操作。这四个事件只派发给事件对应的插件。
 
@@ -474,7 +504,7 @@ demo-kit/
 { "configPage": "pages/config.html" }
 ```
 
-也可写在 `contributes.configPage`。必须是包内 `.html` / `.htm` 文件，最大 512 KiB。配置页只出现在「设置 → 插件」的插件详情中，不会混入设置主菜单。
+也可写在 `contributes.configPage`。必须是包内 `.html` / `.htm` 文件，最大 512 KiB。配置页只出现在「设置 → 插件」的插件详情中，不会混入设置主菜单。配置页适用于填写 API Key、开关和选项，仅在插件启用且首次切到配置标签时加载；停留在原生管理标签时不会提前执行页面脚本。停用、卸载或替换安装会使旧页面桥失效并取消该桥的在途任务、文件订阅和模型流；重新启用后需要重新打开页面，旧桥不会恢复授权。
 
 ---
 
@@ -676,7 +706,7 @@ demo-kit-1.0.0.zip
 | 清单缺少 / 无效字段 | 提示会写出具体路径，按上文逐字段对照 |
 | 此版本不支持的字段 / 内容类型 | 用了未实现的能力；未知字段不会被忽略 |
 | hooks 或 uiEntries 声明了 handler 但未声明 runtime | 带 handler 的贡献均需 `runtime` |
-| `uiEntries` 的 `slot` 无效 | 拼错槽位名会使整个清单无效，按 12 槽位表核对 |
+| `uiEntries` 的 `slot` 无效 | 拼错槽位名会使整个清单无效，按上面 13 个槽位表核对 |
 | `uiEntries` 的 `page` 不是 HTML | `page` 必须指向包内 `.html` / `.htm` |
 | `uiEntries` 同时声明或缺少入口类型 | `page`、`handler` 必须且只能出现一个 |
 | `backup.data` 写了 page / handler / confirm | 该槽位只接受数据选项 |
@@ -695,14 +725,51 @@ demo-kit-1.0.0.zip
 插件通过插件索引（`index.json`）分发，插件包统一放在商店仓库 **main 分支的 `packages/` 目录**（文件名 `{id}_{version}.zip`），**不使用 GitHub Release**。整体流程：
 
 1. **上传图标**：在插件商店的发布入口上传插件图标；
-2. **暂存仓库**：把插件提交为待审条目（`.zip` 文件名建议用 `{id}_{version}.zip`）；
-3. **审核**：提交由**后端人工审核**，通过后才进入商店；
-4. **发布到 main**：审核通过后，后端用 GitHub Contents API 把插件包写入 `packages/{id}_{version}.zip`，并更新仓库根目录的 `index.json` 条目，均提交到 main 分支；
+2. **填写作者名**：首次上传时会弹出对话框要求填写「作者名」（uploader），**必填且首次填写后固定**，用于插件所有者校验；
+3. **暂存仓库**：把插件提交为待审条目（`.zip` 文件名建议用 `{id}_{version}.zip`）；
+4. **审核**：提交由**后端人工审核**，通过后才进入商店；
+5. **发布到 main**：审核通过后，后端用 GitHub Contents API 把插件包写入 `packages/{id}_{version}.zip`，并更新仓库根目录的 `index.json` 条目，均提交到 main 分支；
+   > 包文件名 `{id}_{version}.zip` 中的 `id` 第一段必须是作者名、不能以 `aiverse` 开头（`aiverse.*` 为官方保留），版本号用下划线连接且不带 `v` 前缀，例如 `yhdmgf.desktop-pet_1.1.0.zip`；不符该格式会在上传/审核环节被拒。
 5. **进入商店**：客户端从 main 分支拉 `index.json` 列表，再从 `packages/` 下载对应 `{id}_{version}.zip` 安装。
 
 > 客户端只从 main 分支的 `packages/` 下载，仓库或目录不存在时会直接提示未找到（HTTP 404）。更新插件时递增 `version` 并重新走一遍发布流程即可。
 
-**审计拦截**：上传与审核阶段会拦截可疑内容，包括路径越界（`..`、绝对路径）、可执行产物，以及代码里的 `eval`、`Runtime`、`su`、`pm install`、`sh -c` 等高危调用。
+### 插件所有者校验
+
+为防止插件 ID 被冒名顶替，商店服务端实施**所有者校验**机制：
+
+- **首次上传**：填写「作者名」（uploader）作为插件所有者标识，记录在待审核队列；
+- **后续更新**：必须匹配首次上传时填写的作者名，否则会被拒绝（HTTP 403「该插件属于其他作者，你不能更新」）；
+- **管理员特权**：管理员登录后台审核时，不受所有者限制，可以更新任何插件；
+- **所有者转移**：管理员可在后台「ID 管理」功能里手动修改插件所有者（转移所有权）。
+
+> 注意：作者名（uploader）和 plugin.json 里的 `author` 字段是两个概念：
+> - `uploader`：上传者标识，用于所有者校验，只在后台审核队列显示；
+> - `author`：插件作者，在商店和客户端显示，必须符合正则 `^[a-z][a-z0-9-]*$` 且与 `id` 第一段一致。
+>
+> 两者可以不同（例如：张三开发插件，李四帮忙上传，则 `author=张三`、`uploader=李四`）。
+
+> 说明：上传 → 暂存 → 人工审核 → 写入 `packages/` 与 `index.json` 这条链路运行在插件商店的服务端，不在 App 客户端里；客户端只负责从 `main` 拉取 `index.json` 并下载 `packages/` 里的包。
+
+### index.json 的字段与校验
+
+`index.json` 由商店服务端维护，客户端拉取后按下列规则严格校验，任一条不满足会拒绝整个索引：
+
+| 字段 | 约束 |
+| --- | --- |
+| `schema_version` | 必须为 `1` |
+| 插件条目数 | 不超过上限 `MAX_PLUGINS` |
+| `id` | 符合插件 ID 规则，且全表不得重复 |
+| `author` | 正则 `^[a-z][a-z0-9-]*$`，且必须与 `id` 第一段（发布者）一致 |
+| `repository` | 必须是 `https` 且 host 为 `github.com` |
+| `version` | 禁止 `v` 前缀，须为合法语义化版本 |
+| `min_app_version` | 须为合法语义化版本 |
+| `logo` / `homepage` | 必须是 `https` |
+| `tags` | 取值只能来自 `provider` / `tool` / `skill` / `agent` / `mcp` / `ui` / `integration` / `other`，最多 4 个且不得重复 |
+
+> 「官方」标记不是 `tags` 里的一个值，而是按索引里 `author` 是否在官方白名单判定。
+
+**审计拦截**：上传与审核阶段（商店服务端）会拦截可疑内容，包括路径越界（`..`、绝对路径）、可执行产物，以及代码里的 `eval`、`Runtime`、`su`、`pm install`、`sh -c` 等高危调用。这是商店侧的审核行为，不是客户端安装时的强制校验。
 
 **放行**：Node / Python 的正常能力是放行的，例如 `child_process`、`spawn`、`fs`、`http` 等标准库与 API 的常规使用不算违规——插件本就运行在自己的进程里，靠宿主的授权策略约束危险动作。
 
@@ -880,3 +947,5 @@ rl.on('line', (line) => {
 - **改版本号才触发更新**：在线更新依赖 `version` 变化；发布更新时务必递增版本号。
 - **商店索引更新后下拉刷新**：索引更新后商店列表不会自动变化，需手动下拉刷新。
 - **子代理别绑 provider / model**：插件子代理声明 `provider` 或 `model` 会被拒绝，一律继承父会话。
+- **runtime 进程依赖 Linux 容器**：`runtime` 声明的入口是跑在宿主内置 Linux 容器里的独立进程（Node / Python）。**容器未安装/未初始化时进程无法启动**，所有经 runtime 的调用（`tool.invoke`、`hook`、`ui.invoke`）都会返回 `PLUGIN_RUNTIME_UNAVAILABLE`，而纯页面型插件（无 runtime）不受影响。遇到这个错误先确认设备上「终端」功能已把容器初始化好，别急着改插件代码。
+- **插件 ID 第一段必须是作者名**：`id` 形如 `作者名.插件名`，宿主强制校验 `id` 第一段等于 `publisher`（见 [`id` 与 `publisher`](#id-与-publisher)）。`aiverse.*` 是官方保留命名空间，第三方插件用它会被商店判为冒充官方并拒绝。发布包文件名也须是 `作者名.插件名_版本号.zip`。

@@ -13,6 +13,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -28,12 +29,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +83,8 @@ import com.aiverse.core.ui.ExpandableChevronIcon
 import compose.icons.feathericons.Clock
 import compose.icons.feathericons.Key
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /** 涟漪高光一个来回的周期（ms）。 */
 private const val RIPPLE_PERIOD_MS = 1600
@@ -101,6 +111,7 @@ private const val RIPPLE_PEAK_ALPHA = 0.5f
  * 文字像素上把字朝背景提亮，形成一道掠过的光泽，而不是盖上一层灰。
  *
  * 性能：进度在 [drawWithContent] 的绘制阶段读取（`by` 委托在 lambda 内取值），只重绘、不重组。
+ * 侧栏打开等场景经 [chatAnimationsEnabled] 关掉，直接不注册动画、不重绘。
  */
 @Composable
 internal fun Modifier.rippleHighlight(
@@ -108,6 +119,7 @@ internal fun Modifier.rippleHighlight(
     bandRatio: Float = RIPPLE_BAND_RATIO,
     periodMs: Int = RIPPLE_PERIOD_MS
 ): Modifier {
+    if (!chatAnimationsEnabled()) return this
     val transition = rememberInfiniteTransition(label = "ripple-highlight")
     val progress by transition.animateFloat(
         initialValue = 0f,
@@ -613,7 +625,10 @@ internal fun rememberTypewriterStreamingText(
 @Composable
 internal fun StreamingBubble(
     text: String,
-    cache: MarkdownRenderCache? = null
+    cache: MarkdownRenderCache? = null,
+    /** 流式缓存归属 key（`消息id:content`）：让流式中间态只挂在本人身上，交接后按 key 释放，
+     *  不污染同轮接力的落库消息缓存。非 null 时预处理结果不入全局缓存。 */
+    streamingCacheKey: String? = null
 ) {
     val renderText = text
     val t = LocalUIDensityTokens.current
@@ -629,6 +644,7 @@ internal fun StreamingBubble(
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm),
                 cache = cache,
+                streamingCacheKey = streamingCacheKey,
                 blockBackground = blockBackground,
                 blockTextColor = blockTextColor,
             )
@@ -669,7 +685,29 @@ private val REASONING_PREVIEW_MARKERS = charArrayOf(' ', '\t', '#', '*', '-', '>
 private val ReasoningWindowMaxHeight = 300.dp
 
 /**
- * 思考过程折叠行：左对齐、浅色弱化，与正式回复区分。**默认收起**，点这一行随时展开/收起。
+ * 思考窗口内层懒列表的预组合窗口。
+ *
+ * 长思考由大量 Markdown 段落组成，滚动时每个新段落首次进入视口都要做一次注解与文本测量，
+ * 这段工作落在滚动帧里就会掉帧。视口前后各预组合一屏，把首次组合提前到滚动之前，
+ * 同时让来回滚动时已看过的段落继续留在组合树里，不再反复冷启动。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private val ReasoningCacheWindow = LazyLayoutCacheWindow(
+    ahead = ReasoningWindowMaxHeight,
+    behind = ReasoningWindowMaxHeight / 2
+)
+
+/** 新建思考窗口的滚动状态：带预组合窗口，长思考滚动更稳。 */
+@OptIn(ExperimentalFoundationApi::class)
+internal fun newReasoningScrollState(): LazyListState =
+    LazyListState(ReasoningCacheWindow, 0, 0)
+
+/**
+ * 思考过程折叠行：左对齐、浅色弱化，与正式回复区分。默认展开态由 [defaultExpanded] 决定
+ * （「偏好设置 → 思考自动展开」），点这一行随时展开/收起。
+ *
+ * 展开态与其他正文一样可长按选中复制（外层 [SelectionContainer] 统一负责选区）；
+ * 内容仍用懒渲染，超长思考不会因展开而一次性组合全部块。
  *
  * 收起态只占一行：行首思考图标 + 一行内容预览（见 [reasoningPreviewLine]，超宽省略号截断）；
  * 展开态换成完整正文（Markdown 渲染）。两态之间没有「显示尾巴几行」的中间态。
@@ -677,6 +715,7 @@ private val ReasoningWindowMaxHeight = 300.dp
  * [live] 表示思考仍在进行中：折叠行的预览取最后一行、跟着内容滚动，不展开也能看到模型在想什么；
  * 思考结束后预览固定为第一行。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ReasoningBubble(
     text: String,
@@ -693,14 +732,21 @@ internal fun ReasoningBubble(
     live: Boolean = false,
     /** 展开态的外部覆盖（宿主持久化，见 [AIAgentViewModel.reasoningExpansionOverrides]）；null = 用内部状态。 */
     expandedOverride: Boolean? = null,
+    /** 没有外部覆盖时的初始展开态，取自「思考自动展开」偏好。 */
+    defaultExpanded: Boolean = false,
     /** 手动展开/收起时回传新状态，由上层持久化。 */
-    onExpandedChange: ((Boolean) -> Unit)? = null
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+    /** 展开窗口内层懒列表的滚动状态：上层（AIChatPanel）按消息 id 复用，切页返回不丢滚动位置，
+     *  默认带预组合窗口（[ReasoningCacheWindow]），长思考滚动更稳。 */
+    scrollState: LazyListState = rememberLazyListState(ReasoningCacheWindow, 0, 0),
+    streamingCacheKey: String? = null,
 ) {
-    var localExpanded by remember { mutableStateOf(false) }
+    var localExpanded by remember { mutableStateOf(defaultExpanded) }
     val expanded = expandedOverride ?: localExpanded
     val toggleExpanded: (Boolean) -> Unit = { next ->
         if (onExpandedChange != null) onExpandedChange(next) else localExpanded = next
     }
+    val latestToggleExpanded by rememberUpdatedState(toggleExpanded)
     // 存绝对起始时间戳而非累加
     // 毫秒数，切页返回或气泡滚出视口重挂载后显示的仍是真实时长；起始戳连同已见文本的长度与
     // 指纹一起进 saveable，恢复时文本若不是同一轮的延续（期间已换轮）则重新计时。
@@ -781,22 +827,35 @@ internal fun ReasoningBubble(
                 Spacer(Modifier.height(Spacing.sm))
                 // 展开态用懒渲染（LazyMarkdownSuccess）：超长思考只组合可见块，不再一次性
                 // 组合全部节点把 Compose ChangeList 撑爆（OOM 根因）。高度上限交给内层 LazyColumn 自行滚动。
-                MarkdownContent(
-                    text = renderText,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    cache = cache,
-                    compact = true,
-                    lazyScroll = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = ReasoningWindowMaxHeight)
-                        .nestedScroll(rememberBoundNestedScrollConnection())
-                        .pointerInput(text) {
-                            detectTapGestures(
-                                onDoubleTap = { toggleExpanded(false) }
-                            )
-                        }
-                )
+                // 外层 SelectionContainer 负责长按选区：选中块会被 LazyColumn 钉住不回收，
+                // 复制只包含已组合的可见内容，与聊天正文的选区行为一致。
+                SelectionContainer {
+                    CompositionLocalProvider(
+                        LocalTextSelectionColors provides TextSelectionColors(
+                            handleColor = MaterialTheme.colorScheme.primary,
+                            backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.32f),
+                        )
+                    ) {
+                        MarkdownContent(
+                            text = renderText,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            cache = cache,
+                            compact = true,
+                            lazyScroll = true,
+                            lazyListState = scrollState,
+                            streamingCacheKey = streamingCacheKey,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = ReasoningWindowMaxHeight)
+                                .nestedScroll(rememberBoundNestedScrollConnection())
+                                .pointerInput(text) {
+                                    detectTapGestures(
+                                        onDoubleTap = { toggleExpanded(false) }
+                                    )
+                                }
+                        )
+                    }
+                }
             }
         }
     }
@@ -817,7 +876,11 @@ internal fun TypingDots(
     /** 是否单独给读屏播报「正在生成」：嵌在 [AgentBusyIndicator] 里时由外层状态行统一播报。 */
     announce: Boolean = true
 ) {
-    val transition = rememberInfiniteTransition(label = "typing-dots")
+    val transition = if (chatAnimationsEnabled()) {
+        rememberInfiniteTransition(label = "typing-dots")
+    } else {
+        null
+    }
     val label = stringResource(R.string.chat_status_generating)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -829,7 +892,7 @@ internal fun TypingDots(
             )
     ) {
         repeat(3) { index ->
-            val offsetY by transition.animateFloat(
+            val offsetY by if (transition != null) transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 0f,
                 animationSpec = infiniteRepeatable(
@@ -844,7 +907,7 @@ internal fun TypingDots(
                     initialStartOffset = StartOffset(index * 150)
                 ),
                 label = "dot-$index"
-            )
+            ) else rememberUpdatedState(0f)
             Box(
                 modifier = Modifier
                     .graphicsLayer { translationY = offsetY }

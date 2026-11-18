@@ -124,6 +124,12 @@ class WorkspaceRepository @Inject constructor(
     private val externalWorkspacesKey = stringPreferencesKey("external_workspaces")
 
     /**
+     * 工作区显示名（别名）持久化：JSON `Map<String,String>`，键按作用域区分（见 [aliasScopeKey]），
+     * 避免不同模式（内部/外部/远程）同名目录互相覆盖。别名不走 [sanitize]（仅目录名走），只 trim + 限长 + 去重。
+     */
+    private val workspaceAliasesKey = stringPreferencesKey("workspace_aliases")
+
+    /**
      * 所有项目的父目录，固定用内部 filesDir（app 私有 ext4）。
      *
      * 必须是 ext4：外部私有目录（getExternalFilesDir）落在 emulated/FUSE 存储，内核拒绝
@@ -278,13 +284,14 @@ class WorkspaceRepository @Inject constructor(
     }
 
     private suspend fun refreshLocalWorkspaces(): List<Workspace> {
+        val aliases = readAliases()
         val internal = projectsRoot.listFiles { f -> f.isDirectory }
             ?.sortedBy { it.name.lowercase() }
             ?.map { Workspace(name = it.name, path = it.absolutePath) }
             ?: emptyList()
         // 外部本地工作区：失联（目录被移动/删除）时保留记录并标记不可用，目录恢复后自动重新可用
         val external = mapExternalWorkspaces(readExternalWorkspaces()) { File(it).isDirectory }
-        return internal + external
+        return (internal + external).map { it.mergeAlias(aliases) }
     }
 
     /** exec 列出 remoteWorkspacePath 下的子目录作为工作区（不用 SFTP，避免 sshj Buffer bug）。 */
@@ -294,6 +301,7 @@ class WorkspaceRepository @Inject constructor(
             return emptyList()
         }
         val wsRoot = pathHomeResolver.expandHome(cfg.remoteWorkspacePath.trimEnd('/'))
+        val aliases = readAliases()
         return runCatching {
             // 目录名可含空格，不能交给 xargs/basename 按空白分词（会把 "new api" 拆成两条），
             // 用 glob 逐项原样输出目录名。
@@ -308,7 +316,7 @@ class WorkspaceRepository @Inject constructor(
         }.getOrElse {
             FileLogger.w(TAG, "远程工作区列表失败: $wsRoot", it)
             emptyList()
-        }
+        }.map { it.mergeAlias(aliases) }
     }
 
     /** 同步执行远程命令并返回 stdout（供工作区列表/新建/删除用）。 */
@@ -496,6 +504,12 @@ class WorkspaceRepository @Inject constructor(
             }
             target?.let { sessionUseCase.deleteSessionsByWorkspace(it.path) }
         }
+        // 删除工作区时清掉对应别名，避免同名目录重建后意外继承旧显示名
+        target?.let { ws ->
+            val key = aliasScopeKey(ws)
+            val map = readAliases().toMutableMap()
+            if (map.remove(key) != null) writeAliases(map)
+        }
         refreshWorkspaces()
         FileLogger.i(TAG, "删除工作区: $name")
     }
@@ -520,6 +534,56 @@ class WorkspaceRepository @Inject constructor(
     private suspend fun writeExternalWorkspaces(list: List<ExternalWorkspaceRecord>) {
         context.workspaceDataStore.edit { it[externalWorkspacesKey] = json.encodeToString(list) }
     }
+
+    // ── 工作区显示名（别名） ────────────────────────────────
+
+    /** 读别名表；损坏时忽略并返空（与外部工作区记录同一容错策略）。 */
+    private suspend fun readAliases(): Map<String, String> {
+        val raw = context.workspaceDataStore.data.first()[workspaceAliasesKey] ?: return emptyMap()
+        return runCatching { json.decodeFromString<Map<String, String>>(raw) }
+            .getOrElse {
+                FileLogger.w(TAG, "工作区别名解析失败，已忽略", it)
+                emptyMap()
+            }
+    }
+
+    private suspend fun writeAliases(map: Map<String, String>) {
+        context.workspaceDataStore.edit { it[workspaceAliasesKey] = json.encodeToString(map) }
+    }
+
+    /** 别名作用域键：区分内部/外部/远程，避免不同模式同名目录覆盖。远程沿用 host:port 作用域（与 currentNameKeyForMode 思路一致）。 */
+    private fun aliasScopeKey(ws: Workspace): String = when (ws.type) {
+        WorkspaceType.INTERNAL -> "internal:${ws.name}"
+        WorkspaceType.EXTERNAL_LOCAL -> "external:${ws.name}"
+        WorkspaceType.REMOTE -> {
+            val cfg = remoteSshConnection.config
+            val host = cfg?.let { "${it.host}:${it.port}" } ?: ""
+            "remote:$host:${ws.name}"
+        }
+    }
+
+    /** 按作用域键把别名合并进 [Workspace.displayName]，逻辑字段（name/path/type）不变。 */
+    private fun Workspace.mergeAlias(aliases: Map<String, String>): Workspace =
+        copy(displayName = aliases[aliasScopeKey(this)])
+
+    /**
+     * 设置/清除工作区显示名（别名）。仅影响展示，不动磁盘目录与会话；传 null/空白即清除、退回目录名。
+     * 别名不走 [sanitize]（仅目录名走），只 trim + 限长 64，允许中文/空格。
+     * 供重命名与备份还原（[renameWorkspace] / BackupManagerImpl）共用。
+     */
+    suspend fun setWorkspaceAlias(workspace: Workspace, alias: String?) = withContext(Dispatchers.IO) {
+        val cleaned = alias?.trim()?.take(64).orEmpty()
+        val map = readAliases().toMutableMap()
+        val key = aliasScopeKey(workspace)
+        if (cleaned.isEmpty()) map.remove(key) else map[key] = cleaned
+        writeAliases(map)
+        refreshWorkspaces()
+        FileLogger.i(TAG, "设置工作区别名: ${workspace.name} -> ${cleaned.ifEmpty { "<清除>" }}")
+    }
+
+    /** 重命名工作区显示名（别名）：磁盘目录不动，会话与项目级配置保留。 */
+    suspend fun renameWorkspace(workspace: Workspace, newDisplayName: String) =
+        setWorkspaceAlias(workspace, newDisplayName)
 
     /** 单引号转义，保证 shell 命令安全。 */
     private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"

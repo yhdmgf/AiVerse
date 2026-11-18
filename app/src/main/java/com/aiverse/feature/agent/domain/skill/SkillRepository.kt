@@ -29,13 +29,14 @@ class SkillRepository @Inject constructor(
     private val skillConfigRepository: SkillConfigRepository,
     private val fileAccess: FileAccessProvider
 ) {
-    /** 全部技能（含来源作用域），未过滤禁用；同名技能项目级优先（与 MCP 两级配置一致）。 */
-    fun listAllSkills(): List<SkillEntry> =
-        mergeAll(globalDirectorySkillSource.listSkills(), projectDirectorySkillSource.listSkills())
+    /** 全部技能（含来源作用域），未过滤禁用；同名技能项目级优先（与 MCP 两级配置一致）。
+     *  [force]=true 时不依赖上层缓存短路（当前各来源自身按快照指纹缓存解析，仓库层无额外缓存）。 */
+    fun listAllSkills(force: Boolean = false): List<SkillEntry> =
+        mergeAll(globalDirectorySkillSource.listSkills(force), projectDirectorySkillSource.listSkills(force))
 
     /** 启用的技能列表（注入系统提示词用），禁用技能被过滤。 */
-    fun listSkills(): List<Skill> =
-        filterDisabled(listAllSkills(), skillConfigRepository.disabledNames()).map { it.skill }
+    fun listSkills(force: Boolean = false): List<Skill> =
+        filterDisabled(listAllSkills(force), skillConfigRepository.disabledNames()).map { it.skill }
 
     /** 当前被禁用的技能名集合（小写归一化）。批量判断取一次即可，避免逐个重读配置文件。 */
     fun disabledNames(): Set<String> = skillConfigRepository.disabledNames()

@@ -111,6 +111,7 @@ import com.aiverse.feature.settings.data.repository.BackgroundMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
 import com.aiverse.feature.settings.data.repository.ImageGenModelSettingsRepository
 import com.aiverse.feature.settings.data.repository.VisionModelSettingsRepository
+import com.aiverse.feature.workspace.domain.RemoteAgentConfigIdentityChangedException
 import com.aiverse.feature.workspace.domain.model.RemoteConnection
 import com.aiverse.feature.workspace.domain.repository.RemoteRepository
 import com.aiverse.feature.settings.domain.model.AIProviderConfig
@@ -731,6 +732,9 @@ class SettingsViewModel @Inject constructor(
     private val _deleteExternalWorkspaceSessions = MutableStateFlow(false)
     val deleteExternalWorkspaceSessions: StateFlow<Boolean> = _deleteExternalWorkspaceSessions.asStateFlow()
 
+    private val _mcpLazyTools = MutableStateFlow(false)
+    val mcpLazyTools: StateFlow<Boolean> = _mcpLazyTools.asStateFlow()
+
     private val _themeMode = MutableStateFlow(AppThemeMode.AUTO)
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
@@ -1276,6 +1280,12 @@ class SettingsViewModel @Inject constructor(
             launch {
                 generalSettingsRepository.deleteExternalWorkspaceSessionsFlow.collectLatest {
                     _deleteExternalWorkspaceSessions.value = it
+                }
+            }
+
+            launch {
+                generalSettingsRepository.mcpLazyToolsFlow.collectLatest {
+                    _mcpLazyTools.value = it
                 }
             }
 
@@ -1916,7 +1926,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _skills.value = withContext(Dispatchers.IO) {
                 val disabled = skillRepository.disabledNames()
-                skillRepository.listAllSkills().map { entry ->
+                val entries = try {
+                    skillRepository.listAllSkills()
+                } catch (error: java.io.IOException) {
+                    if (error is java.io.InterruptedIOException) throw error
+                    // 刚启动/刚切远程时 SSH 未就绪、或读取中连接身份变化均为瞬态，后续会自动重扫，降为 DEBUG。
+                    if (isTransientRemoteConfigError(error)) {
+                        FileLogger.d("SettingsViewModel", "技能清单等待 SSH 就绪")
+                    } else {
+                        FileLogger.w("SettingsViewModel", "技能清单读取失败", error)
+                    }
+                    emptyList()
+                }
+                entries.map { entry ->
                     SkillUiEntry(
                         name = entry.skill.name,
                         description = entry.skill.description,
@@ -2141,7 +2163,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _subAgents.value = withContext(Dispatchers.IO) {
                 val disabled = agentDefinitionRepository.disabledNames()
-                agentDefinitionRepository.listAll().map { entry ->
+                val entries = try {
+                    agentDefinitionRepository.listAll()
+                } catch (error: java.io.IOException) {
+                    if (error is java.io.InterruptedIOException) throw error
+                    if (isTransientRemoteConfigError(error)) {
+                        FileLogger.d("SettingsViewModel", "子代理清单等待 SSH 就绪")
+                    } else {
+                        FileLogger.w("SettingsViewModel", "子代理清单读取失败", error)
+                    }
+                    emptyList()
+                }
+                entries.map { entry ->
                     SubAgentUiEntry(
                         name = entry.definition.name,
                         description = entry.definition.description,
@@ -2680,6 +2713,13 @@ class SettingsViewModel @Inject constructor(
     fun setDeleteExternalWorkspaceSessions(enabled: Boolean) {
         viewModelScope.launch {
             generalSettingsRepository.setDeleteExternalWorkspaceSessions(enabled)
+        }
+    }
+
+    /** MCP 工具按需加载（实验）：开启后 MCP 工具不再逐个注册，改用 mcp_search / mcp_call 两个入口。 */
+    fun setMcpLazyTools(enabled: Boolean) {
+        viewModelScope.launch {
+            generalSettingsRepository.setMcpLazyTools(enabled)
         }
     }
 
@@ -3761,3 +3801,14 @@ private fun String.hasExtension(exts: Set<String>): Boolean {
     if (dot < 0 || dot == length - 1) return false
     return substring(dot + 1).lowercase() in exts
 }
+
+/**
+ * 远程模式下技能/子代理清单的“暂不可用”是否属于瞬态：
+ * - 刚启动/刚切换模式时 SSH 配置或主目录尚未就绪（异常文案标识）；
+ * - 读取过程中连接身份变化（刚好连上或重连，见 [RemoteAgentConfigIdentityChangedException]）。
+ * 这两类后续会被连接就绪/文件变更监听重扫补齐，不应按故障打 WARN。
+ */
+private fun isTransientRemoteConfigError(error: java.io.IOException): Boolean =
+    error is RemoteAgentConfigIdentityChangedException ||
+        error.message == "SSH configuration unavailable" ||
+        error.message == "SSH home unavailable"

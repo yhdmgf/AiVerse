@@ -46,6 +46,7 @@ import com.aiverse.feature.agent.domain.tool.toTransportString
 import com.aiverse.feature.plugins.runtime.PermissionReviewDecision
 import com.aiverse.feature.plugins.runtime.PluginHookDispatcher
 import com.aiverse.feature.plugins.runtime.PluginProviderIds
+import com.aiverse.feature.plugins.runtime.ToolDelegation
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.settings.data.remote.ModelMetadataService
 import com.aiverse.feature.settings.data.repository.CompactionModelSettingsRepository
@@ -139,6 +140,7 @@ class StatefulAgentWorkflow @Inject constructor(
         const val USER_REJECTED_CODE = "USER_REJECTED"
         const val PLUGIN_HOOK_DENIED = "PLUGIN_HOOK_DENIED"
         const val PLUGIN_REVIEW_DENIED = "PLUGIN_REVIEW_DENIED"
+        const val PLUGIN_DELEGATION_FAILED = "PLUGIN_DELEGATION_FAILED"
         const val TITLE_GENERATOR_FILE = "agent/title-generator.md"
         const val TITLE_MAX_CHARS = 50
         const val COMMIT_GENERATOR_FILE = "agent/commit-generator.md"
@@ -527,6 +529,9 @@ class StatefulAgentWorkflow @Inject constructor(
         val hookAgentName = context.agentDefinition?.name
 
         return channelFlow {
+            // 工具委托：本批内 callId → 选定执行方。仅当宿主按最终参数批准后才记录，
+            // 委托失败/超时/取消不回退本地工具（executeDelegatedTool 自身负责错误语义）。
+            val delegations = mutableMapOf<String, ToolDelegation>()
             if (hookSessionId != null) {
                 hookRunId = UUID.randomUUID().toString()
                 hookStarted = true
@@ -671,7 +676,8 @@ class StatefulAgentWorkflow @Inject constructor(
                         val callKind = "chat"
                         var callError: String? = null
                         var callCompleted = false
-                        val stream = StreamAccumulator(callStartElapsed) { send(it) }
+                        val responseMessageId = UUID.randomUUID().toString()
+                        val stream = StreamAccumulator(callStartElapsed, responseMessageId) { send(it) }
 
                         try {
                             // 发送前按实际模型的视觉能力处理图片（同 execute 路径）。
@@ -708,7 +714,6 @@ class StatefulAgentWorkflow @Inject constructor(
                             send(AgentEvent.ContextUsage(
                                 if (baselineUsage > 0) baselineUsage else requestEstimate, inputBudget, baselineUsage <= 0
                             ))
-                            val responseMessageId = UUID.randomUUID().toString()
                             val responseWithReasoning = if (stream.reasoning.isNotEmpty()) {
                                 aiResponse.copy(reasoning = stream.reasoning.toString())
                             } else aiResponse
@@ -762,7 +767,7 @@ class StatefulAgentWorkflow @Inject constructor(
                             // 而落库的接力消息又没产生，表现为「思考显示后凭空消失且无报错」。
                             // 有正文或有思考其一即落库；两者皆空则不写空消息。
                             if (partial.isNotEmpty() || reasoning.isNotBlank()) {
-                                send(AgentEvent.AssistantText(partial, emptyList(), reasoning))
+                                send(AgentEvent.AssistantText(partial, emptyList(), reasoning, messageId = responseMessageId))
                             }
                             // 多 Key 的自动切换与重发已在 adapter 内完成（见 AIProvider.keySwitcher）；
                             // 走到这里说明不是 Key 问题、或候选 Key 已全部失败，直接上报原始错误。
@@ -868,10 +873,17 @@ class StatefulAgentWorkflow @Inject constructor(
                                 runId = hookRunId,
                                 scope = hookScope,
                                 agentName = hookAgentName,
+                                // 已被某插件选定执行方的调用，不再让该插件代审自己。
+                                excludedPluginId = hookDecision?.delegation?.hook?.pluginId,
                                 isSub = isSub
                             )
                         }
 
+                        // 仅在宿主按最终参数批准后固定委托归属；未批准的调用不记录委托。
+                        delegations.remove(toolCall.id)
+                        if (checkResult.approved) {
+                            hookDecision?.delegation?.let { delegations[toolCall.id] = it }
+                        }
                         if (!checkResult.approved) {
                             val rawResult = ToolResult.Error(checkResult.denyReason, checkResult.errorCode).toTransportString()
                             send(AgentEvent.ToolCallFinished(toolCall.id, toolCall.name, rawResult, true, argsPreview))
@@ -884,6 +896,7 @@ class StatefulAgentWorkflow @Inject constructor(
                         // 整批取消：已批准未执行的工具补发完成事件（内容为未执行），
                         // 让 ViewModel 清理 runningTool 并 REPLACE 掉「执行中」占位消息。
                         effect.toolCalls.forEach { toolCall ->
+                            delegations.remove(toolCall.id)
                             send(
                                 AgentEvent.ToolCallFinished(
                                     id = toolCall.id,
@@ -903,7 +916,8 @@ class StatefulAgentWorkflow @Inject constructor(
                         val toolCalls = effect.toolCalls
                         val toolStartedAt = ConcurrentHashMap<String, Long>()
                         toolCalls.forEach { toolCall ->
-                            if (toolCall.name == "editFile" || toolCall.name == "writeFile") {
+                            // 委托执行不产生本地文件修改，不建检查点（避免同一操作记两次）。
+                            if (toolCall.id !in delegations && (toolCall.name == "editFile" || toolCall.name == "writeFile")) {
                                 (toolCall.arguments["path"] as? JsonPrimitive)?.contentOrNull?.let { path ->
                                     currentContext.sessionId?.let { sid ->
                                         checkpointManager.beforeFileModified(sid, path)
@@ -930,8 +944,11 @@ class StatefulAgentWorkflow @Inject constructor(
                                             agentName = hookAgentName
                                         )
                                         val run: suspend () -> ToolRunResult = {
+                                            val delegation = delegations[toolCall.id]
                                             val tool = toolRegistry.getTool(toolCall.name)
-                                            if (tool is StreamingAgentTool) {
+                                            if (delegation != null) {
+                                                runToolDelegate(delegation, hookRunId, toolCall) { send(it) }
+                                            } else if (tool is StreamingAgentTool) {
                                                 runToolStream(tool, toolCall, currentContext) { send(it) }
                                             } else {
                                                 runToolSync(tool, toolCall, currentContext)
@@ -950,6 +967,7 @@ class StatefulAgentWorkflow @Inject constructor(
                         // 串行处理 mode 切换并组装批量结果。
                         val batchResults = mutableListOf<ToolBatchResult>()
                         toolCalls.forEachIndexed { index, toolCall ->
+                            delegations.remove(toolCall.id)
                             val runResult = runResults.getOrNull(index)
                                 ?: ToolRunResult(ToolResult.Error("工具未执行", "TOOL_NOT_EXECUTED").toTransportString(), true)
                             var rawResult = runResult.raw
@@ -984,19 +1002,19 @@ class StatefulAgentWorkflow @Inject constructor(
                                 }
                             }
                             if (!isError && hookSessionId != null) {
-                                toolResultSuccessData(rawResult)?.let { data ->
-                                    val transform = pluginHookDispatcher.afterToolCall(
-                                        sessionId = hookSessionId,
-                                        runId = hookRunId,
-                                        callId = toolCall.id,
-                                        toolName = toolCall.name,
-                                        mode = currentContext.mode.name,
-                                        scope = hookScope,
-                                        agentName = hookAgentName,
-                                        data = data
-                                    )
-                                    transform.data?.let { rawResult = replaceToolResultData(rawResult, it) }
-                                }
+                                // data 改为懒求值 lambda：dispatcher 内部先判有无可写 hook，
+                                // 没有目标就不解析 rawResult，省掉每次工具结果的 JSON 解析开销。
+                                val transform = pluginHookDispatcher.afterToolCall(
+                                    sessionId = hookSessionId,
+                                    runId = hookRunId,
+                                    callId = toolCall.id,
+                                    toolName = toolCall.name,
+                                    mode = currentContext.mode.name,
+                                    scope = hookScope,
+                                    agentName = hookAgentName,
+                                    data = { toolResultSuccessData(rawResult) }
+                                )
+                                transform.data?.let { rawResult = replaceToolResultData(rawResult, it) }
                             }
                             batchResults.add(ToolBatchResult(toolCall.id, toolCall.name, rawResult, isError, runResult.attachments, runResult.images))
                         }
@@ -1083,6 +1101,11 @@ class StatefulAgentWorkflow @Inject constructor(
         hookCompleted = true
     }.onCompletion { cause ->
         if (!hookStarted || hookSessionId == null) return@onCompletion
+        // 本任务结束（完成/取消/出错）即清除手机控制「本任务免确认」记录，
+        // 避免下个任务沿用本次的免确认；未走到此清理的极端情况由 LRU 上限兼底。
+        if (hookRunId.isNotEmpty()) {
+            policyEngine.clearPhoneControlTask(hookRunId)
+        }
         val status = when {
             hookCompleted -> if (hookTerminalError) "error" else "success"
             cause is CancellationException -> "cancelled"
@@ -1118,8 +1141,10 @@ class StatefulAgentWorkflow @Inject constructor(
      * UI 端反复重启打字机协程。按时间窗口合并，窗口内只保留最新累积文本，到窗口边界才发送，
      * 把下游事件频率压到 ~16/s；打字机渲染本身有 100ms 节流，少发中间态无感知。
      */
-    private class StreamAccumulator(
+    internal class StreamAccumulator(
         private val callStartElapsed: Long,
+        private val responseMessageId: String,
+        private val materialize: (StringBuilder) -> String = { it.toString() },
         private val emit: suspend (AgentEvent) -> Unit
     ) {
         private companion object {
@@ -1136,8 +1161,10 @@ class StatefulAgentWorkflow @Inject constructor(
         var ttfbElapsed: Long? = null
         var retryAttempts = 0
 
-        private var pendingText: String? = null
-        private var pendingReasoning: String? = null
+        // 只记脏标记、推送时才物化字符串：中间态不再每次增量都整串复制一份（长文本流式的内存抖动根因），
+        // 到窗口边界/结束才经 materialize 生成一份交给下游。
+        private var textDirty = false
+        private var reasoningDirty = false
         private var lastTextSentAt = 0L
         private var lastReasoningSentAt = 0L
 
@@ -1146,7 +1173,7 @@ class StatefulAgentWorkflow @Inject constructor(
                 is AIStreamChunk.TextDelta -> {
                     markTtfb()
                     text.append(chunk.text)
-                    pendingText = text.toString()
+                    textDirty = true
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastTextSentAt >= DELTA_THROTTLE_MS) {
                         flushText()
@@ -1157,7 +1184,7 @@ class StatefulAgentWorkflow @Inject constructor(
                     // 思考内容也算首字（推理模型先吐思考再吐正文）
                     markTtfb()
                     reasoning.append(chunk.text)
-                    pendingReasoning = reasoning.toString()
+                    reasoningDirty = true
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastReasoningSentAt >= DELTA_THROTTLE_MS) {
                         flushReasoning()
@@ -1201,22 +1228,22 @@ class StatefulAgentWorkflow @Inject constructor(
         private fun reset() {
             text.setLength(0)
             reasoning.setLength(0)
-            pendingText = null
-            pendingReasoning = null
+            textDirty = false
+            reasoningDirty = false
             lastTextSentAt = 0L
             lastReasoningSentAt = 0L
         }
 
         private suspend fun flushText() {
-            val t = pendingText ?: return
-            pendingText = null
-            emit(AgentEvent.AssistantDelta(t))
+            if (!textDirty) return
+            textDirty = false
+            emit(AgentEvent.AssistantDelta(materialize(text), responseMessageId))
         }
 
         private suspend fun flushReasoning() {
-            val t = pendingReasoning ?: return
-            pendingReasoning = null
-            emit(AgentEvent.ReasoningDelta(t))
+            if (!reasoningDirty) return
+            reasoningDirty = false
+            emit(AgentEvent.ReasoningDelta(materialize(reasoning), responseMessageId))
         }
     }
 
@@ -1688,6 +1715,59 @@ class StatefulAgentWorkflow @Inject constructor(
         return ToolResult.Success(JsonObject(strippedData))
     }
 
+    /** 执行插件委托的工具调用（无本地回退），透传 live 输出与进度。 */
+    private suspend fun runToolDelegate(
+        delegation: ToolDelegation,
+        runId: String,
+        toolCall: ToolCall,
+        onEvent: suspend (AgentEvent) -> Unit
+    ): ToolRunResult {
+        var lastProgressAt = 0L
+        val liveBuffer = StringBuilder()
+        return try {
+            val result = pluginHookDispatcher.executeDelegatedTool(
+                delegation = delegation,
+                runId = runId,
+                callId = toolCall.id,
+                toolName = toolCall.name,
+                arguments = JsonObject(toolCall.arguments),
+                onProgress = { live ->
+                    liveBuffer.append(live).append('\n')
+                    if (liveBuffer.length > LIVE_TAIL_CHARS) {
+                        liveBuffer.delete(0, liveBuffer.length - LIVE_TAIL_CHARS)
+                    }
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
+                        lastProgressAt = now
+                        onEvent(
+                            AgentEvent.ToolCallProgress(
+                                id = toolCall.id,
+                                toolName = toolCall.name,
+                                accumulated = liveBuffer.toString()
+                            )
+                        )
+                    }
+                }
+            )
+            val processed = toolOutputStore.process(toolCall.name, toolCall.id, result)
+            ToolRunResult(processed.toTransportString(), processed is ToolResult.Error)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ToolRunResult(
+                ToolResult.Error(
+                    appContext.getString(
+                        R.string.plugin_delegation_failed,
+                        delegation.hook.pluginId,
+                        e.message ?: "unknown"
+                    ),
+                    PLUGIN_DELEGATION_FAILED
+                ).toTransportString(),
+                isError = true
+            )
+        }
+    }
+
     private suspend fun requestPermissionIfNeeded(
         tool: AgentTool?,
         callId: String,
@@ -1698,6 +1778,7 @@ class StatefulAgentWorkflow @Inject constructor(
         runId: String,
         scope: String,
         agentName: String?,
+        excludedPluginId: String? = null,
         isSub: Boolean = false
     ): PermissionCheckResult {
         if (tool == null) {
@@ -1713,7 +1794,7 @@ class StatefulAgentWorkflow @Inject constructor(
             }
         }
 
-        val eval = policyEngine.evaluate(tool, tool.name, arguments, mode)
+        val eval = policyEngine.evaluate(tool, tool.name, arguments, mode, taskKey = runId)
         if (eval.verdict == ToolPermissionPolicyEngine.Verdict.DENY) {
             val reason = eval.denyReason ?: "该工具被项目安全规则策略禁止执行"
             val code = if (mode == AgentMode.PLAN) "PLAN_MODE_REJECTED" else "SYSTEM_DENIED"
@@ -1726,13 +1807,17 @@ class StatefulAgentWorkflow @Inject constructor(
 
         // 子代理（专家模式子弹）无用户交互确认弹窗：白名单内写操作 ASK 自动放行；
         // 高危宿主系统操作（Shizuku）与不可逆删除仍拦截，避免无人确认的越权执行。
-        if (isSub && eval.verdict == ToolPermissionPolicyEngine.Verdict.ASK) {
-            if (tool.name == ToolPermissionPolicyEngine.SHIZUKU_TOOL ||
-                tool.name == ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL
-            ) {
+        // 手机控制拦截独立于 verdict：即使「始终免确认」把裁决变为 ALLOW，子代理仍不得操作宿主手机。
+        if (isSub) {
+            if (tool.name == ToolPermissionPolicyEngine.SHIZUKU_TOOL) {
                 return PermissionCheckResult(false, "子代理不允许执行宿主系统操作（Shizuku）", "SYSTEM_DENIED")
             }
-            return PermissionCheckResult(true)
+            if (tool.name == ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL) {
+                return PermissionCheckResult(false, "子代理不允许操作宿主手机（手机控制）", "SYSTEM_DENIED")
+            }
+            if (eval.verdict == ToolPermissionPolicyEngine.Verdict.ASK) {
+                return PermissionCheckResult(true)
+            }
         }
 
         return when (eval.verdict) {
@@ -1750,7 +1835,8 @@ class StatefulAgentWorkflow @Inject constructor(
                         agentName = agentName,
                         callId = callId,
                         toolName = tool.name,
-                        arguments = JsonObject(arguments)
+                        arguments = JsonObject(arguments),
+                        excludedPluginId = excludedPluginId
                     )
                     when (review.decision) {
                         PermissionReviewDecision.ALLOW -> return PermissionCheckResult(true)
@@ -1771,10 +1857,20 @@ class StatefulAgentWorkflow @Inject constructor(
                 )
                 when (permissionManager.awaitApproval(request)) {
                     PermissionChoice.REJECT -> PermissionCheckResult(false, "用户拒绝执行该工具", "USER_REJECTED")
-                    PermissionChoice.ONCE -> PermissionCheckResult(true)
+                    PermissionChoice.ONCE -> {
+                        if (tool.name == ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL) {
+                            // 手机控制「本任务免确认」：本次确认后，同任务内后续调用不再重复弹窗。
+                            policyEngine.markPhoneControlTaskConfirmed(runId)
+                        }
+                        PermissionCheckResult(true)
+                    }
                     PermissionChoice.ALWAYS -> {
                         if (eval.rememberablePatterns.isNotEmpty()) {
                             policyEngine.remember(tool.name, eval.rememberablePatterns, PermissionScope.PROJECT)
+                        }
+                        if (tool.name == ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL) {
+                            // 手机控制不可记忆为「始终允许」，只记录本次任务已确认（TASK 免确认语义）。
+                            policyEngine.markPhoneControlTaskConfirmed(runId)
                         }
                         PermissionCheckResult(true)
                     }

@@ -2,6 +2,8 @@ package com.aiverse.testutil
 
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.FileEntry
+import com.aiverse.feature.workspace.domain.FileReadTooLargeException
+import com.aiverse.feature.workspace.domain.readBytesBounded
 import com.aiverse.feature.workspace.domain.sha256Fingerprint
 import java.io.File
 import java.io.FileOutputStream
@@ -75,6 +77,39 @@ class TestFileAccessProvider : FileAccessProvider {
     }
 
     override fun readBytes(path: String): ByteArray = File(path).readBytes()
+
+    override fun readBytes(path: String, maxBytes: Long): ByteArray {
+        val file = File(path)
+        if (file.length() > maxBytes) throw FileReadTooLargeException(maxBytes)
+        return file.inputStream().use { it.readBytesBounded(maxBytes) }
+    }
+
+    /** 与生产实现同语义：逐段跟符号链接解析（末级可选保留），用于路径/祖先比较。 */
+    override fun resolvePath(path: String, followFinalLink: Boolean): String {
+        val pending = ArrayDeque(File(path).absolutePath.split('/').filter { it.isNotEmpty() })
+        var current = File("/")
+        var links = 0
+        while (pending.isNotEmpty()) {
+            val part = pending.removeFirst()
+            when (part) {
+                "." -> continue
+                ".." -> {
+                    current = current.parentFile ?: File("/")
+                    continue
+                }
+            }
+            val candidate = File(current, part)
+            if ((followFinalLink || pending.isNotEmpty()) && java.nio.file.Files.isSymbolicLink(candidate.toPath())) {
+                if (++links > 40) throw java.nio.file.FileSystemLoopException(path)
+                val target = java.nio.file.Files.readSymbolicLink(candidate.toPath()).toString()
+                current = if (target.startsWith('/')) File("/") else current
+                target.split('/').filter { it.isNotEmpty() }.asReversed().forEach(pending::addFirst)
+            } else {
+                current = candidate
+            }
+        }
+        return current.absolutePath
+    }
 
     override fun writeBytes(path: String, bytes: ByteArray, overwrite: Boolean) {
         val file = File(path)

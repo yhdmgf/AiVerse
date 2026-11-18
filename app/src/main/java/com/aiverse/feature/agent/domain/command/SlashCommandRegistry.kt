@@ -1,15 +1,20 @@
 package com.aiverse.feature.agent.domain.command
 
 import android.content.Context
+import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.domain.skill.Skill
 import com.aiverse.feature.agent.domain.skill.SkillRepository
+import com.aiverse.feature.workspace.domain.RemoteAgentConfigIdentityChangedException
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
+import java.util.concurrent.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 /**
@@ -39,10 +44,40 @@ class SlashCommandRegistry @Inject constructor(
     /** `/` 菜单展示的命令列表。 */
     val commands: StateFlow<List<SlashCommand>> = _commands.asStateFlow()
 
-    /** 重新扫描技能并重建菜单。涉及文件 IO，调用方应在 IO 上下文调用。 */
-    suspend fun refresh() = withContext(Dispatchers.IO) {
-        skills = skillRepository.listSkills()
-        _commands.value = buildCommands()
+    /** 重新扫描技能并重建菜单。涉及文件 IO，调用方应在 IO 上下文调用。
+     *
+     * [force]=true 时绕过仓库「内容未变化不重算」短路，强制重读（远程配置内容或连接身份变化后用）。
+     * 阻塞 IO 放到 Dispatchers.IO，并允许协程取消立即中断；连接类 IO 异常按「无技能命令」降级，
+     * 不让一次刷新失败拖垮请求（上游 72736087）。
+     */
+    suspend fun refresh(force: Boolean = false) = withContext(Dispatchers.IO) {
+        try {
+            runInterruptible {
+                skills = skillRepository.listSkills(force)
+                _commands.value = buildCommands()
+            }
+        } catch (e: IOException) {
+            if (e is CancellationException) throw e
+            skills = emptyList()
+            _commands.value = buildCommands()
+            // 连接身份变化（刚好连上/重连）是瞬态竞态，缓存层已重试过，这里降为 DEBUG，不当故障上报。
+            if (e is RemoteAgentConfigIdentityChangedException) {
+                FileLogger.d(TAG, "斜杠命令技能清单等待连接就绪")
+            } else {
+                FileLogger.w(TAG, "刷新斜杠命令失败，按无技能命令降级", e)
+            }
+        }
+    }
+
+    companion object {
+        private const val TAG = "SlashCommandRegistry"
+
+        /**
+         * 构造技能本轮指令：把技能正文里的 `$ARGUMENTS` 替换为 [args]；
+         * 无占位且 [args] 非空时追加一行，保证用户输入不丢失。
+         */
+        fun buildSkillPrompt(skill: Skill, args: String): String =
+            substituteArguments(skill.instructions, args)
     }
 
     private fun buildCommands(): List<SlashCommand> = buildList {
@@ -102,14 +137,5 @@ class SlashCommandRegistry @Inject constructor(
         data class SkillCommand(val skill: Skill, override val args: String) : ResolvedCommand {
             override val name: String get() = skill.name
         }
-    }
-
-    companion object {
-        /**
-         * 构造技能本轮指令：把技能正文里的 `$ARGUMENTS` 替换为 [args]；
-         * 无占位且 [args] 非空时追加一行，保证用户输入不丢失。
-         */
-        fun buildSkillPrompt(skill: Skill, args: String): String =
-            substituteArguments(skill.instructions, args)
     }
 }

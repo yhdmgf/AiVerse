@@ -5,6 +5,9 @@ import com.aiverse.R
 import com.aiverse.feature.agent.domain.model.AgentMode
 import com.aiverse.feature.agent.domain.tool.AgentTool
 import com.aiverse.feature.agent.domain.tool.ToolCapability
+import com.aiverse.feature.phonecontrol.data.ConfirmMode
+import com.aiverse.feature.phonecontrol.data.PhoneControlSettings
+import com.aiverse.feature.phonecontrol.data.PhoneControlSettingsRepository
 import com.aiverse.feature.settings.data.repository.ToolSafetySettingsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -40,13 +43,40 @@ class ToolPermissionPolicyEngineTest {
         }
     }
 
-    private fun engine(vararg rules: PermissionRule, safetyDisabled: Boolean = false): ToolPermissionPolicyEngine {
+    private fun engine(
+        vararg rules: PermissionRule,
+        safetyDisabled: Boolean = false,
+        phoneSettings: PhoneControlSettings = PhoneControlSettings(),
+        overlayGranted: Boolean = true
+    ): ToolPermissionPolicyEngine {
         val repo = mockk<PermissionRulesRepository>(relaxed = true)
         coEvery { repo.loadEffectiveForCurrentProject() } returns rules.toList()
         val safety = mockk<ToolSafetySettingsRepository>(relaxed = true)
         coEvery { safety.isSafetyInterceptionDisabled() } returns safetyDisabled
-        return ToolPermissionPolicyEngine(repo, safety, mockk<FileWhitelistPolicy>(relaxed = true), appContext())
+        return object : ToolPermissionPolicyEngine(
+            repo,
+            safety,
+            mockk<FileWhitelistPolicy>(relaxed = true),
+            phoneControlRepo(phoneSettings),
+            appContext()
+        ) {
+            override fun isOverlayPermissionGranted(): Boolean = overlayGranted
+        }
     }
+
+    private fun phoneControlRepo(settings: PhoneControlSettings): PhoneControlSettingsRepository =
+        mockk {
+            coEvery { currentSettings() } returns settings
+        }
+
+    private fun phoneSettings(
+        confirmMode: ConfirmMode,
+        denyPackages: Set<String> = emptySet()
+    ) = PhoneControlSettings(enabled = true, confirmMode = confirmMode, denyPackages = denyPackages)
+
+    private fun phone(packageName: String? = null) =
+        if (packageName == null) emptyMap()
+        else mapOf("package_name" to JsonPrimitive(packageName))
 
     private fun tool(vararg caps: ToolCapability): AgentTool {
         val t = mockk<AgentTool>(relaxed = true)
@@ -559,13 +589,94 @@ class ToolPermissionPolicyEngineTest {
         assertEquals(listOf("命令替换 \$(...)"), formatArgs)
     }
 
-    // ── remember：去重后逐条落库 ────────────────────────────────────
+    // ── 手机控制：「不碰」名单安全底线与确认方式映射 ─────────────────
+
+    @Test
+    fun phoneControl_denyPackage_deniedRegardlessOfConfirmMode() = runTest {
+        val pkg = "com.icbc"
+        for (mode in ConfirmMode.values()) {
+            val e = engine(phoneSettings = phoneSettings(mode, denyPackages = setOf(pkg)))
+            val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone(pkg), AgentMode.BUILD)
+            assertEquals("confirmMode=$mode", ToolPermissionPolicyEngine.Verdict.DENY, r.verdict)
+            assertNotNull(r.denyReason)
+            assertTrue(r.rememberablePatterns.isEmpty())
+        }
+    }
+
+    @Test
+    fun phoneControl_askMode_asksWithoutRememberable() = runTest {
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.ASK))
+        val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD)
+        assertEquals(ToolPermissionPolicyEngine.Verdict.ASK, r.verdict)
+        assertTrue(r.rememberablePatterns.isEmpty())
+        assertNotNull(r.rememberDisabledReason)
+    }
+
+    @Test
+    fun phoneControl_askMode_withoutOverlayPermission_denied() = runTest {
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.ASK), overlayGranted = false)
+        val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD)
+        assertEquals(ToolPermissionPolicyEngine.Verdict.DENY, r.verdict)
+        assertEquals("resource:${R.string.tool_phone_control_overlay_permission_reason}", r.denyReason)
+    }
+
+    @Test
+    fun phoneControl_alwaysMode_allowsEvenWithoutOverlayPermission() = runTest {
+        // 始终免确认：直接操作，不再需要悬浮窗确认入口，故未授予悬浮窗权限也放行。
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.ALWAYS), overlayGranted = false)
+        val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD)
+        assertEquals(ToolPermissionPolicyEngine.Verdict.ALLOW, r.verdict)
+    }
+
+    @Test
+    fun phoneControl_taskMode_confirmedTaskKeyAllowsThenClearRestoresAsk() = runTest {
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.TASK))
+        val first = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD, taskKey = "run-1")
+        assertEquals("未确认过的任务仍需逐次确认", ToolPermissionPolicyEngine.Verdict.ASK, first.verdict)
+
+        e.markPhoneControlTaskConfirmed("run-1")
+        val second = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD, taskKey = "run-1")
+        assertEquals("同一任务确认过一次后免确认", ToolPermissionPolicyEngine.Verdict.ALLOW, second.verdict)
+
+        val other = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD, taskKey = "run-2")
+        assertEquals("其他任务不受影响", ToolPermissionPolicyEngine.Verdict.ASK, other.verdict)
+
+        e.clearPhoneControlTask("run-1")
+        val cleared = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD, taskKey = "run-1")
+        assertEquals("任务结束后清理，恢复逐次确认", ToolPermissionPolicyEngine.Verdict.ASK, cleared.verdict)
+    }
+
+    @Test
+    fun phoneControl_taskMode_confirmedTaskKey_stillDeniedForDenyPackage() = runTest {
+        val pkg = "com.eg.android.AlipayGphone"
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.TASK, denyPackages = setOf(pkg)))
+        e.markPhoneControlTaskConfirmed("run-1")
+        val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone(pkg), AgentMode.BUILD, taskKey = "run-1")
+        assertEquals("不碰名单优先于本任务免确认", ToolPermissionPolicyEngine.Verdict.DENY, r.verdict)
+    }
+
+    @Test
+    fun phoneControl_taskMode_noTaskKey_stillAsks() = runTest {
+        val e = engine(phoneSettings = phoneSettings(ConfirmMode.TASK))
+        e.markPhoneControlTaskConfirmed("run-1")
+        // 调用方未传 taskKey（如旧调用点）：无从判定任务归属，保守逐次确认。
+        val r = e.evaluate(tool(), ToolPermissionPolicyEngine.PHONE_CONTROL_TOOL, phone("com.example.app"), AgentMode.BUILD)
+        assertEquals(ToolPermissionPolicyEngine.Verdict.ASK, r.verdict)
+    }
+
+    // ── remember：去重后逐条落库 ───────────────────────────────────
 
     @Test
     fun remember_dedupesAndAddsEach() = runTest {
         val repo = mockk<PermissionRulesRepository>(relaxed = true)
         coEvery { repo.add(any(), any()) } just runs
-        val e = ToolPermissionPolicyEngine(repo, mockk(relaxed = true), mockk<FileWhitelistPolicy>(relaxed = true), appContext())
+        val e = ToolPermissionPolicyEngine(
+            repo,
+            mockk(relaxed = true),
+            mockk<FileWhitelistPolicy>(relaxed = true),
+            phoneControlRepo(PhoneControlSettings()),
+            appContext()
+        )
 
         e.remember("Bash", listOf("git pull", "git pull", "ls"), PermissionScope.PROJECT)
 

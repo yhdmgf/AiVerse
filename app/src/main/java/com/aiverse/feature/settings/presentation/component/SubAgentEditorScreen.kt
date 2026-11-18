@@ -120,6 +120,8 @@ internal fun SubAgentEditorScreen(
 
     // 档位列表跟随「选定的提供商 + 模型」，与聊天页共用同一套能力解析；
     // 未选模型（继承父会话）或能力未知时列出全部档位，由用户按模型实际支持情况自选。
+    // 与聊天页 [com.aiverse.feature.agent.domain.provider.reasoningLevelsForUi] 的唯一差异：这里排除 AUTO
+    // （子代理档位是「必选一个具体强度」，聊天页保留 AUTO 表示「开思考但用模型默认」）。
     val effortOptions = remember(providerId, model, modelMetadata, providers) {
         val provider = providers.firstOrNull { it.id == providerId }
         val capability = provider?.let { reasoningCapabilityOf(it, model, modelMetadata) }

@@ -22,6 +22,15 @@ sealed interface FileTreeRoot {
     }
 
     /**
+     * 用户通过文件树「+」添加的本机文件夹（宿主真实目录）。
+     * 与工作区/容器不同，它不随执行模式变化：远程模式下仍读写当前设备上的目录。
+     */
+    data class LocalFolder(val hostPath: String) : FileTreeRoot {
+        override val label: String =
+            hostPath.trimEnd('/').substringAfterLast('/').ifBlank { hostPath }
+    }
+
+    /**
      * 当前容器根，对应容器内 `/`。
      * 图标与「容器与镜像」列表一致：[osId] 识别到系统时用该系统 logo，
      * 未识别时 [remote] 为真用服务器图标、为假用硬盘图标。
@@ -145,6 +154,23 @@ data class RetryState(val attempt: Int, val maxRetries: Int, val error: RetryErr
  */
 @Immutable
 data class KeySwitchState(val newIndex: Int, val total: Int)
+
+/**
+ * 单个会话正在流式输出的助手消息快照（内容 + 思考 + 计时 + 落库标记）。
+ * 由 [com.aiverse.feature.agent.presentation.run.StreamingAssistantStore] 按 sessionId 持有，
+ * 仅保留运行中/刚结束的少数会话，降低长会话的流式内存开销；UI 据此渲染实时气泡。
+ */
+@Immutable
+data class StreamingAssistantMessage(
+    val sessionId: String,
+    val messageId: String,
+    val content: String = "",
+    val reasoning: String = "",
+    val settled: Boolean = false,
+    val reasoningStartMs: Long? = null,
+    val reasoningEndMs: Long? = null,
+    val persisted: Boolean = false
+)
 
 @Immutable
 data class AgentUIMessage(

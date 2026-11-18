@@ -35,6 +35,7 @@ import com.aiverse.feature.agent.data.remote.openai.OpenAIToolDefinition
 import com.aiverse.feature.agent.data.remote.openai.OpenAIFunctionDefinition
 import com.aiverse.feature.agent.data.remote.openai.OpenAIImagePart
 import com.aiverse.feature.agent.data.remote.openai.StreamOptions
+import com.aiverse.feature.plugins.runtime.PluginProviderIds
 
 class OpenAIAdapter @Inject constructor(
     private val api: OpenAIApi
@@ -434,6 +435,13 @@ class OpenAIAdapter @Inject constructor(
                             choice.get("finish_reason")?.takeIf { !it.isJsonNull }?.asString?.let {
                                 finishReason = it
                             }
+
+                            val remoteMessageId = delta.get("aicode_message_id")
+                                ?.takeIf {
+                                    PluginProviderIds.isPluginId(providerId) &&
+                                        it.isJsonPrimitive && it.asJsonPrimitive.isString
+                                }?.asString
+                            if (remoteMessageId != null) send(AIStreamChunk.TextDelta("", remoteMessageId))
 
                             // 文字增量
                             delta.get("content")?.takeIf { !it.isJsonNull }?.asString?.let { c ->

@@ -1,6 +1,8 @@
 package com.aiverse.feature.workspace.domain
 
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.Charset
 
@@ -18,6 +20,19 @@ data class FileEntry(
     val permissions: String = "---"
 )
 
+/** 远程配置读取的两类目标：技能目录（SKILL.md / CLAUDE.md）与子代理定义目录（顶层 *.md）。 */
+enum class AgentConfigKind { SKILLS, AGENTS }
+
+/**
+ * 一整套远端配置文件的快照：[identity] 唯一标识「哪台机器/哪个工作区/哪类配置/哪个目录」，
+ * [revision] 是内容指纹（内容一变即变，用于解析缓存失效），[files] 是容器路径 → 文件全文。
+ */
+data class AgentConfigSnapshot(
+    val identity: String,
+    val revision: String,
+    val files: Map<String, String>
+)
+
 /**
  * 文件读写后端抽象：把"在哪读写文件"从硬编码的本地 java.io.File 解耦。
  *
@@ -33,6 +48,18 @@ data class FileEntry(
  * [copyToLocal] 拿到本地临时文件再处理——远程模式下会 SFTP 下载到临时目录。
  */
 interface FileAccessProvider {
+
+    /**
+     * 读取一整套远程配置快照（技能/子代理目录），走批量线协议；无远程配置后端时返回 null。
+     * 默认 [forceRefresh] 为 false：新鲜期内直接复用内存快照，之后后台增量刷新。
+     */
+    fun agentConfigSnapshot(path: String, kind: AgentConfigKind, forceRefresh: Boolean = false): AgentConfigSnapshot? = null
+
+    /** 只回已就绪的内存/磁盘快照，绝不触发网络；无快照返回 null。供按名查找的快速路径使用。 */
+    fun cachedAgentConfigSnapshot(path: String, kind: AgentConfigKind): AgentConfigSnapshot? = null
+
+    /** 让远程配置缓存失效：[path] 为 null 时全量失效，否则只失效受该路径影响的条目。 */
+    fun invalidateAgentConfigCache(path: String? = null) {}
 
     /**
      * 读取文件全文文本。文件不存在时抛 [NoSuchFileException]。
@@ -106,6 +133,17 @@ interface FileAccessProvider {
      */
     fun readBytes(path: String): ByteArray
 
+    /** 读取前及读取过程中都限制大小；超出 [maxBytes] 抛 [FileReadTooLargeException]。 */
+    fun readBytes(path: String, maxBytes: Long): ByteArray
+
+    /**
+     * 按后端文件系统语义逐段解析路径，返回可用于相等/祖先比较的绝对身份路径。
+     * 允许不存在的末级路径；不得先词法消除 `..`，以免改变 `link/..` 的含义。
+     * [followFinalLink] 为 false 时保留末级符号链接本身，父路径仍解析链接。
+     * 返回值只用于比较，不应作为后端操作的输入（本地可能返回宿主路径）。
+     */
+    fun resolvePath(path: String, followFinalLink: Boolean = true): String
+
     /**
      * 写入文件原始字节。父目录不存在则自动创建。[overwrite] 为 false 且文件已存在时抛 [FileAlreadyExistsException]。
      * 供 [GenerateImageTool] 等需要落盘二进制数据（图片等）的工具使用，也用于上传附件等二进制写入；
@@ -161,6 +199,12 @@ interface FileAccessProvider {
     /** 获取父目录路径（容器路径形式）。 */
     fun parentPath(path: String): String?
 
+    /**
+     * 访问 [path] 时应使用的后端。跨后端复制用它决定源/目标 provider；
+     * 单一实现直接返回自身，委托层按路径路由。
+     */
+    fun backendFor(path: String): FileAccessProvider = this
+
     /** 把内部真实路径还原为 AI 视角的容器路径（回显用）。 */
     fun toDisplayPath(path: String): String
 }
@@ -182,6 +226,27 @@ internal fun sha256Fingerprint(bytes: ByteArray): String {
             append(HEX_CHARS[v and 0x0F])
         }
     }
+}
+
+/** 文件读取超出调用方给定的字节上限：导出、附件预览等按量读取时用来拦住超大文件。 */
+class FileReadTooLargeException(val maxBytes: Long) : IOException("file exceeds $maxBytes bytes")
+
+/** 按 [maxBytes] 有界读取：读满即抛 [FileReadTooLargeException]，不把整文件吞进内存。 */
+internal fun InputStream.readBytesBounded(maxBytes: Long): ByteArray {
+    require(maxBytes in 0..Int.MAX_VALUE.toLong())
+    val out = ByteArrayOutputStream()
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        val length = minOf(buffer.size.toLong(), maxBytes - total + 1).toInt()
+        val count = read(buffer, 0, length)
+        if (count < 0) break
+        if (count == 0) continue
+        total += count
+        if (total > maxBytes) throw FileReadTooLargeException(maxBytes)
+        out.write(buffer, 0, count)
+    }
+    return out.toByteArray()
 }
 
 private const val HEX_CHARS = "0123456789abcdef"

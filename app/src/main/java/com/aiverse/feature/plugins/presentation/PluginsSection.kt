@@ -1,7 +1,6 @@
 package com.aiverse.feature.plugins.presentation
 
 import android.provider.Settings
-import android.view.View
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -82,7 +80,6 @@ import com.aiverse.core.ui.SelectionActionButton
 import com.aiverse.core.ui.rememberListSelectionState
 import com.aiverse.core.ui.selectionListBottomContentPadding
 import com.aiverse.core.ui.SwipeToDeleteRow
-import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.domain.shizuku.ShizukuState
 import com.aiverse.feature.plugins.domain.InstalledPlugin
 import com.aiverse.feature.plugins.domain.MEMORY_TOGGLE_PLUGIN_ID
@@ -123,7 +120,6 @@ import compose.icons.feathericons.Tool
 import compose.icons.feathericons.User
 import compose.icons.feathericons.Users
 import compose.icons.feathericons.Zap
-import kotlinx.coroutines.delay
 
 /**
  * 插件设置主界面（AiCode 移植版）。
@@ -713,6 +709,13 @@ private fun PluginRow(
                         textColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         backgroundColor = MaterialTheme.colorScheme.secondaryContainer
                     )
+                    if (plugin.record.official) {
+                        McpPill(
+                            text = stringResource(R.string.plugins_badge_official),
+                            textColor = MaterialTheme.semanticColors.onInfoContainer,
+                            backgroundColor = MaterialTheme.semanticColors.infoContainer
+                        )
+                    }
                     if (!publisher.isNullOrBlank()) {
                         McpPill(
                             text = publisher,
@@ -775,6 +778,7 @@ private fun PluginRow(
 internal fun PluginDetailSection(
     plugin: InstalledPlugin,
     onToggleEnabled: (Boolean) -> Unit,
+    onExport: () -> Unit = {},
     bridgeFactory: ((page: PluginPage, post: (String) -> Unit, onClosePage: () -> Unit) -> PluginWebBridge)? = null,
     onClosePage: () -> Unit = {},
     dependencyState: PluginDependencyUiState? = null,
@@ -792,61 +796,6 @@ internal fun PluginDetailSection(
     val configPage = plugin.content?.configPage
     val hasConfigPage = plugin.isActive && configPage != null && bridgeFactory != null
     var selectedTab by remember(plugin.id, plugin.isActive) { mutableIntStateOf(0) }
-
-    val context = LocalContext.current
-    val colorScheme = MaterialTheme.colorScheme
-    val semantic = MaterialTheme.semanticColors
-    val fontScale = LocalConfiguration.current.fontScale
-    val themeDark = PluginThemeTokens.isDark(colorScheme)
-    val themeVariables = remember(colorScheme, semantic, fontScale) {
-        PluginThemeTokens.variables(colorScheme, semantic, fontScale)
-    }
-    val pageBackground = semantic.pageBackground.toArgb()
-
-    // TODO(P3d): 预热依赖 PluginWebViewFactory / PluginWebViewCache / PluginWebBridgeInstaller，
-    // 待 P3d 页面桥落地后接入。
-    LaunchedEffect(configPage?.cacheKey, plugin.record.installedAt, plugin.record.archiveSha256, hasConfigPage) {
-        if (!hasConfigPage) return@LaunchedEffect
-        val url = PluginWebViewFactory.pageUrl(configPage)
-        delay(200)
-        if (PluginWebViewCache.isLoaded(configPage.cacheKey, url)) return@LaunchedEffect
-        runCatching {
-            val webView = PluginWebViewCache.take(configPage.cacheKey) ?: PluginWebViewFactory.create(
-                context = context,
-                page = configPage,
-                dark = themeDark,
-                backgroundColor = pageBackground,
-                themeVariables = { themeVariables },
-                onPageFinished = { view ->
-                    PluginWebViewCache.markLoaded(configPage.cacheKey, url, view)
-                    view.evaluateJavascript(PluginThemeTokens.applyScript(themeVariables), null)
-                },
-                onMainFrameError = { PluginWebViewCache.clearLoading(configPage.cacheKey) }
-            )
-            PluginWebViewCache.put(configPage.cacheKey, webView)
-            if (PluginWebViewCache.takeBridge(configPage.cacheKey) == null) {
-                val bridge = bridgeFactory(
-                    configPage,
-                    { script -> runCatching { webView.evaluateJavascript(script, null) } },
-                    onClosePage
-                )
-                PluginWebBridgeInstaller.install(webView, bridge) { message ->
-                    bridge.postMessage(message)
-                }
-                PluginWebViewCache.putBridge(configPage.cacheKey, bridge)
-            }
-            PluginWebViewCache.markLoading(configPage.cacheKey, url)
-            val metrics = context.resources.displayMetrics
-            webView.measure(
-                View.MeasureSpec.makeMeasureSpec(metrics.widthPixels, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, View.MeasureSpec.EXACTLY)
-            )
-            webView.layout(0, 0, metrics.widthPixels, metrics.heightPixels)
-            webView.loadUrl(url)
-        }.onFailure { error ->
-            FileLogger.w("PluginsSection", "插件配置页预热失败", error)
-        }
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (hasConfigPage) {
@@ -869,6 +818,7 @@ internal fun PluginDetailSection(
                 plugin = plugin,
                 languageTag = languageTag,
                 onToggleEnabled = onToggleEnabled,
+                onExport = onExport,
                 dependencyState = dependencyState,
                 onPrepareDependencies = onPrepareDependencies,
                 shizukuGranted = shizukuGranted,
@@ -901,6 +851,7 @@ private fun PluginNativeConfigContent(
     plugin: InstalledPlugin,
     languageTag: String,
     onToggleEnabled: (Boolean) -> Unit,
+    onExport: () -> Unit = {},
     dependencyState: PluginDependencyUiState? = null,
     onPrepareDependencies: () -> Unit = {},
     shizukuGranted: Boolean = false,
@@ -963,6 +914,26 @@ private fun PluginNativeConfigContent(
                     onCheckedChange = onToggleEnabled,
                     enabled = plugin.manifest != null && plugin.content != null
                 )
+            }
+        }
+
+        // 导出：把已安装插件打包为可再导入的 zip 并拉起系统分享（测试）
+        SettingsGroup {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = t.listCellPaddingVertical),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.plugins_export_hint),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onExport) {
+                    Text(text = stringResource(R.string.plugins_export_action))
+                }
             }
         }
 
@@ -1421,7 +1392,8 @@ internal fun PluginSettingsSheet(
                 onSetIndexSourceText = onSetIndexSourceText,
                 onSetDownloadMirror = onSetDownloadMirror
             )
-            Spacer(modifier = Modifier.height(Spacing.md))
+            // 两张设置卡之间留出更明显的间隙（原 md 偏小，视觉上贴在一起）。
+            Spacer(modifier = Modifier.height(Spacing.lg))
             PluginDeveloperSection(
                 devMode = devMode,
                 devRootPath = devRootPath,
@@ -1516,6 +1488,22 @@ private fun PluginDeveloperSection(
                     .padding(horizontal = Spacing.lg, vertical = Spacing.md)
             )
         }
+        // 文档入口：关于插件（使用手册）与开发插件（编写规则），点击跳官网。
+        // 与开发者开关合入同一张卡（行间用 SettingsDivider 分隔），避免两张 SettingsGroup 背靠背贴死。
+        // SettingsRow 默认已带右箭头，不再手动传 trailing，修掉每行两个箭头的显示 bug。
+        val docsContext = LocalContext.current
+        SettingsDivider()
+        SettingsRow(
+            icon = FeatherIcons.BookOpen,
+            title = stringResource(R.string.plugins_docs_about),
+            onClick = { openUrl(docsContext, PLUGIN_DOCS_URL) }
+        )
+        SettingsDivider()
+        SettingsRow(
+            icon = FeatherIcons.Code,
+            title = stringResource(R.string.plugins_docs_dev),
+            onClick = { openUrl(docsContext, PLUGIN_DEV_DOCS_URL) }
+        )
     }
 }
 
@@ -1525,3 +1513,9 @@ private fun ShizukuState.statusLabelRes(): Int = when (this) {
     ShizukuState.PERMISSION_DENIED -> R.string.settings_shizuku_status_denied
     ShizukuState.READY -> R.string.settings_shizuku_status_ready
 }
+
+/** 插件使用手册（官方文档站「关于插件」页）。 */
+private const val PLUGIN_DOCS_URL = "https://www.aivapp.cn/guide/scripts"
+
+/** 插件开发规则（官方文档站「开发插件」页）。 */
+private const val PLUGIN_DEV_DOCS_URL = "https://www.aivapp.cn/advanced/plugin-dev"

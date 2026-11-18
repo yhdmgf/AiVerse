@@ -10,6 +10,7 @@ import com.aiverse.feature.git.domain.model.GitStatus
 import com.aiverse.feature.git.domain.model.GitTag
 import com.aiverse.feature.git.domain.model.GraphCommit
 import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
+import com.aiverse.feature.settings.data.repository.ExecutionModeHolder
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -41,7 +42,7 @@ class GitRepositoryTest {
         }
         val workspace = mockk<WorkspaceRepository>()
         every { workspace.currentPath() } returns workPath
-        return GitRepository(engine, workspace)
+        return GitRepository(engine, workspace, ExecutionModeHolder())
     }
 
     // ── status()：porcelain v1 -b 解析 ───────────────────────────
@@ -395,7 +396,7 @@ class GitRepositoryTest {
         every { workspace.currentPath() } returns workPath
         val slot = slot<String>()
         coEvery { engine.runCommandSyncUnbounded(capture(slot), any(), any()) } returns CommandResult("", 0)
-        val repo = GitRepository(engine, workspace)
+        val repo = GitRepository(engine, workspace, ExecutionModeHolder())
 
         repo.commit("fix: 表格 | 分号; 括号(1)")
         // '|' 是 shell 管道符，整条消息必须单引号包裹传递
@@ -409,7 +410,7 @@ class GitRepositoryTest {
         every { workspace.currentPath() } returns workPath
         val slot = slot<String>()
         coEvery { engine.runCommandSyncUnbounded(capture(slot), any(), any()) } returns CommandResult("", 0)
-        val repo = GitRepository(engine, workspace)
+        val repo = GitRepository(engine, workspace, ExecutionModeHolder())
 
         repo.commit("it's fixed")
         // 内嵌单引号关闭-转义-重开：it'\''s fixed

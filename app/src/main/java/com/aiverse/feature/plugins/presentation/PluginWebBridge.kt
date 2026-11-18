@@ -21,6 +21,7 @@ import com.aiverse.feature.plugins.runtime.PluginHttpService
 import com.aiverse.feature.plugins.runtime.PluginIntrospectionService
 import com.aiverse.feature.plugins.runtime.PluginModelService
 import com.aiverse.feature.plugins.runtime.PluginProcessException
+import com.aiverse.feature.plugins.runtime.PluginProviderService
 import com.aiverse.feature.plugins.runtime.PluginRuntimeManager
 import com.aiverse.feature.plugins.runtime.PluginSecretStore
 import com.aiverse.feature.plugins.runtime.PluginShizukuException
@@ -95,7 +96,10 @@ class PluginWebBridge(
     private val systemService: PluginSystemService,
     private val introspectionService: PluginIntrospectionService,
     private val toolService: PluginToolService,
+    private val permissionService: com.aiverse.feature.plugins.runtime.PluginPermissionService,
+    private val sessionSourceService: com.aiverse.feature.plugins.runtime.PluginSessionHostService,
     private val httpService: PluginHttpService,
+    private val providerService: PluginProviderService? = null,
     private val environment: PluginPageEnvironment,
     @Volatile private var theme: () -> String,
     @Volatile private var onClosePage: () -> Unit,
@@ -118,6 +122,11 @@ class PluginWebBridge(
     @Volatile private var visible = false
     @Volatile private var closed = false
     @Volatile private var contextKey = environment.contextKey()
+    private data class QueuedEvent(val script: String, val contextKey: String?)
+    private val eventLock = Any()
+    private val queuedEvents = ArrayDeque<QueuedEvent>()
+    private var eventFlushScheduled = false
+    private val eventFlush = Runnable { flushEvents() }
     private val fileSubscriptions = PluginFileSubscriptions(
         scope = scope,
         watch = { path, recursive -> environment.watch(hostPaths, path, recursive) },
@@ -260,15 +269,42 @@ class PluginWebBridge(
     }
 
     private fun postEvent(event: JsonObject) {
+        if (closed) return
         val payload = event["payload"] as? JsonObject
-        val key = (payload?.get("contextKey") as? JsonPrimitive)?.contentOrNull
         val contextual = (event["name"] as? JsonPrimitive)?.contentOrNull in setOf("fs.changed", "ui.lifecycle")
-        val script = "window.__aiverseEvent(${jsString(event.toString())})"
-        mainHandler.post {
-            if (isAuthorized() && (!contextual || key == null || key == environment.contextKey())) {
-                runCatching { post(script) }
+        val key = if (contextual) (payload?.get("contextKey") as? JsonPrimitive)?.contentOrNull else null
+        val queued = QueuedEvent(
+            "try{window.__aiverseEvent(${jsString(event.toString())})}catch(e){}",
+            key
+        )
+        // 合帧：流式 token / 进度这类高频事件先入队，同一窗口内合并成一次 evaluateJavascript，
+        // 避免每条事件一次跨 WebView 调用把页面调抖。窗口与上限见 [EVENT_BATCH_WINDOW_MS] / [MAX_EVENT_BATCH_SIZE]。
+        synchronized(eventLock) {
+            if (closed) return
+            queuedEvents.addLast(queued)
+            if (!eventFlushScheduled) {
+                eventFlushScheduled = true
+                mainHandler.postDelayed(eventFlush, EVENT_BATCH_WINDOW_MS)
             }
         }
+    }
+
+    private fun flushEvents() {
+        val batch = synchronized(eventLock) {
+            val events = List(minOf(queuedEvents.size, MAX_EVENT_BATCH_SIZE)) { queuedEvents.removeFirst() }
+            if (queuedEvents.isEmpty()) {
+                eventFlushScheduled = false
+            } else {
+                mainHandler.postDelayed(eventFlush, EVENT_BATCH_WINDOW_MS)
+            }
+            events
+        }
+        if (batch.isEmpty() || !isAuthorized()) return
+        val key = environment.contextKey()
+        val script = batch.asSequence()
+            .filter { it.contextKey == null || it.contextKey == key }
+            .joinToString(";\n") { it.script }
+        if (script.isNotEmpty()) runCatching { post(script) }
     }
 
     /**
@@ -430,6 +466,13 @@ class PluginWebBridge(
         "model.start" -> modelService.start(page.pluginId, params, "page:${page.cacheKey}")
         "model.read" -> modelService.read(page.pluginId, params)
         "model.cancel" -> modelService.cancel(page.pluginId, params)
+        // 插件维护自己声明的提供商（模型列表 / 上下文窗口 / API Key）；范围严格限定为清单内条目。
+        // providerService 由构造方注入；未注入（页面宿主尚未传参）时按方法不支持回退，不致崩溃。
+        "providers.listModels" -> requireProviderService().listModels(page.pluginId, params)
+        "providers.addModel" -> requireProviderService().addModel(page.pluginId, params)
+        "providers.deleteModel" -> requireProviderService().deleteModel(page.pluginId, params)
+        "providers.setModelContext" -> requireProviderService().setModelContext(page.pluginId, params)
+        "providers.setApiKey" -> requireProviderService().setApiKey(page.pluginId, params)
         "clipboard.read" -> systemService.clipboardRead(page.pluginId)
         "clipboard.write" -> systemService.clipboardWrite(
             page.pluginId,
@@ -474,6 +517,10 @@ class PluginWebBridge(
         "tools.resolve" -> toolService.resolve(page.pluginId, params)
         "mcp.status" -> introspectionService.mcpStatus(page.pluginId)
         "http.request" -> httpService.request(page.pluginId, params)
+        "sessionSource.setMessages" -> sessionSourceService.setMessages(page.pluginId, params)
+        "sessionSource.pushEvent" -> sessionSourceService.pushEvent(page.pluginId, params)
+        "permissions.request" -> permissionService.request(page.pluginId, params)
+        "permissions.cancel" -> permissionService.cancel(page.pluginId, params)
         else -> throw PluginHostException("METHOD_UNKNOWN", "unknown method: $method")
         }
     }
@@ -507,6 +554,16 @@ class PluginWebBridge(
             throw PluginHostException(e.code, e.message)
         }
     }
+
+    /**
+     * `providers.*` 依赖的宿主提供商维护服务。
+     *
+     * TODO(wiring): 该服务已就位，但页面宿主（PluginsViewModel.createWebBridge）尚未把它传进桥。
+     * 桥的构造参数给了默认 null 以不破坏既有调用点；宿主接入后此处即自动生效，无需再改分支。
+     */
+    private fun requireProviderService(): PluginProviderService =
+        providerService
+            ?: throw PluginHostException("METHOD_UNSUPPORTED", "provider maintenance is not wired on this page host")
 
     /**
      * 从设置页创建宿主托管的系统浮层；权限与页面声明由 [PluginOverlayManager] 校验。
@@ -708,6 +765,10 @@ class PluginWebBridge(
 
     private companion object {
         const val TAG = "PluginWebBridge"
+        /** 事件合帧窗口：16ms ≈ 一帧，窗口内的高频事件合并成一次 evaluateJavascript。 */
+        const val EVENT_BATCH_WINDOW_MS = 16L
+        /** 单帧最多推送的事件条数；超出部分留到下一帧，避免单次脚本过长卡主线程。 */
+        const val MAX_EVENT_BATCH_SIZE = 32
         const val UI_INVOKE_TIMEOUT_MS = 60_000L
         const val MAX_INVOKE_ARGS_CHARS = 256 * 1024
         const val MAX_TERMINAL_TITLE_CHARS = 120

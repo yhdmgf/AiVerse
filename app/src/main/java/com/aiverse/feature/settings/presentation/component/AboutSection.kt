@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiverse.R
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.dialogTextFieldColors
@@ -62,6 +67,7 @@ import compose.icons.feathericons.Github
 import compose.icons.feathericons.Globe
 import compose.icons.feathericons.MessageCircle
 import compose.icons.feathericons.RefreshCw
+import compose.icons.feathericons.Star
 import compose.icons.feathericons.Tag
 
 /**
@@ -84,6 +90,7 @@ internal fun AboutSection(
     val context = LocalContext.current
     var showChannelSheet by remember { mutableStateOf(false) }
     var showMirrorDialog by remember { mutableStateOf(false) }
+
     val termsUrl = stringResource(R.string.agreement_terms_url)
     val privacyUrl = stringResource(R.string.agreement_privacy_url)
 

@@ -239,7 +239,7 @@ class PluginIndexClient @Inject constructor(
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}: $url")
             val body = response.body ?: throw IOException("空响应: $url")
             val declared = body.contentLength()
-            if (declared > maxBytes) throw IOException("响应超过大小限制: $url")
+            if (declared > maxBytes) throw PluginIndexException("响应超过大小限制: $url")
             if (expectedSize != null && declared > 0 && declared != expectedSize) {
                 throw IOException("响应大小 $declared 与声明 $expectedSize 不一致")
             }
@@ -251,7 +251,7 @@ class PluginIndexClient @Inject constructor(
                 val read = stream.read(buffer)
                 if (read < 0) break
                 total += read
-                if (total > maxBytes) throw IOException("响应超过大小限制: $url")
+                if (total > maxBytes) throw PluginIndexException("响应超过大小限制: $url")
                 output.write(buffer, 0, read)
             }
             if (expectedSize != null && total != expectedSize) {

@@ -874,7 +874,7 @@ private fun WorkspaceRestoreDialog(
                             onCheckedChange = { v -> checked = checked + (ws.name to v) }
                         )
                         Text(
-                            text = ws.name,
+                            text = ws.alias?.takeIf { it.isNotBlank() } ?: ws.name,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,

@@ -3,10 +3,12 @@ package com.aiverse.feature.agent.domain.permission
 import android.content.Context
 import android.provider.Settings
 import com.aiverse.R
-import dagger.hilt.android.qualifiers.ApplicationContext
 import com.aiverse.feature.agent.domain.tool.AgentTool
 import com.aiverse.feature.agent.domain.tool.ToolCapability
+import com.aiverse.feature.phonecontrol.data.ConfirmMode
+import com.aiverse.feature.phonecontrol.data.PhoneControlSettingsRepository
 import com.aiverse.feature.settings.data.repository.ToolSafetySettingsRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
@@ -29,10 +31,11 @@ import javax.inject.Singleton
  * AUTO 模式也不自动放行（除非已开启「禁用安全拦截」）。
  */
 @Singleton
-class ToolPermissionPolicyEngine @Inject constructor(
+open class ToolPermissionPolicyEngine @Inject constructor(
     private val rulesRepo: PermissionRulesRepository,
     private val toolSafetySettings: ToolSafetySettingsRepository,
     private val fileWhitelistPolicy: FileWhitelistPolicy,
+    private val phoneControlSettings: PhoneControlSettingsRepository,
     @param:ApplicationContext private val appContext: Context
 ) {
     companion object {
@@ -42,8 +45,14 @@ class ToolPermissionPolicyEngine @Inject constructor(
         /** Shizuku 工具：以 adb shell 身份直接操作宿主 Android 系统，按高危处理（一律弹窗、不可记忆）。 */
         const val SHIZUKU_TOOL = "Shizuku"
 
-        /** 手机控制工具：读屏/点击/打开应用（无障碍），属超高危险指令，无论任何免授权开关一律强制逐次确认。 */
+        /** 手机控制工具：读屏/点击/打开应用（无障碍），属超高危险指令，按手机控制「确认方式」设置裁决。 */
         const val PHONE_CONTROL_TOOL = "PhoneControl"
+
+        /** 手机控制动作携带的目标应用参数名，用于比对「不碰」名单。 */
+        private const val PHONE_CONTROL_PACKAGE_ARG = "package_name"
+
+        /** 手机控制任务级免确认（ConfirmMode.TASK）最多同时记录的已确认任务数，超出按 LRU 淘汰。 */
+        private const val MAX_CONFIRMED_PHONE_TASKS = 64
 
         /**
          * 合并后的终端会话工具：其 `start` 动作承载 shell 命令，需走指令级前缀匹配；
@@ -130,7 +139,19 @@ class ToolPermissionPolicyEngine @Inject constructor(
         val askTitle: String? = null
     )
 
-    suspend fun evaluate(tool: AgentTool?, toolName: String, args: Map<String, JsonElement>, mode: com.aiverse.feature.agent.domain.model.AgentMode): EvalResult {
+    /** 手机控制「本任务免确认」已确认任务集合（访问序 LRU，超出上限淘汰最久未用条目）。 */
+    private val confirmedPhoneTasks = object : LinkedHashMap<String, Unit>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>): Boolean =
+            size > MAX_CONFIRMED_PHONE_TASKS
+    }
+
+    suspend fun evaluate(
+        tool: AgentTool?,
+        toolName: String,
+        args: Map<String, JsonElement>,
+        mode: com.aiverse.feature.agent.domain.model.AgentMode,
+        taskKey: String? = null
+    ): EvalResult {
         val capabilities = tool?.effectiveCapabilities(args).orEmpty()
         if (mode == com.aiverse.feature.agent.domain.model.AgentMode.PLAN && isDangerousTool(toolName, args, capabilities)) {
             return EvalResult(Verdict.DENY, emptyList(), denyReason = appContext.getString(R.string.tool_plan_mode_denied))
@@ -143,21 +164,8 @@ class ToolPermissionPolicyEngine @Inject constructor(
 
         // 「一键允许所有工具」（全局）开启后默认放行，不再逐次索要确认。
         // 安全底线仍保留：灾难性 rm（根目录/系统目录删除）与 Shizuku 宿主系统操作仍拦截。
-        // 手机控制属超高危险指令：即使开启一键允许/禁用安全拦截，仍强制逐次确认且不可记忆。
-        // 确认走悬浮窗口（其他页面也可确认），故需悬浮窗权限；未授予时无法确认，直接拒绝并说明原因。
         if (toolName == PHONE_CONTROL_TOOL) {
-            if (!Settings.canDrawOverlays(appContext)) {
-                return EvalResult(
-                    Verdict.DENY,
-                    emptyList(),
-                    denyReason = appContext.getString(R.string.tool_phone_control_overlay_permission_reason)
-                )
-            }
-            return EvalResult(
-                Verdict.ASK,
-                emptyList(),
-                rememberDisabledReason = appContext.getString(R.string.tool_shizuku_confirmation_reason)
-            )
+            return evaluatePhoneControl(args, taskKey)
         }
 
         if (toolSafetySettings.isGlobalAutoApprove()) {
@@ -248,6 +256,75 @@ class ToolPermissionPolicyEngine @Inject constructor(
         } else {
             evaluateGeneric(rules, capabilities)
         }
+    }
+
+    /** 是否已授予悬浮窗权限（可拆出以便测试覆盖）。 */
+    open fun isOverlayPermissionGranted(): Boolean = Settings.canDrawOverlays(appContext)
+
+    /**
+     * 手机控制分支裁决：先走「不碰」名单安全底线，再按「确认方式」设置决定放行 / 询问。
+     *
+     * 评估顺序：
+     *   1) 动作携带的 package_name 命中「不碰」名单（银行/支付/券商类）→ 无论确认方式一律 DENY；
+     *   2) 始终免确认（ALWAYS）→ 直接 ALLOW，跳过悬浮窗检查（免确认不再需要悬浮窗确认入口）；
+     *   3) 本任务免确认（TASK）且本次任务已确认过 → ALLOW；
+     *   4) 其余（ASK，或 TASK 尚未确认）→ 需悬浮窗权限（未授予则 DENY），否则 ASK 且不可记忆。
+     */
+    private suspend fun evaluatePhoneControl(args: Map<String, JsonElement>, taskKey: String?): EvalResult {
+        val targetPackage = (args[PHONE_CONTROL_PACKAGE_ARG] as? JsonPrimitive)?.content?.trim().orEmpty()
+        if (targetPackage.isNotEmpty() && targetPackage in phoneControlSettings.currentSettings().denyPackages) {
+            return EvalResult(
+                Verdict.DENY,
+                emptyList(),
+                denyReason = appContext.getString(R.string.phone_permission_deny_package)
+            )
+        }
+        return when (phoneControlSettings.currentSettings().confirmMode) {
+            ConfirmMode.ALWAYS -> EvalResult(Verdict.ALLOW, emptyList())
+            ConfirmMode.TASK -> {
+                if (taskKey != null && isPhoneControlTaskConfirmed(taskKey)) {
+                    return EvalResult(Verdict.ALLOW, emptyList())
+                }
+                askPhoneControl()
+            }
+            ConfirmMode.ASK -> askPhoneControl()
+        }
+    }
+
+    /** 手机控制待确认（需悬浮窗入口，且因超高危险不可「始终允许」）。 */
+    private fun askPhoneControl(): EvalResult {
+        if (!isOverlayPermissionGranted()) {
+            return EvalResult(
+                Verdict.DENY,
+                emptyList(),
+                denyReason = appContext.getString(R.string.tool_phone_control_overlay_permission_reason)
+            )
+        }
+        return EvalResult(
+            Verdict.ASK,
+            emptyList(),
+            rememberDisabledReason = appContext.getString(R.string.tool_shizuku_confirmation_reason)
+        )
+    }
+
+    /** 该任务是否已在手机控制「本任务免确认」下确认过。 */
+    private fun isPhoneControlTaskConfirmed(taskKey: String): Boolean =
+        synchronized(confirmedPhoneTasks) { confirmedPhoneTasks.containsKey(taskKey) }
+
+    /**
+     * 标记一次任务内手机控制已经用户确认：同一任务后续调用按「本任务免确认」放行。
+     * 用访问序 LRU 有界集合，防 Singleton 长期累积；超出 [MAX_CONFIRMED_PHONE_TASKS] 淘汰最久未用条目。
+     */
+    fun markPhoneControlTaskConfirmed(taskKey: String) {
+        synchronized(confirmedPhoneTasks) { confirmedPhoneTasks[taskKey] = Unit }
+    }
+
+    /**
+     * 清除某任务的手机控制确认记录（任务结束/取消时调用）。
+     * 若调用方未显式清理，也会被 [markPhoneControlTaskConfirmed] 的 LRU 上限兜底淘汰。
+     */
+    fun clearPhoneControlTask(taskKey: String) {
+        synchronized(confirmedPhoneTasks) { confirmedPhoneTasks.remove(taskKey) }
     }
 
     private fun isDangerousTool(toolName: String, args: Map<String, JsonElement>, capabilities: Set<ToolCapability>): Boolean {

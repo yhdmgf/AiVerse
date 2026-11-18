@@ -3,6 +3,7 @@ package com.aiverse.feature.agent.presentation.component
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,6 +88,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
@@ -119,7 +122,11 @@ import com.aiverse.feature.agent.presentation.BrowseClipboard
 import com.aiverse.feature.agent.presentation.BrowseSortMode
 import com.aiverse.feature.agent.presentation.FileBrowseState
 import com.aiverse.feature.agent.presentation.FileTreeNode
+import com.aiverse.feature.plugins.domain.session.PluginSessionGroup
+import com.aiverse.feature.plugins.domain.session.PluginSessionSummary
+import com.aiverse.feature.plugins.presentation.PluginSessionUiMapper
 import com.aiverse.feature.agent.presentation.FileTreeRoot
+import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.core.ui.ChevronRotationStyle
 import com.aiverse.core.ui.ExpandableChevronIcon
@@ -151,6 +158,7 @@ import compose.icons.feathericons.Check
 import compose.icons.feathericons.CornerUpRight
 import compose.icons.feathericons.Share2
 import compose.icons.feathericons.Upload
+import compose.icons.feathericons.UploadCloud
 import androidx.compose.ui.res.stringResource
 import com.aiverse.R
 import java.text.SimpleDateFormat
@@ -162,6 +170,26 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 
+@Composable
+private fun DrawerProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    strokeWidth: Dp = ProgressIndicatorDefaults.CircularStrokeWidth
+) {
+    // 侧栏打开时经 [chatAnimationsEnabled] 关掉不确定进度动画，改成静态 0.75 进度环：
+    // 隐藏/后台的侧栏进度条不再逐帧重绘，视觉上仍是「加载中」。
+    if (chatAnimationsEnabled()) {
+        CircularProgressIndicator(modifier = modifier, color = color, strokeWidth = strokeWidth)
+    } else {
+        CircularProgressIndicator(
+            progress = { 0.75f },
+            modifier = modifier,
+            color = color,
+            strokeWidth = strokeWidth
+        )
+    }
+}
+
 /**
  * 侧边栏内容：顶部 Tab 切换「会话」/「文件」，底部「设置」入口卡片。
  * Tab0 为根会话列表，带子代理的会话行可就地展开；Tab1 为当前工作区的文件树。
@@ -170,6 +198,9 @@ import kotlinx.coroutines.delay
 fun ChatDrawerContent(
     sessions: List<ChatSession>,
     currentSessionId: String?,
+    pluginSessionGroups: List<PluginSessionGroup> = emptyList(),
+    currentPluginSessionId: String? = null,
+    onSelectPluginSession: (PluginSessionSummary) -> Unit = {},
     agentStates: Map<String, AgentUIState>,
     awaitingPermissionSessionIds: Set<String> = emptySet(),
     onSelect: (ChatSession) -> Unit,
@@ -203,6 +234,11 @@ fun ChatDrawerContent(
     onPasteOverwrite: () -> Unit,
     onCancelPasteOverwrite: () -> Unit,
     onClearClipboard: () -> Unit,
+    workspaceName: String = "",
+    onAddLocalFolder: (Uri) -> Unit = {},
+    onRemoveLocalFolder: (String) -> Unit = {},
+    onUploadFiles: (String, List<Uri>) -> Unit = { _, _ -> },
+    onUploadFolder: (String, Uri) -> Unit = { _, _ -> },
     // 文件管理增强：分享/导入/导出/批量移动/复制
     onShareEntries: (Set<String>) -> Unit,
     onExportEntries: (Set<String>, Uri) -> Unit,
@@ -387,6 +423,9 @@ fun ChatDrawerContent(
                 0 -> SessionListTab(
                     sessions = sessions,
                     currentSessionId = currentSessionId,
+                    pluginSessionGroups = pluginSessionGroups,
+                    currentPluginSessionId = currentPluginSessionId,
+                    onSelectPluginSession = onSelectPluginSession,
                     agentStates = agentStates,
                     awaitingPermissionSessionIds = awaitingPermissionSessionIds,
                     subSessionsByParent = subSessionsByParent,
@@ -438,6 +477,11 @@ fun ChatDrawerContent(
                     onCutEntry = onCutEntry,
                     onPasteEntry = onPasteEntry,
                     onClearClipboard = onClearClipboard,
+                    workspaceName = workspaceName,
+                    onAddLocalFolder = onAddLocalFolder,
+                    onRemoveLocalFolder = onRemoveLocalFolder,
+                    onUploadFiles = onUploadFiles,
+                    onUploadFolder = onUploadFolder,
                     onShareEntries = onShareEntries,
                     onExportEntries = onExportEntries,
                     onImportFiles = onImportFiles,
@@ -603,6 +647,9 @@ fun ChatDrawerContent(
 private fun SessionListTab(
     sessions: List<ChatSession>,
     currentSessionId: String?,
+    pluginSessionGroups: List<PluginSessionGroup>,
+    currentPluginSessionId: String?,
+    onSelectPluginSession: (PluginSessionSummary) -> Unit,
     agentStates: Map<String, AgentUIState>,
     awaitingPermissionSessionIds: Set<String>,
     subSessionsByParent: Map<String, List<ChatSession>>,
@@ -620,6 +667,9 @@ private fun SessionListTab(
         SessionListContent(
             sessions = sessions,
             currentSessionId = currentSessionId,
+            pluginSessionGroups = pluginSessionGroups,
+            currentPluginSessionId = currentPluginSessionId,
+            onSelectPluginSession = onSelectPluginSession,
             agentStates = agentStates,
             awaitingPermissionSessionIds = awaitingPermissionSessionIds,
             subSessionsByParent = subSessionsByParent,
@@ -640,6 +690,9 @@ private fun SessionListTab(
 private fun SessionListContent(
     sessions: List<ChatSession>,
     currentSessionId: String?,
+    pluginSessionGroups: List<PluginSessionGroup>,
+    currentPluginSessionId: String?,
+    onSelectPluginSession: (PluginSessionSummary) -> Unit,
     agentStates: Map<String, AgentUIState>,
     awaitingPermissionSessionIds: Set<String>,
     subSessionsByParent: Map<String, List<ChatSession>>,
@@ -650,7 +703,7 @@ private fun SessionListContent(
     onSelect: (ChatSession) -> Unit,
     onLongClick: (ChatSession) -> Unit
 ) {
-    if (sessions.isEmpty()) {
+    if (sessions.isEmpty() && pluginSessionGroups.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -683,6 +736,29 @@ private fun SessionListContent(
         state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
+        // 插件会话：不混入时间分组，固定放在本机会话之上；组内顺序保持插件返回顺序。
+        pluginSessionGroups.forEach { pluginGroup ->
+            item(key = "plugin-group-${pluginGroup.pluginId}", contentType = "group-header") {
+                SettingsGroupHeader(text = pluginGroup.pluginName)
+            }
+            itemsIndexed(
+                items = pluginGroup.sessions,
+                key = { _, pluginSession -> "plugin-session-${pluginSession.id}" },
+                contentType = { _, _ -> "plugin-session" }
+            ) { index, pluginSession ->
+                Column {
+                    if (index > 0) SettingsDivider()
+                    ChatSessionRow(
+                        session = pluginSession.asChatSession(),
+                        selected = !selectionMode && currentPluginSessionId == pluginSession.id,
+                        isExecuting = pluginSession.running,
+                        onClick = { onSelectPluginSession(pluginSession) },
+                        onLongClick = {}
+                    )
+                }
+            }
+        }
+
         // 每个分组占一个 item、组内 forEach 全量渲染会让 LazyColumn 失去惰性：
         // 「最近 30 天」这种分组有上百个会话时，一个 item 就要组合上百行。分组头与会话各自成 item。
         groups.forEach { group ->
@@ -832,7 +908,7 @@ internal fun ChatSearchResults(
     when {
         state.hits.isEmpty() && state.loading -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
+                DrawerProgressIndicator(
                     modifier = Modifier.size(24.dp),
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -978,6 +1054,11 @@ private fun FileBrowserTab(
     onCutEntry: (String, String) -> Unit,
     onPasteEntry: (String, (Boolean) -> Unit) -> Unit,
     onClearClipboard: () -> Unit,
+    workspaceName: String,
+    onAddLocalFolder: (Uri) -> Unit,
+    onRemoveLocalFolder: (String) -> Unit,
+    onUploadFiles: (String, List<Uri>) -> Unit,
+    onUploadFolder: (String, Uri) -> Unit,
     onShareEntries: (Set<String>) -> Unit,
     onExportEntries: (Set<String>, Uri) -> Unit,
     onImportFiles: (List<Uri>, String) -> Unit,
@@ -1005,6 +1086,37 @@ private fun FileBrowserTab(
     var searchQuery by remember { mutableStateOf("") }
     // 面包屑焦点目录：默认工作区根，展开工作区目录时跟随，点上级折回
     var focusPath by remember { mutableStateOf(workspaceRoot) }
+    // 上传时记住长按的目标目录；系统选择器回调时目标目录行可能已被刷新，不能用菜单节点。
+    var uploadTarget by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    // 「+」添加本机文件夹：系统目录选择器，选中后持久化授权并登记为文件树根。
+    val localFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            onAddLocalFolder(uri)
+        }
+    }
+    val uploadFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        val target = uploadTarget
+        uploadTarget = null
+        if (target != null && uris.isNotEmpty()) onUploadFiles(target, uris)
+    }
+    val uploadFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        val target = uploadTarget
+        uploadTarget = null
+        if (target != null && uri != null) onUploadFolder(target, uri)
+    }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
@@ -1092,6 +1204,7 @@ private fun FileBrowserTab(
                 FileTreeBreadcrumb(
                     focusPath = focusPath,
                     workspaceRoot = workspaceRoot,
+                    rootLabel = workspaceName.ifBlank { stringResource(R.string.file_browser_title) },
                     onNavigate = { path ->
                         focusPath = path
                         onCollapseToPath(path)
@@ -1105,7 +1218,7 @@ private fun FileBrowserTab(
                     )
                 }
                 if (fileOpPaths.isNotEmpty()) {
-                    CircularProgressIndicator(
+                    DrawerProgressIndicator(
                         modifier = Modifier.padding(horizontal = Spacing.xs).size(16.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.primary
@@ -1123,6 +1236,18 @@ private fun FileBrowserTab(
                     ) {
                         Text(stringResource(R.string.common_done))
                     }
+                }
+                // 「+」添加本机文件夹作为独立文件树根。
+                IconButton(
+                    onClick = { localFolderLauncher.launch(null) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = FeatherIcons.Plus,
+                        contentDescription = stringResource(R.string.file_browser_add_folder),
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 // 根行工具收进 ⋯ 菜单：新建/导入/搜索/显示隐藏/编辑/刷新 + 排序方式。
                 Box {
@@ -1292,7 +1417,7 @@ private fun FileBrowserTab(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                DrawerProgressIndicator(modifier = Modifier.size(24.dp))
             }
 
             is FileBrowseState.Error -> Box(
@@ -1538,9 +1663,36 @@ private fun FileBrowserTab(
     }
 
     menuNode?.let { node ->
+        val root = node.root
+        // 上传是从设备选择文件/文件夹写入当前目录：只对容器内目录（工作区、容器、其子目录）提供，
+        // 本机文件夹本来就在设备上，不需要上传。
+        val isLocalFolderPath = WorkspacePathMapper.isLocalFolderContainerPath(node.path)
+        val uploadFileAction: (() -> Unit)? = if (node.entry.isDirectory && !isLocalFolderPath) {
+            {
+                menuNode = null
+                uploadTarget = node.path
+                uploadFileLauncher.launch(arrayOf("*/*"))
+            }
+        } else null
+        val uploadFolderAction: (() -> Unit)? = if (node.entry.isDirectory && !isLocalFolderPath) {
+            {
+                menuNode = null
+                uploadTarget = node.path
+                uploadFolderLauncher.launch(null)
+            }
+        } else null
+        val removeFolderAction: (() -> Unit)? = if (root is FileTreeRoot.LocalFolder) {
+            {
+                menuNode = null
+                onRemoveLocalFolder(root.hostPath)
+            }
+        } else null
         FileTreeActionSheet(
             node = node,
             clipboard = clipboard,
+            onUploadFile = uploadFileAction,
+            onUploadFolder = uploadFolderAction,
+            onRemoveLocalFolder = removeFolderAction,
             onNewFile = {
                 menuNode = null
                 if (node.root == null && node.path !in expandedPaths) onToggleExpand(node.path)
@@ -1691,15 +1843,16 @@ private fun ClipboardIndicator(
     }
 }
 
-/** 文件树顶部面包屑：显示焦点目录的相对路径段，点非末段「返回上级」（折叠更深层）。 */
+/** 文件树顶部面包屑：显示焦点目录的相对路径段（根段为当前工作区名），点非末段「返回上级」（折叠更深层）。 */
 @Composable
 private fun FileTreeBreadcrumb(
     focusPath: String,
     workspaceRoot: String,
+    rootLabel: String,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val segments = buildBreadcrumbSegments(focusPath, workspaceRoot)
+    val segments = buildBreadcrumbSegments(focusPath, workspaceRoot, rootLabel)
     Row(
         modifier = modifier.horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically
@@ -1729,8 +1882,8 @@ private fun FileTreeBreadcrumb(
     }
 }
 
-/** 把焦点目录拆成面包屑段：根段用「workspace」，其余为逐级目录名，携带累积路径供返回。 */
-private fun buildBreadcrumbSegments(focusPath: String, workspaceRoot: String): List<Pair<String, String>> {
+/** 把焦点目录拆成面包屑段：根段用 [rootLabel]（当前工作区名），其余为逐级目录名，携带累积路径供返回。 */
+private fun buildBreadcrumbSegments(focusPath: String, workspaceRoot: String, rootLabel: String): List<Pair<String, String>> {
     val base = workspaceRoot.trimEnd('/')
     if (!focusPath.startsWith(base)) {
         // 非工作区根（如容器根）：仅显示末段名，不可导航。
@@ -1741,7 +1894,7 @@ private fun buildBreadcrumbSegments(focusPath: String, workspaceRoot: String): L
     val parts = if (rel.isEmpty()) emptyList() else rel.split("/")
     val segments = mutableListOf<Pair<String, String>>()
     var acc = base
-    segments += "workspace" to base
+    segments += rootLabel to base
     for (p in parts) {
         acc = "$acc/$p"
         segments += p to acc
@@ -1749,13 +1902,16 @@ private fun buildBreadcrumbSegments(focusPath: String, workspaceRoot: String): L
     return segments
 }
 
-/** 文件树节点长按弹出的功能菜单：目录（含工作区根）可新建，非根节点可复制/剪切/重命名/删除，
- * 剪切板非空时目录可「粘贴到此处」。 */
+/** 文件树节点长按弹出的功能菜单：容器内目录（含工作区根）可新建与上传文件/文件夹，
+ * 非根节点可复制/剪切/重命名/删除，剪切板非空时目录可「粘贴到此处」；本机文件夹根可移除。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FileTreeActionSheet(
     node: FileTreeNode,
     clipboard: BrowseClipboard?,
+    onUploadFile: (() -> Unit)?,
+    onUploadFolder: (() -> Unit)?,
+    onRemoveLocalFolder: (() -> Unit)?,
     onNewFile: () -> Unit,
     onNewFolder: () -> Unit,
     onRename: () -> Unit,
@@ -1810,6 +1966,22 @@ private fun FileTreeActionSheet(
                     onClick = onNewFolder
                 )
             }
+            onUploadFile?.let { action ->
+                SheetActionRow(
+                    icon = FeatherIcons.Upload,
+                    label = stringResource(R.string.file_browser_upload_file),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    onClick = action
+                )
+            }
+            onUploadFolder?.let { action ->
+                SheetActionRow(
+                    icon = FeatherIcons.UploadCloud,
+                    label = stringResource(R.string.file_browser_upload_folder),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    onClick = action
+                )
+            }
             if (node.root == null) {
                 SheetActionRow(
                     icon = FeatherIcons.Share2,
@@ -1846,6 +2018,14 @@ private fun FileTreeActionSheet(
                     label = stringResource(R.string.common_delete),
                     tint = MaterialTheme.colorScheme.error,
                     onClick = onDelete
+                )
+            }
+            onRemoveLocalFolder?.let { action ->
+                SheetActionRow(
+                    icon = FeatherIcons.X,
+                    label = stringResource(R.string.file_browser_remove_folder),
+                    tint = MaterialTheme.colorScheme.error,
+                    onClick = action
                 )
             }
         }
@@ -1935,7 +2115,7 @@ private fun FileTreeRow(
         Spacer(Modifier.width(indentWidth * node.depth))
         if (node.entry.isDirectory) {
             if (showExpanding) {
-                CircularProgressIndicator(
+                DrawerProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary
@@ -1956,7 +2136,7 @@ private fun FileTreeRow(
         }
         Spacer(Modifier.width(Spacing.xs))
         if (busy) {
-            CircularProgressIndicator(
+            DrawerProgressIndicator(
                 modifier = Modifier.size(20.dp),
                 strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.primary
@@ -1977,7 +2157,8 @@ private fun FileTreeRow(
     }
 }
 
-/** 文件树行的类型图标：目录用文件夹，文件按扩展名挑选单色线性图标。容器根用「容器与镜像」列表同款图标。
+/** 文件树行的类型图标：目录用文件夹，文件按扩展名挑选单色线性图标。容器根用「容器与镜像」列表同款图标，
+ * 本机文件夹根用磁盘图标。
  * [decorationColor] 非空时统一染色（.gitignore/dotfile 弱化）。 */
 @Composable
 private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
@@ -2002,6 +2183,15 @@ private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
         }
         return
     }
+    if (node.root is FileTreeRoot.LocalFolder) {
+        Icon(
+            imageVector = FeatherIcons.HardDrive,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = decorationColor ?: MaterialTheme.colorScheme.primary
+        )
+        return
+    }
     val vector = if (node.entry.isDirectory) {
         FeatherIcons.Folder
     } else {
@@ -2022,6 +2212,9 @@ private val FileTreeIgnoredColor = Color(0xFFCC8844)
 
 /** 文件树一行的显示名：根节点用根标签（工作区根 `workspace` / 当前容器名），其余用条目名。 */
 private val FileTreeNode.displayName: String get() = root?.label ?: entry.name
+
+/** 插件会话合成一个不落库的 [ChatSession]，仅供 [ChatSessionRow] 渲染（标题/时间）。 */
+private fun PluginSessionSummary.asChatSession(): ChatSession = PluginSessionUiMapper.toChatSession(this)
 
 /** 文件树一行除缩进与文本外的固定宽度开销（start 8 + 箭头 16 + 4 + 图标 20 + 8 + end 12），供预算整树统一行宽。 */
 private val FILE_TREE_ROW_OVERHEAD = 68.dp

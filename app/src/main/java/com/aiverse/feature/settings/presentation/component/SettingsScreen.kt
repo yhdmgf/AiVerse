@@ -325,6 +325,7 @@ fun SettingsScreen(
     val goalMaxTurns by viewModel.goalMaxTurns.collectAsStateWithLifecycle()
     val goalMaxTokens by viewModel.goalMaxTokens.collectAsStateWithLifecycle()
     val deleteExternalWorkspaceSessions by viewModel.deleteExternalWorkspaceSessions.collectAsStateWithLifecycle()
+    val mcpLazyTools by viewModel.mcpLazyTools.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val welcomeEntries by viewModel.welcomeEntries.collectAsStateWithLifecycle()
     val themePresetId by viewModel.themePresetId.collectAsStateWithLifecycle()
@@ -564,6 +565,8 @@ fun SettingsScreen(
     // 「添加技能」底部弹层：选择作用域后走手动新建 / 文件导入 / 压缩包导入 / GitHub 拉取。
     var showSkillAddSheet by remember { mutableStateOf(false) }
     var skillImportScope by remember { mutableStateOf(SkillScope.GLOBAL) }
+    // 记忆页顶栏「新建」触发标志：MemorySection 内部观察到 true 就弹出新建记忆 dialog 并复位。
+    var showMemoryEditor by remember { mutableStateOf(false) }
     // 「从 GitHub 拉取」输入仓库地址的对话框可见性。
     var showGithubSkillDialog by remember { mutableStateOf(false) }
     // 技能文件 / 压缩包选择器：结果交给 ViewModel 读取并落盘到所选作用域。
@@ -1076,6 +1079,21 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                        SettingsSection.Memory -> {
+                            if (memoryEnabled) {
+                                // 多选入口：顶栏铅笔开关，状态由 [selectionFor] 统一持有。
+                                SelectionToggleAction(selectionFor(SettingsSection.Memory))
+                                // 新建记忆：触发 MemorySection 内部的新建 dialog。
+                                IconButton(onClick = { showMemoryEditor = true }) {
+                                    Icon(
+                                        FeatherIcons.Plus,
+                                        contentDescription = stringResource(R.string.memory_add),
+                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
                         SettingsSection.SkillDetail -> selectedSkill?.let { entry ->
                             Box {
                                 var skillMoreExpanded by remember { mutableStateOf(false) }
@@ -1316,7 +1334,9 @@ fun SettingsScreen(
                     goalMaxTokens = goalMaxTokens,
                     onSetGoalMaxTokens = { viewModel.setGoalMaxTokens(it) },
                     deleteExternalWorkspaceSessions = deleteExternalWorkspaceSessions,
-                    onToggleDeleteExternalWorkspaceSessions = { viewModel.setDeleteExternalWorkspaceSessions(it) }
+                    onToggleDeleteExternalWorkspaceSessions = { viewModel.setDeleteExternalWorkspaceSessions(it) },
+                    mcpLazyTools = mcpLazyTools,
+                    onToggleMcpLazyTools = { viewModel.setMcpLazyTools(it) }
                 )
                 SettingsSection.Appearance -> AppearanceSettingsSection(
                     themeMode = themeMode,
@@ -1755,7 +1775,12 @@ fun SettingsScreen(
                 SettingsSection.Memory -> {
                     // 防御：记忆开关关闭时该入口行已整行隐藏，此处兜底不渲染记忆管理内容。
                     if (memoryEnabled) {
-                        MemorySection(viewModel = memoryViewModel)
+                        MemorySection(
+                            viewModel = memoryViewModel,
+                            selection = selectionFor(SettingsSection.Memory),
+                            showMemoryEditor = showMemoryEditor,
+                            onConsumeAddNew = { showMemoryEditor = false }
+                        )
                     }
                 }
                 SettingsSection.PluginPage -> {

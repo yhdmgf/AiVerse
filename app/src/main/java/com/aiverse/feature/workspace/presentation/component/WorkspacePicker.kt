@@ -54,6 +54,7 @@ import com.aiverse.feature.workspace.domain.model.Workspace
 import com.aiverse.feature.workspace.domain.model.WorkspaceType
 import com.aiverse.feature.workspace.presentation.WorkspaceViewModel
 import compose.icons.FeatherIcons
+import compose.icons.feathericons.Edit2
 import compose.icons.feathericons.Folder
 import compose.icons.feathericons.HardDrive
 import compose.icons.feathericons.MoreHorizontal
@@ -62,6 +63,9 @@ import compose.icons.feathericons.Trash2
 import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import com.aiverse.R
+
+/** 工作区显示名（别名）最大长度，与仓库侧 [com.aiverse.feature.workspace.data.repository.WorkspaceRepository] 的限长一致。 */
+private const val MAX_ALIAS_LENGTH = 64
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +94,7 @@ fun WorkspaceChip(
         )
         Spacer(Modifier.width(Spacing.xs))
         Text(
-            text = current?.name ?: stringResource(R.string.workspace_select),
+            text = current?.displayLabel ?: stringResource(R.string.workspace_select),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -252,6 +256,9 @@ private fun WorkspaceSelectionHost(
                     if (created != null) select(created)
                 }
             },
+            onRename = { ws, newDisplayName ->
+                viewModel.renameWorkspace(ws, newDisplayName)
+            },
             onDelete = { viewModel.deleteWorkspace(it.name) },
             onStopCurrentSessions = onSwitchConfirmed,
             deleteExternalWorkspaceSessions = deleteExternalWorkspaceSessions,
@@ -326,6 +333,7 @@ private fun WorkspaceSheet(
     onAddExternal: () -> Unit,
     onSelect: (Workspace) -> Unit,
     onCreate: (String) -> Unit,
+    onRename: (Workspace, String) -> Unit,
     onDelete: (Workspace) -> Unit,
     onStopCurrentSessions: () -> Unit,
     deleteExternalWorkspaceSessions: Boolean,
@@ -334,6 +342,7 @@ private fun WorkspaceSheet(
     val sheetState = rememberModalBottomSheetState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Workspace?>(null) }
+    var pendingRename by remember { mutableStateOf<Workspace?>(null) }
     val createWorkspaceLabel = stringResource(
         if (isLocalMode) R.string.workspace_new_internal else R.string.workspace_new_workspace
     )
@@ -391,6 +400,7 @@ private fun WorkspaceSheet(
                             selected = ws.name == current?.name,
                             canDelete = workspaces.size > 1,
                             onClick = { onSelect(ws) },
+                            onRename = { pendingRename = ws },
                             onDelete = { pendingDelete = ws }
                         )
                     }
@@ -408,6 +418,20 @@ private fun WorkspaceSheet(
                 showCreateDialog = false
             },
             onDismiss = { showCreateDialog = false }
+        )
+    }
+
+    pendingRename?.let { ws ->
+        RenameWorkspaceDialog(
+            workspace = ws,
+            // 重名校验范围：其他工作区的显示名 + 目录名（排除自身，按目录名识别）。
+            otherLabels = workspaces.filter { it.name != ws.name }
+                .flatMap { listOf(it.displayLabel, it.name) },
+            onConfirm = { newDisplayName ->
+                onRename(ws, newDisplayName)
+                pendingRename = null
+            },
+            onDismiss = { pendingRename = null }
         )
     }
 
@@ -448,6 +472,7 @@ private fun WorkspaceRow(
     selected: Boolean,
     canDelete: Boolean,
     onClick: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     val external = workspace.type == WorkspaceType.EXTERNAL_LOCAL
@@ -473,7 +498,7 @@ private fun WorkspaceRow(
         Spacer(Modifier.width(Spacing.md))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = workspace.name,
+                text = workspace.displayLabel,
                 style = MaterialTheme.typography.bodyLarge,
                 color = when {
                     disabled -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -504,6 +529,21 @@ private fun WorkspaceRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        // 重命名：仅改显示名（镜像删除按钮的 32dp 容器 + Radius.sm 裁剪 + 18dp 图标 pattern）
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(Radius.sm))
+                .clickable(enabled = !disabled, onClick = onRename),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                FeatherIcons.Edit2,
+                contentDescription = stringResource(R.string.common_rename),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
         if (canDelete) {
             Box(
@@ -562,6 +602,56 @@ private fun CreateWorkspaceDialog(
         },
         confirmButton = {
             TextButton(enabled = canConfirm, onClick = { onConfirm(trimmed) }) { Text(stringResource(R.string.common_create)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        }
+    )
+}
+
+/**
+ * 重命名工作区显示名（别名）弹窗：仅改展示名，不动磁盘目录。
+ * 仿 [CreateWorkspaceDialog] 与会话重命名弹窗：预填当前显示名，校验非空/不超长/不与其他工作区重名（排除自身）。
+ */
+@Composable
+private fun RenameWorkspaceDialog(
+    workspace: Workspace,
+    otherLabels: List<String>,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember(workspace.name) { mutableStateOf(workspace.displayLabel) }
+    val trimmed = name.trim()
+    val original = workspace.displayLabel
+    val duplicate = otherLabels.any { it.equals(trimmed, ignoreCase = true) }
+    val canConfirm = trimmed.isNotEmpty() && trimmed != original && !duplicate
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.workspace_rename)) },
+        text = {
+            Column {
+                AppTextField(
+                    value = name,
+                    onValueChange = { name = it.take(MAX_ALIAS_LENGTH) },
+                    singleLine = true,
+                    label = stringResource(R.string.common_name),
+                    placeholder = stringResource(R.string.workspace_rename_hint),
+                    isError = duplicate,
+                    colors = dialogTextFieldColors()
+                )
+                if (duplicate) {
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        stringResource(R.string.workspace_rename_exists),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = canConfirm, onClick = { onConfirm(trimmed) }) { Text(stringResource(R.string.common_rename)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }

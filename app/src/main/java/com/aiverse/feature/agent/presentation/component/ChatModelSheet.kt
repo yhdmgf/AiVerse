@@ -43,6 +43,7 @@ import com.aiverse.feature.agent.domain.model.ReasoningPlan
 import com.aiverse.feature.agent.domain.provider.ReasoningProtocol
 import com.aiverse.feature.agent.domain.provider.ReasoningResolver
 import com.aiverse.feature.agent.domain.provider.preferredOnLevel
+import com.aiverse.feature.agent.domain.provider.reasoningLevelsForUi
 import com.aiverse.feature.agent.domain.provider.showsThinkingToggle
 import com.aiverse.feature.onboarding.domain.OnboardingStep
 import com.aiverse.feature.settings.data.remote.ModelTestResult
@@ -147,16 +148,10 @@ internal fun ReasoningEffortSelector(
     val plan = remember(effort, capability, protocol, model) {
         ReasoningResolver.plan(protocol, model, effort.apiValue, capability)
     }
-    // rikkahub 固定 7 档：关闭/自动/低/中/高/超高/最大（自动=开思考但不指定强度，服务端用模型默认）。
-    val sliderLevels = listOf(
-        ReasoningEffort.NONE,
-        ReasoningEffort.AUTO,
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-        ReasoningEffort.XHIGH,
-        ReasoningEffort.MAX
-    )
+    // 档位集合按模型勾选的能力过滤（与子代理编辑页同一套规则，见 [reasoningLevelsForUi]）：
+    // 已知能力只列模型真实支持的档位（能关闭时前置「关闭」，AUTO 交给开关/适配器表达）；
+    // 能力未知（中转站改名 / 自定义模型）时列全部档位并保留 AUTO 作默认，UI 会同时提示「可能不生效」。
+    val sliderLevels = remember(capability) { capability.reasoningLevelsForUi() }
     val sliderLabels = reasoningLevelLabels(sliderLevels)
     val sliderCurrentIndex = remember(effort, capability, sliderLevels) {
         sliderLevels.indexOf(effort).takeIf { it >= 0 }

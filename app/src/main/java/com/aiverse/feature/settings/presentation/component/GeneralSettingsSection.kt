@@ -67,7 +67,9 @@ internal fun GeneralSettingsSection(
     maxSubagentRunning: Int,
     onSetMaxSubagentRunning: (Int) -> Unit,
     deleteExternalWorkspaceSessions: Boolean,
-    onToggleDeleteExternalWorkspaceSessions: (Boolean) -> Unit
+    onToggleDeleteExternalWorkspaceSessions: (Boolean) -> Unit,
+    mcpLazyTools: Boolean,
+    onToggleMcpLazyTools: (Boolean) -> Unit
 ) {
     var showStartupSessionSheet by remember { mutableStateOf(false) }
     var editingFirstByteTimeout by remember { mutableStateOf(false) }
@@ -206,6 +208,18 @@ internal fun GeneralSettingsSection(
 
         SettingsGroupHeader(text = stringResource(R.string.settings_general_tools))
         SettingsGroup {
+            SettingsRow(
+                icon = null,
+                title = stringResource(R.string.settings_mcp_lazy_tools),
+                subtitle = stringResource(R.string.settings_mcp_lazy_tools_desc),
+                trailing = {
+                    AppSwitch(
+                        checked = mcpLazyTools,
+                        onCheckedChange = onToggleMcpLazyTools
+                    )
+                }
+            )
+            SettingsDivider()
             SettingsRow(
                 icon = null,
                 title = stringResource(R.string.settings_sendfile_max_size),

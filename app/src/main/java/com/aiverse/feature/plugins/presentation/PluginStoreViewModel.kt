@@ -1,5 +1,6 @@
 package com.aiverse.feature.plugins.presentation
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aiverse.core.util.FileLogger
@@ -13,6 +14,7 @@ import com.aiverse.feature.plugins.data.index.PluginIndexSource
 import com.aiverse.feature.plugins.data.index.PluginOfficialRepositories
 import com.aiverse.feature.plugins.data.index.PluginIndexSourceRepository
 import com.aiverse.feature.plugins.domain.PluginError
+import com.aiverse.feature.plugins.domain.PluginErrorCode
 import com.aiverse.feature.plugins.domain.PluginInstallOrigin
 import com.aiverse.feature.plugins.domain.PluginInstallResult
 import com.aiverse.feature.plugins.domain.PluginManager
@@ -20,6 +22,8 @@ import com.aiverse.feature.plugins.domain.PluginPreview
 import com.aiverse.feature.plugins.domain.PluginPreviewResult
 import com.aiverse.feature.plugins.domain.PluginUpdateLogic
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -88,6 +92,8 @@ data class PluginStoreUiState(
     val updatesByPluginId: Map<String, PluginStoreItem> = emptyMap(),
     val error: PluginStoreError? = null,
     val installingPluginId: String? = null,
+    /** 正在为分享而下载/准备插件包的插件 id；非空时分享按钮转圈并禁用，防重复点击。 */
+    val sharingPluginId: String? = null,
     val preview: PluginStorePreview? = null,
     /** 一键更新全部：本轮待更新总数；> 0 表示批量更新进行中，供界面显示「更新中 x/N」。 */
     val updatingTotal: Int = 0,
@@ -106,6 +112,7 @@ data class PluginStoreUiState(
  */
 @HiltViewModel
 class PluginStoreViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val client: PluginIndexClient,
     private val sourceRepository: PluginIndexSourceRepository,
     private val manager: PluginManager
@@ -117,6 +124,10 @@ class PluginStoreViewModel @Inject constructor(
     /** 一次加载结束后要提示的失败来源数；仅在用户下拉刷新或确实有来源失败时发送。 */
     private val _refreshResult = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     val refreshResult: SharedFlow<Int> = _refreshResult.asSharedFlow()
+
+    /** 分享结果：成功携带本地插件包文件（已按商店包原名放好），失败携带原因。界面收到后拉系统分享。 */
+    private val _shareResult = MutableSharedFlow<Result<File>>(extraBufferCapacity = 1)
+    val shareResult: SharedFlow<Result<File>> = _shareResult.asSharedFlow()
 
     /** 来源地址列表变化时才重新拉取；markFetched 等只改时间戳的写入不会触发加载。 */
     private var loadedUrls: List<String>? = null
@@ -181,7 +192,7 @@ class PluginStoreViewModel @Inject constructor(
                             installedVersion = installedVersion,
                             updateAvailable = isNewer(plugin.version, installedVersion),
                             compatible = client.isCompatible(plugin),
-                            official = PluginOfficialRepositories.isOfficial(plugin.repository)
+                            official = PluginOfficialRepositories.isOfficialAuthor(plugin.author)
                         )
                     }
                     if (!snapshot.stale) {
@@ -247,6 +258,7 @@ class PluginStoreViewModel @Inject constructor(
                                     installingPluginId = null,
                                     error = PluginStoreError(
                                         code = PluginStoreErrorCode.PREVIEW_FAILED,
+                                        pluginError = consistencyError(preview, item, manifestVersion),
                                         pluginId = item.plugin.id
                                     )
                                 )
@@ -314,6 +326,70 @@ class PluginStoreViewModel @Inject constructor(
 
     fun consumePreview() {
         _state.update { it.copy(preview = null) }
+    }
+
+    /**
+     * 分享指定条目的插件包 zip：先确保包在本地（未缓存就按 install 同一条下载链路下载），
+     * 再拷到 cacheDir/share/ 并保留商店包原名（{id}_{version}.zip），然后把文件发给界面层。
+     *
+     * 文件名用 [DownloadedPluginPackage.asset.name]（索引里的原文件名），不改名；
+     * 界面层拿文件经 FileProvider 授权后发 ACTION_SEND，收件方保存时看到的还是原名。
+     * 全程走 IO 调度器，不阻塞主线程；结果经 [shareResult] 交界面，成功给文件、失败给原因。
+     */
+    fun share(item: PluginStoreItem) {
+        if (!item.compatible) return
+        val pluginId = item.plugin.id
+        // 已在分享/安装中就忽略，避免并发下载同一包。
+        if (_state.value.sharingPluginId != null || _state.value.installingPluginId != null) return
+        _state.update { it.copy(sharingPluginId = pluginId) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val downloaded = client.download(client.resolveRelease(item.plugin))
+                // 下载缓存名是哈希（plugin-{sha}.zip），分享要保留商店包原名，所以拷一份到 share 目录。
+                val shareDir = File(context.cacheDir, "share")
+                shareDir.mkdirs()
+                val shareFile = File(shareDir, downloaded.asset.name)
+                downloaded.file.copyTo(shareFile, overwrite = true)
+                shareFile
+            }.onFailure { e ->
+                FileLogger.w(TAG, "准备分享插件包失败: ${item.plugin.id}", e)
+            }
+            _state.update { it.copy(sharingPluginId = null) }
+            _shareResult.tryEmit(result)
+        }
+    }
+
+    /**
+     * 一致性校验不通过时，构造可定位到具体字段的 [PluginError]。
+     *
+     * 判定（比较方式）由调用处的 if 条件决定，这里只负责把已经判定出的不匹配字段翻成
+     * 带原因的错误，避免 UI 走笼统的「插件包无法读取」兜底文案。
+     */
+    private fun consistencyError(
+        preview: PluginPreview,
+        item: PluginStoreItem,
+        assetVersion: String
+    ): PluginError {
+        val manifest = preview.manifest
+        return when {
+            manifest.repository != item.plugin.repository -> PluginError(
+                PluginErrorCode.REPOSITORY_MISMATCH,
+                // detail：包内地址 \n 商店登记地址；repository URL 不会含换行，界面按此拆分展示。
+                "${manifest.repository}\n${item.plugin.repository}"
+            )
+            manifest.id != item.plugin.id -> PluginError(
+                PluginErrorCode.FIELD_INVALID,
+                "id: ${manifest.id} != ${item.plugin.id}"
+            )
+            manifest.publisher != item.plugin.author -> PluginError(
+                PluginErrorCode.FIELD_INVALID,
+                "publisher: ${manifest.publisher} != ${item.plugin.author}"
+            )
+            else -> PluginError(
+                PluginErrorCode.FIELD_INVALID,
+                "version: ${manifest.version} != $assetVersion"
+            )
+        }
     }
 
     /** 一键更新全部是否正在进行，供界面禁用按钮防重复点击。 */
@@ -389,6 +465,16 @@ class PluginStoreViewModel @Inject constructor(
                 asset.version != manifestVersion
             ) {
                 manager.discard(preview.token)
+                // 批量更新也不丢具体原因：透传到 state.error，由已安装页红字展示（pluginId 匹配）。
+                _state.update {
+                    it.copy(
+                        error = PluginStoreError(
+                            code = PluginStoreErrorCode.PREVIEW_FAILED,
+                            pluginError = consistencyError(preview, item, manifestVersion),
+                            pluginId = item.plugin.id
+                        )
+                    )
+                }
                 FileLogger.w(TAG, "批量更新校验不通过: ${item.plugin.id}")
                 return false
             }

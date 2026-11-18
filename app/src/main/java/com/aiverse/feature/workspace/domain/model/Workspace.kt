@@ -25,5 +25,11 @@ data class Workspace(
     /** 工作区类型，默认内部工作区，保持旧构造兼容。 */
     val type: WorkspaceType = WorkspaceType.INTERNAL,
     /** 工作区当前是否可用（外部本地目录被移动/删除时为 false），默认可用。 */
-    val available: Boolean = true
-)
+    val available: Boolean = true,
+    /** 显示名（别名）：仅影响 UI 展示，不改磁盘目录、会话与 AI 侧路径，默认 null 退回 [name]。 */
+    val displayName: String? = null
+) {
+    /** 列表/顶栏展示用的名字：有非空别名用别名，否则退回目录名 [name]。逻辑（选中/删除/键）仍用 [name]。 */
+    val displayLabel: String
+        get() = displayName?.takeIf { it.isNotBlank() } ?: name
+}

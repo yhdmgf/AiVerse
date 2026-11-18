@@ -108,6 +108,7 @@ import com.aiverse.feature.agent.presentation.AIAgentViewModel
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.component.AIChatPanel
 import com.aiverse.feature.agent.presentation.component.ChatDrawerContent
+import com.aiverse.feature.agent.presentation.component.LocalChatAnimationsEnabled
 import com.aiverse.feature.agent.presentation.component.chatImageLoader
 import com.aiverse.feature.agent.presentation.component.mediaFileResolver
 import com.aiverse.feature.agent.presentation.component.openSentAttachment
@@ -134,10 +135,12 @@ import com.aiverse.feature.settings.data.repository.BackgroundMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
 import com.aiverse.feature.settings.data.repository.ScreenOnSettingsRepository
 import com.aiverse.feature.settings.data.repository.ThemeSettingsRepository
+import com.aiverse.feature.settings.presentation.GithubStarPromptViewModel
 import com.aiverse.feature.settings.presentation.SettingsViewModel
 import com.aiverse.feature.settings.presentation.FetchState
 import com.aiverse.feature.settings.presentation.UpdateCheckUiState
 import com.aiverse.feature.settings.presentation.component.githubReleaseUrl
+import com.aiverse.feature.settings.presentation.component.GithubStarDialog
 import com.aiverse.feature.settings.presentation.component.SettingsScreen
 import com.aiverse.feature.settings.presentation.component.UpdateCheckDialog
 import com.aiverse.feature.settings.presentation.component.openUrl
@@ -511,6 +514,17 @@ fun AppNavigation(
     val onboardingUiState by onboardingStateHolder.state.collectAsStateWithLifecycle()
     val onboardingRegistry = remember { OnboardingTargetRegistry() }
     var showBackConfirm by remember { mutableStateOf(false) }
+
+    // 启动 GitHub Star 提示弹窗：协议已同意且首次引导结束后弹出（未永久关闭时，每次启动都会提醒）。
+    // 勾选「不再显示」并关闭后由 GithubStarPromptViewModel 持久化，下次启动不再弹。
+    val starPromptViewModel: GithubStarPromptViewModel = hiltViewModel()
+    val starDismissed by starPromptViewModel.dismissed.collectAsStateWithLifecycle()
+    var showStarDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(agreementAccepted, onboardingUiState.active, starDismissed) {
+        if (agreementAccepted && !onboardingUiState.active && !starDismissed) {
+            showStarDialog = true
+        }
+    }
     // 步骤二容器环境就绪（provision 完成）：就绪前不显示「按左上角返回」引导，避免用户被引导去返回却装不完。
     var containerReady by remember { mutableStateOf(isContainerReady()) }
     LaunchedEffect(onboardingUiState.active) {
@@ -580,6 +594,8 @@ fun AppNavigation(
     val pasteConflict by agentViewModel.pasteConflict.collectAsStateWithLifecycle()
     val chatSearchQuery by agentViewModel.chatSearchQuery.collectAsStateWithLifecycle()
     val chatSearchState by agentViewModel.chatSearchState.collectAsStateWithLifecycle()
+    val activePluginSession by agentViewModel.activePluginSession.collectAsStateWithLifecycle()
+    val pluginSessionGroups by agentViewModel.pluginSessionGroups.collectAsStateWithLifecycle()
 
     // ── 导出会话：SAF 保存文件 ──
     var pendingExportSessionId by remember { mutableStateOf<String?>(null) }
@@ -759,10 +775,17 @@ fun AppNavigation(
     }
 
     // 侧栏内容：modal 抽屉与大屏常驻栏共用同一份，不在两处重复几十行参数。
-    val drawerBody: @Composable () -> Unit = {
+    val drawerBody: @Composable (Boolean) -> Unit = { animationsEnabled ->
+        CompositionLocalProvider(LocalChatAnimationsEnabled provides animationsEnabled) {
         ChatDrawerContent(
             sessions = sessions,
             currentSessionId = currentSessionId,
+            pluginSessionGroups = pluginSessionGroups,
+            currentPluginSessionId = activePluginSession?.id,
+            onSelectPluginSession = { session ->
+                agentViewModel.openPluginSession(session)
+                if (!permanentDrawer) scope.launch { drawerState.close() }
+            },
             agentStates = agentStates,
             awaitingPermissionSessionIds = awaitingPermissionSessionIds,
             subSessionsByParent = subSessionsByParent,
@@ -810,6 +833,23 @@ fun AppNavigation(
                 agentViewModel.pasteBrowseEntry(targetDir, onResult)
             },
             onClearClipboard = { agentViewModel.clearBrowseClipboard() },
+            workspaceName = currentWorkspace?.name.orEmpty(),
+            onAddLocalFolder = { uri ->
+                agentViewModel.addLocalFolder(uri) { ok ->
+                    if (!ok) toastFileOpFailed(context, R.string.file_browser_add_folder_failed)
+                }
+            },
+            onRemoveLocalFolder = { hostPath -> agentViewModel.removeLocalFolder(hostPath) },
+            onUploadFiles = { dir, uris ->
+                agentViewModel.uploadBrowseFiles(dir, uris) { ok ->
+                    if (!ok) toastFileOpFailed(context, R.string.file_browser_upload_failed)
+                }
+            },
+            onUploadFolder = { dir, uri ->
+                agentViewModel.uploadBrowseFolder(dir, uri) { ok ->
+                    if (!ok) toastFileOpFailed(context, R.string.file_browser_upload_failed)
+                }
+            },
             onShareEntries = { agentViewModel.shareEntries(it) },
             onExportEntries = { paths, uri ->
                 agentViewModel.exportEntries(paths, uri) { ok ->
@@ -884,6 +924,7 @@ fun AppNavigation(
                 if (!permanentDrawer) scope.launch { drawerState.close() }
             }
         )
+        }
     }
 
     // 页面主体（NavHost）：大屏放进 Row 的右侧，窄窗放进 modal 抽屉容器里。
@@ -1228,7 +1269,7 @@ fun AppNavigation(
                             .fillMaxHeight()
                     ) {
                         sidebarStateHolder.SaveableStateProvider("chat-sidebar") {
-                            drawerBody()
+                            drawerBody(currentRoute == "chat" && sidebarWidth > 0.dp)
                         }
                     }
                 }
@@ -1258,7 +1299,10 @@ fun AppNavigation(
                     // drawerTonalElevation / drawerContainerColor（scrim 已在上方显式透明，不再参与层次），宽度仍走 drawerWidth()。
                     modifier = Modifier.width(drawerWidth())
                 ) {
-                    drawerBody()
+                    drawerBody(
+                        drawerState.currentValue == DrawerValue.Open ||
+                            drawerState.targetValue == DrawerValue.Open
+                    )
                 }
             }
         ) {
@@ -1436,6 +1480,21 @@ fun AppNavigation(
                 }
             )
         }
+
+        // 启动 GitHub Star 提示弹窗：勾选「不再显示」并关闭则持久隐藏，否则下次启动再弹。
+        if (showStarDialog) {
+            GithubStarDialog(
+                onStar = { dontShowAgain ->
+                    if (dontShowAgain) starPromptViewModel.dismiss()
+                    showStarDialog = false
+                    openUrl(context, GITHUB_REPO_URL)
+                },
+                onDismiss = { dontShowAgain ->
+                    if (dontShowAgain) starPromptViewModel.dismiss()
+                    showStarDialog = false
+                }
+            )
+        }
     }
     }
     }
@@ -1574,3 +1633,6 @@ private fun SignatureMismatchScreen(
         }
     }
 }
+
+/** GitHub 仓库地址：启动 Star 弹窗跳转用。 */
+private const val GITHUB_REPO_URL = "https://github.com/yhdmgf/AiVerse"

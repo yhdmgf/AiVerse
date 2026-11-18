@@ -52,6 +52,17 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
                 "Search failed: no results found"
             }
 
+            // Bing 对纯 HTTP 抓取常返回与查询无关的反爬诱饵页（如搜 DeepSeek 却返回 Google/知乎）。
+            // 若结果与查询词毫无交集，判定为降级/反爬页，抛错让上层回退到可用的搜索后端。
+            val tokens = query.lowercase().split(Regex("[^\\p{L}\\p{N}]+"))
+                .filter { it.length >= 2 }
+            if (tokens.isNotEmpty()) {
+                val haystack = results.joinToString(" ") { "${it.title} ${it.text}" }.lowercase()
+                if (tokens.none { haystack.contains(it) }) {
+                    error("Bing returned results unrelated to the query (likely anti-bot page)")
+                }
+            }
+
             SearchResult(items = results)
         }
     }

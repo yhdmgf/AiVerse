@@ -90,7 +90,9 @@
 
 | 接口 | 方法 | 说明 | 鉴权 |
 |------|------|------|------|
-| `/api/upload` | POST | 上传插件包（multipart，字段 `file`，上限 10MB） | IP 限流 |
+| `/api/upload` | POST | 上传插件包（multipart，字段 `file` + `uploader`，上限 10MB） | IP 限流 + 所有者校验 |
+| `/api/owner` | GET | 查询插件所有者（`?id=<pluginId>`） | 无（公开） |
+| `/api/owner/change` | POST | 修改插件所有者（body：`{id, new_owner}`） | 需要（管理员） |
 | `/api/captcha/challenge` | GET | 下发算术题挑战 `{id,question,totp_required}` | 无 |
 | `/api/captcha/verify` | POST | 校验算术题答案，签发一次性 token | 无 |
 | `/api/login` | POST | 管理员登录（需 `captcha_token` + `totp`），返回 Session Cookie | 算术验证 + TOTP + IP/账号双维度限流 |
@@ -108,16 +110,20 @@
 ### 4.4 插件上架流程
 
 ```text
-开发者上传 plugin.zip  →  POST /api/upload
+开发者上传 plugin.zip + 填写作者名（uploader）  →  POST /api/upload
+        ↓
+后端校验：uploader 必填 + 所有者匹配（非管理员）
         ↓
 暂存 inbox/（不公开）
         ↓
 管理员在 /store/ 审核（查看清单 / 下载）
         ↓
-通过 → POST /api/approve → 自动发布到 GitHub 仓库 aiverserules（index.json + plugin.txt）
+通过 → POST /api/approve → 自动发布到 GitHub 仓库 aiverseRules（index.json + plugin.txt）
         ↓
 用户在 AiVerse APP 插件商店看到并安装
 ```
+
+> **所有者校验规则**：首次上传时记录 uploader 为插件所有者，后续更新必须匹配（防冒名）；管理员不受限制。可在后台「ID 管理」功能里查询/修改所有者。
 
 ### 4.5 登录安全（三层防护）
 

@@ -91,4 +91,9 @@ class WorkspaceViewModel @Inject constructor(
     fun deleteWorkspace(name: String) = viewModelScope.launch {
         runCatching { repository.deleteWorkspace(name) }
     }
+
+    /** 重命名工作区显示名（别名）：仅改展示，不动磁盘目录、会话与 AI 侧路径。 */
+    fun renameWorkspace(workspace: Workspace, newDisplayName: String) = viewModelScope.launch {
+        runCatching { repository.renameWorkspace(workspace, newDisplayName) }
+    }
 }

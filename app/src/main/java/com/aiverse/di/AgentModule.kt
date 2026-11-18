@@ -79,6 +79,7 @@ import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.DelegatingFileAccess
 import com.aiverse.feature.workspace.domain.LocalFileAccess
 import com.aiverse.feature.workspace.domain.RemoteSftpFileAccess
+import com.aiverse.feature.workspace.domain.RemoteAgentConfigCache
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -106,6 +107,8 @@ import com.aiverse.feature.agent.domain.notification.DefaultAgentEventInjector
 import com.aiverse.feature.agent.domain.session.MessagePersistenceUseCase
 import com.aiverse.feature.agent.domain.session.SessionUseCase
 import com.aiverse.feature.agent.domain.tool.mcp.ManageMcpTool
+import com.aiverse.feature.agent.domain.tool.mcp.McpCallTool
+import com.aiverse.feature.agent.domain.tool.mcp.McpSearchTool
 import com.aiverse.feature.agent.domain.tool.memory.MemoryTool
 import com.aiverse.feature.agent.domain.tool.mode.PlanApprovalManager
 import com.aiverse.feature.agent.domain.tool.mode.PlanModeTool
@@ -369,8 +372,9 @@ object AgentModule {
     @Singleton
     fun provideRemoteSftpFileAccess(
         connection: RemoteSshConnection,
-        workspaceRepository: WorkspaceRepository
-    ): RemoteSftpFileAccess = RemoteSftpFileAccess(connection, workspaceRepository)
+        workspaceRepository: WorkspaceRepository,
+        agentConfigCache: RemoteAgentConfigCache
+    ): RemoteSftpFileAccess = RemoteSftpFileAccess(connection, workspaceRepository, agentConfigCache)
 
     @Provides
     @Singleton
@@ -407,6 +411,8 @@ object AgentModule {
         manageSkillTool: ManageSkillTool,
         askUserQuestionTool: AskUserQuestionTool,
         manageMcpTool: ManageMcpTool,
+        mcpSearchTool: McpSearchTool,
+        mcpCallTool: McpCallTool,
         webSearchTool: WebSearchTool,
         webFetchTool: WebFetchTool,
         planModeTool: PlanModeTool,
@@ -449,6 +455,9 @@ object AgentModule {
             register("manageSkill", manageSkillTool)
             register("askUserQuestion", askUserQuestionTool)
             register("manageMcp", manageMcpTool)
+            // MCP 元工具：按需加载（实验）开启时作为唯一的 MCP 入口；始终注册，顺序固定。
+            register("mcp_search", mcpSearchTool)
+            register("mcp_call", mcpCallTool)
             register("websearch", webSearchTool)
             register("webfetch", webFetchTool)
             register("planMode", planModeTool)

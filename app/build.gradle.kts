@@ -494,6 +494,12 @@ dependencies {
     // 迁移测试：MigrationTestHelper + Robolectric（在 JVM 上跑 Room 迁移，需真实 resources）
     testImplementation("androidx.room:room-testing:2.7.1")
     testImplementation("org.robolectric:robolectric:4.15.1")
+    // Robolectric 4.15.1 传递依赖的 conscrypt-openjdk-uber 2.5.2 只打包了 x86_64/osx-x86_64 native，
+    // 不含 linux-aarch_64：在 ARM64 Linux 宿主上引导 SDK28 平台时 System.loadLibrary("conscrypt_openjdk_jni")
+    // 会 UnsatisfiedLinkError，使仅有的 3 个 Robolectric 测试（ChatAnimations/GestureAndScale/TerminalFontResize）全失败。
+    // 显式升级到 2.9.0（补齐 linux-aarch_64 / osx-aarch_64 native，其余平台 native 依旧齐全），
+    // Gradle 冲突解析取最高版本，压过 Robolectric 传递的 2.5.2；x86_64 与 macOS 不受影响。
+    testImplementation("org.conscrypt:conscrypt-openjdk-uber:2.9.0")
     testImplementation("androidx.test:core-ktx:1.6.1")
     testImplementation("androidx.test.ext:junit:1.1.5")
     // 协程测试：runTest 虚拟时间（替代 runBlocking）+ Dispatchers.setMain（ViewModel 测试基建）

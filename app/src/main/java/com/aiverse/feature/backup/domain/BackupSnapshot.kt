@@ -50,6 +50,8 @@ data class BackupSnapshot(
     val compactionThresholdPercent: Int = 90,
     val sendFileMaxSizeMb: Int = 100,
     val deleteExternalWorkspaceSessions: Boolean = false,
+    /** 「MCP 工具按需加载（实验）」开关；旧备份无此字段时回退 false（关闭）。 */
+    val mcpLazyTools: Boolean = false,
     val logLevel: String? = null,
     val visionProviderId: String = "",
     val visionModel: String = "",
@@ -123,6 +125,8 @@ data class BackupMetadata(
     val compactionThresholdPercent: Int = 90,
     val sendFileMaxSizeMb: Int = 100,
     val deleteExternalWorkspaceSessions: Boolean = false,
+    /** 「MCP 工具按需加载（实验）」开关；旧备份无此字段时回退 false（关闭）。 */
+    val mcpLazyTools: Boolean = false,
     val logLevel: String? = null,
     val visionProviderId: String = "",
     val visionModel: String = "",
@@ -204,11 +208,13 @@ data class PluginBackupMeta(
     val fileCount: Int
 )
 
-/** 备份元数据中的一个工作区段：名称 + 备份的文件数（用于导入摘要）。 */
+/** 备份元数据中的一个工作区段：名称 + 备份的文件数 + 显示名别名（用于导入摘要与还原后恢复别名）。 */
 @Serializable
 data class WorkspaceBackupMeta(
     val name: String,
-    val fileCount: Int
+    val fileCount: Int,
+    /** 显示名（别名），仅内部工作区还原时使用；旧备份无此字段，默认 null 保持兼容。 */
+    val alias: String? = null
 )
 
 fun BackupSnapshot.toMetadata() = BackupMetadata(
@@ -244,6 +250,7 @@ fun BackupSnapshot.toMetadata() = BackupMetadata(
     compactionThresholdPercent = compactionThresholdPercent,
     sendFileMaxSizeMb = sendFileMaxSizeMb,
     deleteExternalWorkspaceSessions = deleteExternalWorkspaceSessions,
+    mcpLazyTools = mcpLazyTools,
     logLevel = logLevel,
     visionProviderId = visionProviderId,
     visionModel = visionModel,

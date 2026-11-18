@@ -1330,10 +1330,20 @@ internal fun ToolPermissionPanel(
                             )
                         }
                     }
-                    if (sessionTitle.isNotBlank()) {
+                    if (request.origin == PendingToolPermission.ORIGIN_PLUGIN_PERMISSION) {
+                        Text(
+                            text = stringResource(R.string.chat_perm_plugin_source, request.pluginName.orEmpty(), request.pluginId.orEmpty()),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    val permissionSessionTitle = sessionTitle.ifBlank {
+                        if (request.origin == PendingToolPermission.ORIGIN_PLUGIN_PERMISSION) request.sessionId else ""
+                    }
+                    if (permissionSessionTitle.isNotBlank()) {
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = stringResource(R.string.chat_perm_session_label, sessionTitle),
+                            text = stringResource(R.string.chat_perm_session_label, permissionSessionTitle),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -1420,7 +1430,9 @@ internal fun ToolPermissionPanel(
                             tone = AgentActionTone.Danger,
                             pill = true
                         )
-                        AgentActionButton(
+                        // 插件主动授权请求不产生永久授权：仅插件来源隐藏「始终允许」。
+                        // 常规工具沿用 pill 行（本地已重构为内容自适应，与上游 weight 行不同）。
+                        if (request.origin != PendingToolPermission.ORIGIN_PLUGIN_PERMISSION) AgentActionButton(
                             text = stringResource(R.string.chat_perm_always_allow),
                             onClick = { onChoice(PermissionChoice.ALWAYS) },
                             enabled = canRemember,

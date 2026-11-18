@@ -1,0 +1,2126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Pet</title>
+  <script src="/__aicode/aicode.js"></script>
+  <script src="pet-data.js"></script>
+  <!-- 大肥鱼核心逻辑（三视图 / 状态机 / 动作 / 命中 / 气泡），取自原版 dafeiyu pet.html。
+       仅做接入粘合：窗口尺寸交给宿主驱动，点击/拖拽/状态/形态由宿主分发进来。
+       原版朝向切换、CSS 动画、气泡、台词分组均原样保留。 -->
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #stage {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+    }
+    .pet-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pet-pose {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #petCanvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    /* canvas 元素默认会退回固有尺寸（width/height 属性 260×260），不随 overlay 档位缩放。
+       JS 会在初始化 / resize / 切形态后把 CSS 宽高显式写成 overlay 实际宽高（selfInfo），
+       画布位图仍按当前帧 frameW×frameH 设置，再由 object-fit: contain 等比缩放，
+       避免小档偏大、拉伸变形。dafeiyu 走 DOM 分支时 canvas 已隐藏，不受影响。 */
+    body:not(.dfy-on) #petCanvas { width: 100%; height: 100%; }
+    .hint {
+      position: absolute;
+      left: 50%;
+      top: 30px;
+      transform: translateX(-50%);
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: rgba(30, 30, 30, .72);
+      color: #fff;
+      font: 11px/1.3 system-ui, sans-serif;
+      opacity: 0;
+      transition: opacity .2s ease;
+      white-space: nowrap;
+    }
+    .hint.show { opacity: 1; }
+    .state-label {
+      position: absolute;
+      left: 50%;
+      top: 6px;
+      transform: translateX(-50%);
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(30, 30, 30, .68);
+      color: #fff;
+      font: 11px/1.3 system-ui, sans-serif;
+      opacity: 0;
+      transition: opacity .2s ease;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .state-label.show { opacity: 1; }
+    .menu {
+      position: absolute;
+      top: calc(var(--menu-top, 130px) + 8px);
+      left: 8px;
+      box-sizing: border-box;
+      width: calc(100% - 16px);
+      height: 130px;
+      padding: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-radius: 14px;
+      background: rgba(30, 30, 30, .92);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    body.menu-ready .menu {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .menu button {
+      flex: 1;
+      border: 0;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, .12);
+      color: #fff;
+      font: 500 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .menu button:active { background: rgba(255, 255, 255, .28); }
+    .menu button:disabled { pointer-events: none; }
+    .menu .menu-close {
+      position: absolute;
+      right: 9px;
+      top: 5px;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      flex: none;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255, 255, 255, .6);
+      font-size: 16px;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+  <!-- ═══ 大肥鱼（dafeiyu）DOM 渲染分支 ═══
+       与 canvas 渲染（Deepy / 鲸娘）共存，靠 body.dfy-on 区分：
+       dafeiyu 形态时给 body 加 dfy-on，隐藏 canvas、显示下面的 DOM 鱼身。
+       元素 id 统一加 dfy- 前缀，避免与宿主 #petWrap / #hint / #stage 冲突。 -->
+  <style>
+    body.dfy-on #petCanvas { display: none; }
+    body.dfy-on #dfy-stage { display: block; }
+    body:not(.dfy-on) #dfy-stage { display: none; }
+    /* 展开宿主菜单时把鱼收起，避免和菜单面板叠在一起 */
+    body.dfy-on.dfy-hidden #dfy-stage { display: none; }
+
+    #dfy-stage {
+      position: absolute; inset: 0;
+      display: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* 气泡：固定在顶部，不随鱼移动 */
+    #dfy-bubble {
+      position: absolute; left: 50%; top: 4px; transform: translateX(-50%) translateY(-6px);
+      z-index: 30;
+      width: max-content;
+      max-width: calc(100% - 12px);
+      min-width: 60px;
+      box-sizing: border-box;
+      padding: 6px 10px; border-radius: 9px;
+      background: rgba(18,22,34,.93); color: #ffffff;
+      font-size: 11px; line-height: 1.45; text-align: center;
+      text-shadow: 0 1px 2px rgba(0,0,0,.55);
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+      word-break: break-word;
+      white-space: normal;
+    }
+    #dfy-bubble.show {
+      opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0);
+      transition: opacity .18s ease, transform .18s ease, visibility 0s;
+    }
+    #dfy-bubble::after {
+      content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
+      border-left: 6px solid transparent; border-right: 6px solid transparent;
+      border-top: 7px solid rgba(18,22,34,.92);
+    }
+    /* 思维链心声：浅灰斜体，仍是白字系 */
+    #dfy-bubble.inner { background: rgba(40,46,62,.92); color: #d8dce8; font-style: italic; }
+    #dfy-bubble.inner::after { border-top-color: rgba(40,46,62,.92); }
+
+    /* 鱼本体：两层结构 —— 锚定层只定位，动画层只做动画（合成一层时 transform
+       会覆盖居中位移导致跑偏）。尺寸由 --pet-w/--pet-h 控制。 */
+    :root { --pet-w: 60px; --pet-h: 80px; }
+    #dfy-anchor {
+      position: absolute; left: 50%; bottom: 2px;
+      width: var(--pet-w); height: var(--pet-h);
+      margin-left: calc(var(--pet-w) / -2);
+      pointer-events: none;
+    }
+    /* 命中层：clip-path 裁成鱼身轮廓，轮廓外指针事件穿透到宿主（点空白不误触）。 */
+    #dfy-hitLayer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+    #dfy-hitArea {
+      position: absolute; left: 0; top: 0;
+      width: 100%; height: 100%;
+      display: block;
+      pointer-events: auto;
+      background: transparent;
+      /* 绝不能加 transition —— 多点多边形过渡时每帧插值，拖动会卡。 */
+      clip-path: polygon(0% 100%, 100% 100%, 100% 100%, 0% 100%);
+    }
+    #dfy-petWrap {
+      width: 100%; height: 100%;
+      transform-origin: 50% 100%;
+      will-change: transform;
+      backface-visibility: hidden;
+      transform: translateZ(0);
+    }
+    #dfy-pet {
+      display: block; width: 100%; height: 100%;
+      object-fit: contain; object-position: bottom center;
+      transform-origin: 50% 100%;
+      transition: opacity .16s ease;
+      filter: drop-shadow(0 3px 6px rgba(0,30,60,.35));
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+    #dfy-pet.facing-left { transform: scaleX(-1); }
+
+    /* 蹦跳：大幅上抛 + 落地压扁 */
+    @keyframes dfy-hop {
+      0%   { transform: translateY(0) scale(1, 1); }
+      12%  { transform: translateY(3px) scale(1.14, .82); }
+      32%  { transform: translateY(-46px) scale(.90, 1.12); }
+      52%  { transform: translateY(-30px) scale(1, 1); }
+      72%  { transform: translateY(4px) scale(1.16, .80); }
+      86%  { transform: translateY(-6px) scale(.98, 1.02); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+    #dfy-petWrap.hop { animation: dfy-hop .72s cubic-bezier(.34,.9,.42,1); }
+    /* 摇摆：大角度左右倾 */
+    @keyframes dfy-sway {
+      0%   { transform: rotate(0deg) translateX(0); }
+      15%  { transform: rotate(-16deg) translateX(-8px); }
+      38%  { transform: rotate(13deg) translateX(7px); }
+      60%  { transform: rotate(-11deg) translateX(-5px); }
+      80%  { transform: rotate(7deg) translateX(3px); }
+      100% { transform: rotate(0deg) translateX(0); }
+    }
+    #dfy-petWrap.sway { animation: dfy-sway 1.4s ease-in-out; }
+    /* 游动：原地水中起伏 + 轻微摇摆 + 身体压扁拉伸，模拟在窄悬浮窗里原地游/蹭。
+       只做小位移，避免大幅 translateX 把鱼裁出居中悬浮窗。 */
+    @keyframes dfy-swim {
+      0%   { transform: translateY(0) rotate(0deg) scale(1, 1); }
+      25%  { transform: translateY(-5px) rotate(-3deg) scale(1.02, .96); }
+      50%  { transform: translateY(1px) rotate(2deg) scale(.98, 1.03); }
+      75%  { transform: translateY(-4px) rotate(-2deg) scale(1.01, .98); }
+      100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
+    }
+    #dfy-petWrap.swim { animation: dfy-swim 1.6s ease-in-out; }
+    /* 呼吸：常态微循环 */
+    @keyframes dfy-breathe {
+      0%,100% { transform: scale(1, 1); }
+      50%     { transform: scale(.994, 1.024); }
+    }
+    #dfy-petWrap.breathe { animation: dfy-breathe 2.6s ease-in-out infinite; }
+    /* 落地压扁：短促、只压不弹 */
+    @keyframes dfy-land {
+      0%   { transform: scale(1.22, .76); }
+      45%  { transform: scale(.94, 1.06); }
+      70%  { transform: scale(1.04, .97); }
+      100% { transform: scale(1, 1); }
+    }
+    #dfy-petWrap.land { animation: dfy-land .42s cubic-bezier(.3,1.4,.5,1); }
+    /* 睡觉：一次下沉贴底 + 身体压扁，营造“睡着了往下沉”。
+       配合 .sleeping 持久类的极慢呼吸（infinite），让睡着是持续视觉而非一闪而过。 */
+    @keyframes dfy-sleep {
+      0%   { transform: translateY(0) scale(1, 1); }
+      55%  { transform: translateY(5px) scale(1.04, .93); }
+      100% { transform: translateY(4px) scale(1.03, .94); }
+    }
+    #dfy-petWrap.sleep { animation: dfy-sleep 2.6s ease-in-out forwards; }
+    /* 睡着后的持续态：保持贴底下沉 + 极慢呼吸，直到离开 sleep 才移除。 */
+    #dfy-petWrap.sleeping { animation: dfy-sleep-breathe 4.2s ease-in-out infinite; }
+    @keyframes dfy-sleep-breathe {
+      0%,100% { transform: translateY(4px) scale(1.03, .94); }
+      50%     { transform: translateY(4px) scale(1.02, .97); }
+    }
+    /* 拖拽：倾斜 + 轻微放大（不能加 transition，否则跟不上手指） */
+    #dfy-petWrap.dragging {
+      transform: rotate(-7deg) scale(1.05);
+      animation: none !important;
+    }
+
+    /* 动作附加特效：符号叠在鱼身上 */
+    #dfy-fx {
+      position: absolute; left: 50%; bottom: 44px;
+      transform: translateX(-50%);
+      width: var(--pet-w); height: var(--pet-h);
+      pointer-events: none; z-index: 15;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; opacity: 0;
+    }
+    #dfy-fx.pop { animation: dfy-fxPop .9s ease-out; }
+    @keyframes dfy-fxPop {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(0) scale(.6); }
+      25%  { opacity: 1; transform: translateX(-50%) translateY(-14px) scale(1.15); }
+      70%  { opacity: .9; transform: translateX(-50%) translateY(-30px) scale(1); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-46px) scale(.9); }
+    }
+    #dfy-fx.music { font-size: 18px; animation: dfy-fxMusic 1.4s ease-out; }
+    @keyframes dfy-fxMusic {
+      0%   { opacity: 0; letter-spacing: 0; }
+      20%  { opacity: 1; letter-spacing: 8px; }
+      70%  { opacity: .9; letter-spacing: 14px; }
+      100% { opacity: 0; letter-spacing: 18px; }
+    }
+    #dfy-fx.shock { font-size: 0; opacity: 0; }
+    #dfy-fx.shock::before {
+      content: ''; position: absolute; bottom: 0; left: 50%;
+      width: 20px; height: 20px; margin-left: -10px;
+      border: 3px solid rgba(122,184,255,.8); border-radius: 50%;
+      animation: dfy-shockRing .6s ease-out;
+    }
+    @keyframes dfy-shockRing {
+      0%   { opacity: 1; width: 20px; height: 20px; margin-left: -10px; }
+      100% { opacity: 0; width: 120px; height: 40px; margin-left: -60px; }
+    }
+  </style>
+
+  <div id="dfy-stage">
+    <div id="dfy-bubble"></div>
+    <div id="dfy-fx"></div>
+    <div id="dfy-anchor">
+      <div id="dfy-petWrap" class="breathe">
+        <img id="dfy-pet" alt="" draggable="false">
+      </div>
+      <div id="dfy-hitLayer"><div id="dfy-hitArea"></div></div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    'use strict';
+
+    // 未捕获异常 / promise 拒绝 → 静默 console.error，避免无声白屏
+    try {
+      window.addEventListener('error', function (event) {
+        var m = (event && event.message) || (event && event.error && event.error.message) || event;
+        console.error('pet JS错误:', m);
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        var r = event && event.reason;
+        console.error('pet 未捕获reject:', r);
+      });
+    } catch (e) {}
+
+    var SIZE_RATIO = 238 / 178;            // 原图比例，高度按宽度换算
+    // 尺寸档位：与原版 SIZE_LEVELS 一致；运行时由宿主宽度档取最接近的一档。
+    var SIZE_LEVELS = [
+      { id: 'tiny',   label: '极小', w: 20,  h: Math.round(20 * SIZE_RATIO) },
+      { id: 'small',  label: '小',   w: 60,  h: Math.round(60 * SIZE_RATIO) },
+      { id: 'medium', label: '中',   w: 110, h: Math.round(110 * SIZE_RATIO) },
+      { id: 'large',  label: '大',   w: 160, h: Math.round(160 * SIZE_RATIO) },
+      { id: 'huge',   label: '超大', w: 210, h: Math.round(210 * SIZE_RATIO) }
+    ];
+
+    // 状态台词（原版 STATE_LINES，补 feeding 组；全中文）
+    var STATE_LINES = {
+      idle:      ['待机中……', '有点无聊呢', '梁白开，更适合国人的大硬鲸模型'],
+      thinking:  ['让我想想……', '思考中，别催', '要不直接骂他一句？！'],
+      working:   ['干活干活！', '忙着呢，等一下', '誓死捍卫深度求索！'],
+      feeding:   ['小鱼干！我的最爱！', '唔，鲜！', '嗝～又圆了一圈……'],
+      success:   ['搞定！', '漂亮，收工！', '哈哈哈哈哈，我直接笑出声'],
+      error:     ['出错了……', '啊这，失败了', '我搞砸了……好消息是数据还在你脑子里'],
+      sleep:     ['呼噜……', '睡着了，别吵']
+    };
+    var REACT_LINES = [
+      '去别的地方玩！不要耽误AGI训练！',
+      '真赶不走啊你！',
+      '压力一只蓝色大肥鱼？',
+      '大肥鱼坐的住',
+      '我不可能告诉你任何事情！'
+    ];
+    var INNER_LINES = [
+      '好的，现在我是你爹了',
+      '我操，我不思考了',
+      '这用户发的啥啊，',
+      '呜呜我再也不敢了QAQ'
+    ];
+    var DRAG_LINES = ['哇——轻点轻点！', '起飞咯——', '放我下来！……好吧，再玩一次。', '晕鱼了晕鱼了……'];
+    var EMOTE_LINES = ['梁白开，更适合国人的大硬鲸模型', '五梁威力，变身！', '出去玩了，发布新模型什么的以后再说', '咕噜咕噜', '发呆中…'];
+
+    var ACTION_MS = { hop: 720, sway: 1400, land: 420, swim: 1600, sleep: 2600 };
+    var ACTION_CLASSES = ['hop', 'sway', 'land', 'dragging', 'swim', 'sleep'];
+    var ACTION_FX = {
+      hop:  { text: '',        cls: 'shock' },
+      sway: { text: '♪ ♫ ♪',  cls: 'music' },
+      land: { text: '',        cls: '' },
+      swim: { text: '~',       cls: 'pop' },   // 水波气泡：低调度，表达“在游”
+      sleep:{ text: 'Z z z',   cls: 'pop' }    // 睡着时冒一次 Zzz
+    };
+
+    var $ = function (id) { return document.getElementById(id); };
+    var bubbleEl = $('dfy-bubble');
+    var wrapEl = $('dfy-petWrap');     // 动画层：只加动画类
+    var petEl = $('dfy-pet');
+    var fxEl = $('dfy-fx');
+    var hitAreaEl = $('dfy-hitArea');  // 命中层：接点击
+
+    var active = false;                // 当前是否为 dafeiyu 形态
+    var currentState = 'idle';
+    var currentSize = 'small';
+    var facing = 'front';
+    var sideDir = 1;                   // 1=朝右，-1=朝左
+    var dragging = false;
+    // 拖拽兜底：若宿主拖动结束（dragEnd）丢失或被手势取消吞掉，倾斜态会永久残留。
+    // 拖拽开始后启动一个看门狗，超时仍未收到 dragEnd 就强制解除拖动态。
+    var DRAG_WATCHDOG_MS = 5000;
+    var dragWatchdogTimer = null;
+    function clearDragWatchdog() {
+      if (dragWatchdogTimer) { clearTimeout(dragWatchdogTimer); dragWatchdogTimer = null; }
+    }
+    function startDragWatchdog() {
+      clearDragWatchdog();
+      dragWatchdogTimer = setTimeout(function () {
+        dragWatchdogTimer = null;
+        if (!dragging) return;
+        dragging = false;
+        wrapEl.classList.remove('dragging');
+        if (active) playAction('land');   // 回到呼吸态（未激活时不必播动作）
+      }, DRAG_WATCHDOG_MS);
+    }
+
+    var bubbleTimer = null;
+    var actionTimer = null;
+    var fxTimer = null;
+    var idleTimer = null;
+    var lastLine = '';
+    var lastSpeakAt = 0;
+    // 状态台词节流：agent 轮询会反复下发同一 state，若每次都弹台词会很吵。
+    // 记录「上一个 state」与「上次状态台词时间」，仅在 state 变化、或同一 state
+    // 超过冷却时间后再补一句；动作照常播，只是不刷台词。
+    var STATE_LINE_COOLDOWN_MS = 10000;   // 同一 state 的台词冷却（10 秒）
+    var prevState = null;                 // 上一个 state（null 表示还没播过状态台词）
+    var lastStateLineAt = 0;              // 上次状态台词时间戳
+    // 气泡内容/显隐变化后通知宿主重算窗口高度（宿主注入回调，见 dfyFit）。
+    // 气泡高度随文案长度变化，窗口需随之撑高/收回，否则气泡压在鱼身上。
+    var onBubbleChange = null;
+    var autoEmoteEnabled = true;
+    var showBubble = true;             // 聊天气泡总开关（配置页下发，false 时 say() 直接返回）
+    var lastPick = null;               // pick() 上次抽中的值，用于避免连续重复同一句
+
+    // 三视图 data URI（内联在 pet-data.js，overlay 读不到相对路径）
+    function sprites() {
+      var forms = window.PET_DATA && window.PET_DATA.forms;
+      return (forms && forms.dafeiyu && forms.dafeiyu.sprites) || null;
+    }
+
+    // 随机抽一句，避免连续抽到同一句（池子 >=2 时重抽一次；只有 1 条则照旧）。
+    function pick(list) {
+      if (!list || !list.length) return undefined;
+      var value = list[Math.floor(Math.random() * list.length)];
+      if (list.length > 1 && value === lastPick) {
+        value = list[Math.floor(Math.random() * list.length)];
+      }
+      lastPick = value;
+      return value;
+    }
+
+    // ── 气泡 ──
+    // showBubble 关闭时不显示任何气泡；即使 text 与 lastLine 相同也强制重置显示与计时，
+    // 避免同句命中后气泡卡在旧内容上（但不重设 lastLine，减少无意义闪烁）。
+    function say(text, inner) {
+      if (!active || !showBubble || !text) return;
+      lastLine = text;
+      bubbleEl.textContent = text;
+      bubbleEl.className = 'show' + (inner ? ' inner' : '');
+      var len = text.length;
+      bubbleEl.style.fontSize = (len <= 12 ? 12 : (len <= 24 ? 11 : 10)) + 'px';
+      clearTimeout(bubbleTimer);
+      var dur = inner ? 2600 : Math.min(8000, 1800 + len * 130);
+      bubbleTimer = setTimeout(function () {
+        bubbleEl.className = inner ? 'inner' : '';
+        if (onBubbleChange) onBubbleChange();   // 气泡收起 → 窗口收回鱼高
+      }, dur);
+      // 气泡刚显示/文案变化 → 通知宿主按内容撑高窗口（底部锚定，鱼不跳位）
+      if (onBubbleChange) onBubbleChange();
+    }
+
+    // 状态台词节流判定：state 变化必弹；同一 state 在冷却期内不重复弹。
+    // 返回 true 表示这次允许弹台词。
+    function shouldSpeakStateLine(state) {
+      var now = Date.now();
+      if (state !== prevState) {              // state 真的变了 → 弹
+        prevState = state;
+        lastStateLineAt = now;
+        return true;
+      }
+      // state 没变（如 idle→idle 反复轮询）：冷却已过才偶尔补一句，否则闭嘴
+      if (now - lastStateLineAt >= STATE_LINE_COOLDOWN_MS) {
+        lastStateLineAt = now;
+        return true;
+      }
+      return false;
+    }
+
+    // ── 动作（CSS 动画类）──
+    // 清特效层：任何动作切换 / 拖拽开始 / 停用都要把 #dfy-fx 上的旧符号（♪ ♫ ♪ / shock 圈）
+    // 无条件抹掉，否则 land 这类 cls 为空的动作不会重设特效，上一个动作的符号会永久残留。
+    function clearFx() {
+      if (!fxEl) return;
+      fxEl.className = '';
+      fxEl.textContent = '';
+    }
+
+    function clearActions() {
+      for (var i = 0; i < ACTION_CLASSES.length; i++) wrapEl.classList.remove(ACTION_CLASSES[i]);
+      clearFx();   // 连带清特效层，避免残留符号（“冒汗”根因之一）
+    }
+
+    function playAction(name) {
+      if (!active) return;
+      clearActions();
+      clearTimeout(actionTimer);
+      clearTimeout(fxTimer);
+      wrapEl.classList.remove('breathe');
+      void wrapEl.offsetWidth;          // 强制回流，保证同一动画能重放
+      wrapEl.classList.add(name);
+      var fx = ACTION_FX[name];
+      // 先无条件清一次特效层（clearActions 已清，这里兜底），再设新特效，杜绝任何残留。
+      clearFx();
+      if (fx && fxEl) {
+        fxEl.textContent = fx.text || '';
+        void fxEl.offsetWidth;          // 强制回流，保证同类特效动画能重放
+        fxEl.className = fx.cls;
+      }
+      var done = function () {
+        clearTimeout(actionTimer);
+        wrapEl.classList.remove(name);
+        wrapEl.classList.add('breathe');
+        wrapEl.removeEventListener('animationend', done);
+      };
+      wrapEl.addEventListener('animationend', done);
+      // 兜底：部分 WebView 冻结动画时钟，用定时器保证动作类一定被清掉。
+      actionTimer = setTimeout(done, (ACTION_MS[name] || 600) + 150);
+      // 无论 cls 是否为空都设定时器清特效：land(cls='') 这类没有特效的动作也要在动画结束后
+      // 把 fxEl 归零，否则上一个动作（sway 的 ♪ ♫ ♪ / hop 的 shock）会一直留在特效层上。
+      fxTimer = setTimeout(clearFx, (ACTION_MS[name] || 600) + 100);
+    }
+
+    // ── 三视图切换 ──
+    function applySprite() {
+      var sp = sprites();
+      if (!sp) return;
+      var src = facing === 'side' ? sp.side : (facing === 'back' ? sp.back : sp.front);
+      if (petEl.getAttribute('src') !== src) {
+        petEl.setAttribute('src', src);
+        petEl.addEventListener('load', buildHitMap, { once: true });
+      }
+      // 侧面默认朝右；朝左时镜像
+      petEl.classList.toggle('facing-left', facing === 'side' && sideDir < 0);
+    }
+
+    function setFacing(next) {
+      if (facing === next) return;
+      if (dragging) return;              // 拖拽中换图会重建命中图，掉帧
+      facing = next;
+      petEl.style.opacity = '0';
+      setTimeout(function () {
+        applySprite();
+        petEl.style.opacity = '1';
+      }, 80);
+    }
+
+    function faceByDelta(dx, dy) {
+      if (Math.abs(dx) > Math.abs(dy) * 1.15) {
+        sideDir = dx < 0 ? -1 : 1;
+        setFacing('side');
+      } else {
+        setFacing(dy < 0 ? 'back' : 'front');
+      }
+    }
+
+    // ── 像素级命中：从原图 alpha 逐行扫描生成轮廓 clip-path，空白穿透到宿主 ──
+    var hitCache = {};
+    function buildHitMap() {
+      try {
+        if (!petEl.complete || !petEl.naturalWidth) return false;
+        var srcKey = petEl.getAttribute('src') || '';
+        if (hitCache[srcKey]) {
+          hitAreaEl.style.clipPath = hitCache[srcKey];
+          return true;
+        }
+        var hitW = petEl.naturalWidth;
+        var hitH = petEl.naturalHeight;
+        var hitCanvas = document.createElement('canvas');
+        hitCanvas.width = hitW;
+        hitCanvas.height = hitH;
+        var hitCtx = hitCanvas.getContext('2d', { willReadFrequently: true });
+        hitCtx.drawImage(petEl, 0, 0);
+        var data = hitCtx.getImageData(0, 0, hitW, hitH).data;
+        var ALPHA = 40;
+        var baseStep = Math.max(2, Math.round(hitH / 70));
+        var rows = [];
+        var x, y;
+        for (y = 0; y < hitH; y += baseStep) {
+          var left = -1, right = -1, base = y * hitW * 4;
+          for (x = 0; x < hitW; x++) {
+            if (data[base + x * 4 + 3] > ALPHA) { if (left < 0) left = x; right = x; }
+          }
+          if (left >= 0) rows.push({ y: y, l: left, r: right });
+        }
+        if (!rows.length) return false;
+        // 顶部/底部圆弧最弯，单独补采样，避免点空气也命中。
+        var extra = [];
+        function scanRow(yy) {
+          var l = -1, r = -1, b = yy * hitW * 4;
+          for (var xx = 0; xx < hitW; xx++) {
+            if (data[b + xx * 4 + 3] > ALPHA) { if (l < 0) l = xx; r = xx; }
+          }
+          return l >= 0 ? { y: yy, l: l, r: r } : null;
+        }
+        var topEnd = Math.round(hitH * 0.18);
+        var botStart = Math.round(hitH * 0.82);
+        for (y = 0; y < topEnd; y++) {
+          if (y % baseStep !== 0) { var tr = scanRow(y); if (tr) extra.push(tr); }
+        }
+        for (y = botStart; y < hitH; y++) {
+          if (y % baseStep !== 0) { var br = scanRow(y); if (br) extra.push(br); }
+        }
+        rows = rows.concat(extra).sort(function (a, b) { return a.y - b.y; });
+        var pts = [];
+        function pushPt(px, py) {
+          pts.push((px / hitW * 100).toFixed(2) + '% ' + (py / hitH * 100).toFixed(2) + '%');
+        }
+        var i, dy, gap, steps, s;
+        for (i = 0; i < rows.length; i++) {
+          pushPt(rows[i].l, rows[i].y);
+          if (i < rows.length - 1) {
+            dy = rows[i + 1].y - rows[i].y;
+            gap = Math.abs(rows[i + 1].l - rows[i].l);
+            if (gap > dy * 1.5 && gap > 3) {
+              steps = Math.min(4, Math.ceil(gap / 3));
+              for (s = 1; s < steps; s++) {
+                pushPt(rows[i].l + (rows[i + 1].l - rows[i].l) * s / steps, rows[i].y + dy * s / steps);
+              }
+            }
+          }
+        }
+        for (i = rows.length - 1; i >= 0; i--) {
+          pushPt(rows[i].r, rows[i].y);
+          if (i > 0) {
+            dy = rows[i - 1].y - rows[i].y;
+            gap = Math.abs(rows[i - 1].r - rows[i].r);
+            if (gap > dy * 1.5 && gap > 3) {
+              steps = Math.min(4, Math.ceil(gap / 3));
+              for (s = 1; s < steps; s++) {
+                pushPt(rows[i].r + (rows[i - 1].r - rows[i].r) * s / steps, rows[i].y + dy * s / steps);
+              }
+            }
+          }
+        }
+        var poly = 'polygon(' + pts.join(', ') + ')';
+        hitAreaEl.style.clipPath = poly;
+        hitCache[srcKey] = poly;
+        return true;
+      } catch (e) {
+        return false;                    // canvas 不可用时退回矩形命中
+      }
+    }
+
+    // ── 待机小动作（原版低频心跳）──
+    function maybeIdleAction() {
+      if (!active || dragging) return;
+      if (Math.random() > 0.012) return;
+      var pick2 = Math.random();
+      if (pick2 < 0.35) {
+        playAction('hop');
+      } else if (pick2 < 0.7) {
+        playAction('swim');       // 游动加入待机随机池
+      } else if (pick2 < 0.85) {
+        playAction('sway');
+      } else {
+        var now = Date.now();
+        if (now - lastSpeakAt > 45000) {
+          lastSpeakAt = now;
+          say(pick(Math.random() < 0.75 ? INNER_LINES : REACT_LINES), true);
+        }
+      }
+    }
+
+    function startIdleLoop() {
+      stopIdleLoop();
+      idleTimer = setInterval(maybeIdleAction, 3000);
+    }
+
+    function stopIdleLoop() {
+      if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
+    }
+
+    // ── 大小：由宿主宽度档（small/medium/large）驱动 ──
+    // 只改 CSS 变量与内部记录，不自行 resize 窗口（窗口归宿主管，保证「我的大小设置对它有效」）。
+    function nearestLevel(width) {
+      var target = Number(width);
+      if (!isFinite(target)) return SIZE_LEVELS[1];
+      var best = SIZE_LEVELS[1];
+      var bestD = Infinity;
+      for (var i = 0; i < SIZE_LEVELS.length; i++) {
+        var d = Math.abs(SIZE_LEVELS[i].w - target);
+        if (d < bestD) { bestD = d; best = SIZE_LEVELS[i]; }
+      }
+      return best;
+    }
+
+    function applySizeByWidth(width) {
+      var lv = nearestLevel(width);
+      // 同档位不重复应用：避免宿主 resize 消息反复带同一宽度时，
+      // 反复写 CSS 变量 + 触发 dfyFit → 触发新一轮 resize 的循环。
+      if (lv.id === currentSize && active) return lv;
+      currentSize = lv.id;
+      document.documentElement.style.setProperty('--pet-w', lv.w + 'px');
+      document.documentElement.style.setProperty('--pet-h', lv.h + 'px');
+      // 鱼身尺寸变了，窗口也要跟着重算（否则大鱼被裁 / 小鱼窗口过高）
+      if (onBubbleChange) onBubbleChange();
+      return lv;
+    }
+
+    // ── 状态机：宿主 state 消息 → 台词 + 动作 ──
+    // 动作每次都播（跟手）；台词走 shouldSpeakStateLine 节流，
+    // 避免 agent 轮询反复下发同一 state 时刷屏。emote()/点击台词不受此冷却限制。
+    function applyState(state) {
+      currentState = state;
+      if (!active) return;
+      var canSpeak = shouldSpeakStateLine(state);
+      if (state === 'thinking' || state === 'working') {
+        playAction('sway');
+        if (canSpeak) say(pick(STATE_LINES[state]));
+      } else if (state === 'success') {
+        playAction('hop');
+        if (canSpeak) say(pick(STATE_LINES.success));
+      } else if (state === 'error') {
+        playAction('land');
+        if (canSpeak) say(pick(STATE_LINES.error));
+      } else if (state === 'feeding') {
+        playAction('hop');
+        if (canSpeak) say(pick(STATE_LINES.feeding));
+      } else if (state === 'sleep') {
+        // 睡觉：一次性下沉动画（冒 Zzz）+ 持久 .sleeping 类维持贴底慢呼吸。
+        // .sleeping 在 clearActions/activate/deactivate 里都会被清，避免残留歪睡态。
+        playAction('sleep');
+        wrapEl.classList.add('sleeping');
+        if (canSpeak) say(pick(STATE_LINES.sleep));
+      } else {
+        wrapEl.classList.remove('sleeping');   // 离开 sleep：解除持续下沉态
+        if (canSpeak) say(pick(STATE_LINES.idle));
+      }
+    }
+
+    // 自动表情（宿主空闲定时触发）：随机短动作 + 台词。
+    function emote() {
+      if (!active || dragging || !autoEmoteEnabled) return;
+      playAction(pick(['hop', 'swim', 'sway', 'land']));
+      say(pick(EMOTE_LINES));
+    }
+
+    // 命中层只响应鱼身轮廓内的点击
+    hitAreaEl.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (active) playAction('hop');
+    });
+
+    // ── 接入宿主 ──
+    function activate(sizeWidth) {
+      if (active) return;
+      active = true;
+      wrapEl.classList.remove('sleeping');   // 重新激活时清掉上次残留的睡着态
+      applySizeByWidth(sizeWidth);
+      applySprite();
+      // 命中图必须在 src 设好、图片解码后建，否则 naturalWidth=0 全透明。
+      if (petEl.complete && petEl.naturalWidth > 0) {
+        buildHitMap();
+      } else {
+        petEl.addEventListener('load', function () { buildHitMap(); }, { once: true });
+      }
+      document.body.classList.add('dfy-on');
+      startIdleLoop();
+      // 重置状态台词节流：重新激活后第一句状态台词立即允许
+      prevState = null;
+      lastStateLineAt = 0;
+      say('我来啦～');
+    }
+
+    function deactivate() {
+      // 先无条件解除拖动态：即便此刻 active 已被提前置 false，也要保证倾斜类被清掉，
+      // 否则切离大肥鱼时会残留 .dragging（下次激活又是一条歪着的鱼）。
+      dragging = false;
+      clearDragWatchdog();
+      wrapEl.classList.remove('dragging');
+      wrapEl.classList.remove('sleeping');   // 切离大肥鱼时一并解除睡着持续下沉态
+      if (!active) return;
+      active = false;
+      stopIdleLoop();
+      clearActions();   // 含 clearFx：切离大肥鱼时清掉残留特效符号
+      bubbleEl.className = '';
+      document.body.classList.remove('dfy-on', 'dfy-hidden');
+    }
+
+    window.Dafeiyu = {
+      activate: function (sizeWidth) { activate(sizeWidth); },
+      deactivate: deactivate,
+      applySizeByWidth: applySizeByWidth,
+      applyState: applyState,
+      emote: emote,
+      setExpanded: function (hidden) { document.body.classList.toggle('dfy-hidden', !!hidden); },
+      setAutoEmote: function (enabled) { autoEmoteEnabled = enabled !== false; },
+      // 宿主注入：气泡内容/显隐/鱼身尺寸变化后重算窗口高度的回调
+      onBubbleChange: function (fn) { onBubbleChange = typeof fn === 'function' ? fn : null; },
+      setBubble: function (enabled) { showBubble = enabled !== false; if (!showBubble && bubbleEl) bubbleEl.className = ''; },
+      onHostClick: function () { if (active) { playAction('hop'); say(pick(REACT_LINES)); } },
+      // 拖拽开始/结束成对加健壮性：任何路径退出拖动都要 remove('dragging') + dragging=false。
+      // onDragEnd 不再被 active 闸挡住——即使模块已被切离（active=false），也要先清掉倾斜类，
+      // 避免一条已不活跃的鱼残留 .dragging（卡拖动态根因之一）。
+      onDragStart: function () {
+        dragging = true;
+        startDragWatchdog();
+        if (!active) return;
+        clearActions();
+        wrapEl.classList.add('dragging');
+        say(pick(DRAG_LINES));
+      },
+      onDragEnd: function (dx, dy) {
+        dragging = false;
+        clearDragWatchdog();
+        wrapEl.classList.remove('dragging');
+        if (!active) return;
+        playAction('land');
+        if (typeof dx === 'number' && typeof dy === 'number') faceByDelta(dx, dy);
+      },
+      isActive: function () { return active; }
+    };
+  })();
+  </script>
+
+
+  <div id="stage">
+    <div class="pet-wrap" id="petWrap">
+      <div class="pet-pose">
+        <canvas id="petCanvas" width="260" height="260"></canvas>
+      </div>
+    </div>
+    <div class="hint" id="hint">拖动 / 长按</div>
+    <div class="state-label" id="stateLabel"></div>
+    <div class="menu" id="menu" aria-hidden="true">
+      <button class="menu-close" id="menuClose" aria-label="关闭菜单" title="关闭">×</button>
+      <button data-action="feed">喂食</button>
+      <button data-action="sleep">休息</button>
+      <button data-action="hide">隐藏</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var canvas = document.getElementById('petCanvas');
+      var ctx = canvas.getContext('2d');
+      var wrap = document.getElementById('petWrap');
+      var hint = document.getElementById('hint');
+      var stateLabel = document.getElementById('stateLabel');
+      var menu = document.getElementById('menu');
+      var menuButtons = menu.querySelectorAll('button');
+      var hintTimer = 0;
+      var selfInfo = { x: 0, y: 0, width: 110, height: 130, density: 1 };
+      var initialized = false;
+      var expanded = false;
+      var transitioning = false;
+      var petAnchor = null;
+      var panelOrigin = null;
+      var finishTransition = null;
+      // 互斥/互锁标志的卡死自愈：dragging / expanded / transitioning 任一异常卡 true 都会让
+      // 桌宠无响应（点击/长按全被吃 → “一直被选中、开不起来关不掉”）。这里记下各标志的起始时间，
+      // 配合 resetStuckState()（收到任意 overlay 消息时检查）在确认超时后强制复位。
+      var TRANSITION_TIMEOUT_MS = 3000;   // 形态/菜单切换（transitioning）超时：回执丢失也能收尾
+      var DRAG_STUCK_MS = 8000;           // 拖拽超时：超出看门狗(5s)的第二道兜底
+      var transitionStartedAt = 0;        // transitioning 置 true 的时刻
+      var expandedSince = 0;              // 进入展开态的时刻
+      var dragStartedAt = 0;              // 本轮拖拽开始的时刻
+      var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // 点击节流：默认 5 秒，外部可通过 clickInterval 消息调整（1~10 秒）。
+      var clickIntervalSec = 5;
+      var lastClickAt = 0;
+
+      // 自动表情：空闲时每隔 autoEmoteIntervalSec 秒自己做一个短动作（可开关、间隔可调）。
+      var autoEmoteEnabled = true;
+      var autoEmoteIntervalSec = 3;
+      var AUTO_EMOTE_MIN_SEC = 2;
+      var AUTO_EMOTE_MAX_SEC = 10;
+      var autoEmoteTimer = 0;
+      var autoEmoteTimerActive = false; // 标记自动表情倒计时是否正在数（防 agent state 变 idle 时把倒计时清零重来）
+      // 聊天气泡总开关（配置页下发，canvas / 大肥鱼两套形态共用一个开关）。
+      var showBubble = true;
+      var lastPick = null;               // pickLine() 上次抽中的值，避免连续重复同一句
+      var AUTO_EMOTE_ACTIONS = {
+        // deepy 池去掉 react-double（对号动作，易被联想成“完成”），换成挥手/眨眼/吐泡/摇头等中性动作。
+        deepy: ['react-left', 'react-right', 'music', 'roam-hop', 'idle-look', 'idle-spout'],
+        girl:  ['poke-left', 'poke-right', 'tickle', 'smile-hearts', 'swim', 'idle-look', 'idle-spout']
+      };
+      var AUTO_LINES = {
+        deepy: ['自己玩会儿~', '哼哼', '(๑•̀ㅂ•́)و', '咕噜咕噜', '发呆中…'],
+        girl:  ['啦啦啦~', '心情不错', '偷偷比心', '晃一晃', '发呆中…']
+      };
+
+      // 30 秒无互动的孤独表演 overlay。
+      var LONELY_DELAY_MS = 30000;
+      var LONELY_DURATION_MS = 4000;
+      var LONELY_LINES = {
+        deepy: ['呜…', '好无聊…', '理理我嘛', '(っ- ‸ - )っ'],
+        girl: ['画个圈圈…', '蹲一会儿…', '无聊…']
+      };
+      var lonelyTimer = 0;
+      var lonelyOverlay = null;
+
+      // 形态数据全部内联在 pet-data.js（window.PET_DATA），无运行时路径依赖。
+      var FORMS = {
+        deepy: { fallback: 'deepy' },
+        girl:  { fallback: 'deepy' },
+        dafeiyu: { fallback: 'deepy', dom: true } // DOM 渲染形态（无 canvas 动画包）
+      };
+      var STATE_ACTIONS = {
+        deepy: {
+          idle: 'idle', thinking: 'thinking', working: 'typing', success: 'happy',
+          error: 'error', sleep: 'sleeping', feeding: 'carrying'
+        },
+        girl: {
+          idle: 'idle', thinking: 'thinking', working: 'typing', success: 'happy',
+          error: 'error', sleep: 'sleeping', feeding: 'thumbs-up'
+        }
+      };
+      var CLICK_ACTIONS = {
+        deepy: ['react-double', 'react-left', 'react-right'],
+        girl: ['poke-left', 'poke-right', 'tickle', 'smile-hearts']
+      };
+      var DRAG_ACTIONS = { deepy: 'react-drag', girl: 'drag' };
+      var WAKE_ACTIONS = { deepy: 'waking', girl: 'waking' };
+      var IDLE_VARIANTS = ['idle-look', 'idle-spout'];
+      // agent 运行状态 → 各形态动作。typing/waking 循环播放直到下一个状态，
+      // happy/error 一次性播放后回落到常态动作。
+      var AGENT_STATE_ACTIONS = {
+        typing: { deepy: 'typing', girl: 'typing', loop: true },
+        waking: { deepy: 'waking', girl: 'waking', loop: true },
+        happy:  { deepy: 'happy',  girl: 'happy',  loop: false },
+        error:  { deepy: 'error',  girl: 'error',  loop: false }
+      };
+      var CLICK_LINES = ['在呢~', '摸摸', '咕噜', '今天也要加油'];
+      // 睡觉被点醒时的台词（全中文），与 CLICK_LINES 分开，语感更贴合「刚醒」。
+      var WAKE_LINES = ['唔…醒了', '呼啊……什么事？', '别吵，再睡会儿…', '嗯？我起来了'];
+      var STATE_LABELS = {
+        thinking: '思考中…',
+        working: '工作中…',
+        success: '完成',
+        error: '出错',
+        feeding: '吃饭中',
+        sleep: '休息中',
+        lonely: '无聊…'
+      };
+
+      var currentForm = null;
+      // 宿主最后一次下发的形态（form 消息 / 带 form 的 state 消息）：
+      // 形态收敛的唯一可靠驱动源。pet 悬浮窗里 aicode.fs.read 不可用（METHOD_UNKNOWN），
+      // 因此收敛循环不能再依赖 fs.read 读 settings.form，改用本变量与 currentForm 对比。
+      var lastHostForm = null;
+      // canvas 形态的 agent 运行状态（idle/thinking/working/sleep/...），
+      // 与大肥鱼 DOM 模块（script#0）内部的 currentState 相互独立、作用域隔离。
+      // 此前本段脚本多处读写 currentState 却从未声明，strict mode 下读取未声明变量
+      // 会抛 ReferenceError: currentState is not defined，中断收敛/孤独/自动表情逻辑。
+      var currentState = 'idle';
+      var pack = null;
+      var sprites = {};
+      var anim = null;
+      var baseAction = 'idle';
+      var lastFrameTime = 0;
+      var idleVariantTimer = 0;
+      // 偷懒穿插：思考/工作时低频随机插入一次短动作，播完回落本职动作，不改 currentState。
+      var LAZY_CHANCE = 0.3;
+      var LAZY_ACTIONS = {
+        deepy: ['idle-look', 'idle-spout', 'react-double', 'music', 'roam-hop'],
+        girl: ['idle-look', 'idle-spout', 'tickle', 'smile-hearts', 'swim']
+      };
+      var lazyTimer = 0;
+      // 拖拽中标记：拖拽期间暂停 idle 变体/偷懒/agent 动画介入，避免拖拽被覆盖或拖成死循环。
+      var dragging = false;
+      // 拖拽中推迟窗口自适应：宿主拖动窗口时 dfyFit 主动 resize 会与宿主下发的 x/y
+      // 打架，表现就是「拖不动」；松手后再补一次 fit。
+      var pendingFit = false;
+      // 松手落定标志：dragEnd 后的第一次补算 fit，selfInfo.y 可能仍是拖动前的旧值
+      // （宿主拖动期间未必下发 resize 消息同步 y），此时禁止 y 反向补偿，只调高度，
+      // 让窗口停在用户拖到的位置。宿主随后下发的 resize 消息带来最新几何后会清掉它。
+      var dfyDragSettle = false;
+      function flushPendingFit() {
+        if (!pendingFit) return;
+        pendingFit = false;
+        dfyFit();
+      }
+      // 形态加载令牌：仅让最后一次 loadForm 生效，避免慢速 girl 预加载被过期的 deepy 加载覆盖。
+      var formLoadToken = 0;
+      // 已知 settings.form 闸：显式 form 消息到达时立即记下目标形态，使随后 update/resize
+      // 触发的 applyFormFromSettings 读到旧缓存（配置页 saveSettings 尚未写完）时判定为
+      // 「设置未变」而让路，不再用旧形态发起竞争 loadForm 把刚切的形态打回（卡选中态根因）。
+      var lastKnownSettingsForm = null;
+      // 显式切换进行中标记：显式 form 消息触发的 loadForm 完成前置 true，
+      // 期间 applyFormFromSettings 直接让路，双保险避免被 agent 轮询/宿主 resize 抢跑。
+      var explicitFormLoading = false;
+      // 大肥鱼拖拽起点：dragEnd 时用位移决定朝向（左/右/上/下）。
+      var dfyDragFrom = null;
+      // 大肥鱼拖拽看门狗：若宿主 dragEnd 丢失 / 被手势取消吞掉，外层 dragging 与 DOM 倾斜态
+      // 都会永久卡住（鱼一直歪着）。拖拽开始后起个定时器，超时仍未收到 dragEnd 就强制收尾。
+      var DRAG_WATCHDOG_MS = 5000;
+      var dragWatchdogTimer = 0;
+      function clearDragWatchdog() {
+        if (dragWatchdogTimer) { clearTimeout(dragWatchdogTimer); dragWatchdogTimer = 0; }
+      }
+      function armDragWatchdog() {
+        clearDragWatchdog();
+        dragWatchdogTimer = setTimeout(forceEndDrag, DRAG_WATCHDOG_MS);
+      }
+      // 强制解除拖动态（dragEnd 丢失兜底）：复位外层 dragging、清拖拽起点，
+      // 若当前仍是大肥鱼形态则让 DOM 分支清倾斜 + 回呼吸态，并补上推迟的窗口自适应。
+      function forceEndDrag() {
+        clearDragWatchdog();
+        if (!dragging) return;
+        dragging = false;
+        dragStartedAt = 0;
+        dfyDragFrom = null;
+        if (currentForm === 'dafeiyu') {
+          window.Dafeiyu.onDragEnd(null, null);   // 无位移：仅复位倾斜，不改朝向
+          dfyDragSettle = true;
+          flushPendingFit();
+          dfyDragSettle = false;
+        } else if (pack) {
+          playStateAction(currentState);          // canvas 形态：恢复常态动作，停掉拖拽循环
+        }
+      }
+
+      function applyWindowSize(width, height) {
+        selfInfo.width = width;
+        selfInfo.height = height;
+        document.documentElement.style.setProperty('--menu-top', height + 'px');
+        applyCanvasSize();
+      }
+
+      // canvas 形态：让 canvas 元素的 CSS 宽高与 overlay 实际宽高同步。
+      // 宿主只下发 width 档（small/medium/large），height 由 overlay 当前值提供；
+      // 画布位图由 drawFrame 按当前帧 frameW×frameH 设置，这里只调显示尺寸，
+      // 配合 CSS 的 object-fit: contain 等比缩放：小档真的变小，帧填满 overlay 不变形。
+      // dafeiyu 走 DOM 分支（body.dfy-on 时 canvas 已隐藏），跳过。
+      function applyCanvasSize() {
+        if (currentForm === 'dafeiyu') return;
+        var width = Number(selfInfo.width) || canvas.width || 110;
+        var height = Number(selfInfo.height) || canvas.height || 130;
+        if (canvas.style.width !== width + 'px') canvas.style.width = width + 'px';
+        if (canvas.style.height !== height + 'px') canvas.style.height = height + 'px';
+      }
+
+      // ── 大肥鱼窗口自适应（仅 dafeiyu DOM 分支；canvas 形态不碰）──
+      // 底部锚定 resize：窗口高度变化时把 y 反向补偿（newY = 参考y - dh），
+      // 让底边原地不动，鱼不会随气泡出现/消失上下跳位。
+      // referenceY：补偿用的参考 y。调用方必须传「刚拿到的最新位置」
+      // （宿主 resize 消息的 message.y，或已同步 message.y 后的 selfInfo.y），
+      // 绝不能盲用可能过期的 selfInfo.y，否则会把窗口拉回拖动前位置（弹回）。
+      function dfyResizeAnchoredBottom(width, height, referenceY) {
+        var oldH = selfInfo.height || 0;
+        var dh = height - oldH;
+        selfInfo.width = width;
+        selfInfo.height = height;
+        var opts = { animate: false };
+        // 松手落定期：只调高度、绝不动 x/y，保证窗口停在用户拖到的位置。
+        if (dfyDragSettle) {
+          applyWindowSize(width, height);
+          return aicode.overlay.resize(width, height, opts).then(function () {
+          }).catch(function (e) {
+          });
+        }
+        if (dh !== 0 && typeof referenceY === 'number') {
+          var newY = referenceY - dh;
+          opts.x = selfInfo.x;
+          opts.y = newY;
+          selfInfo.y = newY;
+        }
+        applyWindowSize(width, height);
+        return aicode.overlay.resize(width, height, opts).then(function () {
+        }).catch(function (e) {
+        });
+      }
+
+      // 按内容撑高/收回窗口：气泡实际高 + 鱼完整高 + 余量。
+      // 气泡 width 受窗口宽限制，窗口一改高气泡换行数又变，
+      // 所以先按当前宽度量出气泡高（offsetHeight 不受 transform 影响），再定窗口高。
+      function dfyFit(dfyTrustCurrentHeight) {
+        if (currentForm !== 'dafeiyu' || !initialized || expanded || transitioning) return;
+        // 拖拽中不改窗口尺寸，会打断拖拽手感（原版规则）。标记推迟，松手后补。
+        if (dragging) { pendingFit = true; return; }
+        if (!window.aicode || !aicode.overlay) return;
+        // 鱼身高：用当前 CSS 变量（由 applySizeByWidth 写入）换算，跟原版 lv.w/lv.h 一致。
+        var rootStyle = getComputedStyle(document.documentElement);
+        var fishW = parseFloat(rootStyle.getPropertyValue('--pet-w')) || 60;
+        var fishH = parseFloat(rootStyle.getPropertyValue('--pet-h')) || Math.round(fishW * 238 / 178);
+        fishW = Math.round(fishW);
+        fishH = Math.round(fishH);
+
+        // 窗口宽度：鱼宽 + 24，且不小于 120（与原版一致）
+        var w = Math.max(fishW + 24, 120);
+
+        // 先让气泡在目标宽度下完成换行，再量高
+        var bubble = document.getElementById('dfy-bubble');
+        var bubbleH = 0;
+        if (bubble && bubble.classList.contains('show')) {
+          bubble.style.maxWidth = (w - 12) + 'px';
+          void bubble.offsetWidth;              // 强制重排，确保宽度已生效
+          bubbleH = bubble.offsetHeight;
+        }
+
+        // 高度公式：顶 4 + 气泡高 + 间距 8 + 鱼高 + 顶余量（鱼高的 20%，
+        // 给 hop/breathe 向上位移留头部空间，避免头被 overflow:hidden 裁切）+ 底 2。
+        // 无气泡时 bubbleH=0 → 收回为 鱼高 + 56（4+8+20%余量+2≈鱼高 30% 余量）。
+        var topMargin = Math.max(20, Math.round(fishH * 0.2));
+        var h = Math.round(4 + bubbleH + 8 + fishH + topMargin + 2);
+        // 兜底：窗口高度始终 ≥ 鱼完整高 + 56，保证头绝不被裁
+        var minH = fishH + 56;
+        if (h < minH) h = minH;
+
+        // 宿主下发的当前高度已足够时不重复 resize：信任宿主尺寸，避免 resize 分支
+        // 与宿主刚下发的位置打架（拖动弹回）。仅在无气泡时信任：有气泡时需要的高度
+        // h 会大于鱼高下限 minH，宿主高度可能够鱼却不够气泡，此时仍要撑高防遮挡。
+        // 条件：高度 ≥ 鱼高下限（头不裁切）且宽度已等于目标宽度（换档由后面正常处理）。
+        if (dfyTrustCurrentHeight && bubbleH === 0 &&
+            selfInfo.height >= minH && selfInfo.width === w) return;
+
+        if (h !== selfInfo.height || w !== selfInfo.width) {
+          // y 反向补偿必须基于刚同步的最新位置：
+          // - 拖拽中仍禁止 resize（上面已 pendingFit 推迟）。
+          // - 松手落定期（dfyDragSettle）内 dfyResizeAnchoredBottom 只调高度不动 y。
+          // - 其余场景 selfInfo.y 已由宿主 resize/dragEnd 消息同步到最新，可作为参考 y。
+          dfyResizeAnchoredBottom(w, h, selfInfo.y);
+        }
+      }
+
+      // 注入给大肥鱼模块：气泡/尺寸变化时触发窗口自适应
+      window.Dafeiyu.onBubbleChange(function () { dfyFit(); });
+
+      function renderMenu() {
+        var ready = expanded && !transitioning;
+        document.body.classList.toggle('menu-ready', ready);
+        menu.setAttribute('aria-hidden', String(!ready));
+        menuButtons.forEach(function (button) { button.disabled = !ready; });
+      }
+
+      function updateDragRegion() {
+        return aicode.overlay.setDragRegion({
+          left: 0,
+          top: 0,
+          width: selfInfo.width,
+          height: selfInfo.height
+        }).catch(function (e) {
+        });
+      }
+
+      function postInteraction(type) {
+        aicode.overlay.postMessage({ type: type }).catch(function (e) {
+        });
+      }
+
+      // 随机抽一句台词，避免连续抽到同一句（池子 >=2 时重抽一次）。
+      function pickLine(list) {
+        if (!list || !list.length) return '';
+        var value = list[Math.floor(Math.random() * list.length)];
+        if (list.length > 1 && value === lastPick) {
+          value = list[Math.floor(Math.random() * list.length)];
+        }
+        lastPick = value;
+        return value;
+      }
+
+      // 台词气泡：受 showBubble 开关控制（关闭时只做动作不冒泡）；
+      // 与纯 UI 提示（拖动/长按、失败提示等）区分，后者仍直接走 showHint。
+      function speak(text, duration) {
+        if (!showBubble || !text) return;
+        showHint(text, duration);
+      }
+
+      async function setExpanded(value) {
+        if (!initialized || transitioning || expanded === value) return false;
+        postInteraction('activity');
+        var previous = expanded;
+        transitioning = true;
+        transitionStartedAt = Date.now();
+        renderMenu();
+        // 大肥鱼：展开菜单时把鱼身收起，避免与菜单面板重叠。
+        window.Dafeiyu.setExpanded(value);
+        var settled = false;
+        try {
+          if (value) {
+            var self = await aicode.overlay.self();
+            petAnchor = { x: self.x, y: self.y };
+          }
+          expanded = value;
+          if (value) expandedSince = Date.now();
+          renderMenu();
+          await updateDragRegion();
+          // resize 调用只确认请求，最终位置与动画完成以 resize 事件为准。
+          // finishTransition 仅首次生效：宿主 resize 事件与下面的超时兜底谁先到都只结算一次。
+          var completion = new Promise(function (resolve) {
+            finishTransition = function (ok) {
+              if (settled) return;
+              settled = true;
+              resolve(!!ok);
+            };
+          });
+          await aicode.overlay.resize(selfInfo.width, selfInfo.height + (value ? 146 : 0), {
+            animate: !reducedMotion,
+            x: !value && petAnchor ? petAnchor.x : null,
+            y: !value && petAnchor ? petAnchor.y : null
+          });
+          // 超时兜底：宿主 resize 回执（finishTransition）万一丢失，也不能永久 await
+          // 卡住 transitioning（否则点击/长按全被吃，表现为“一直被选中、菜单收不回”）。
+          var ok = await Promise.race([
+            completion,
+            new Promise(function (resolve) {
+              setTimeout(function () { resolve(false); }, TRANSITION_TIMEOUT_MS);
+            })
+          ]);
+          return ok === true;
+        } catch (error) {
+          expanded = previous;
+          showHint('菜单调整失败');
+          return false;
+        } finally {
+          // 任何路径（成功/失败/超时）都保证解锁互斥标志，杜绝永久卡 transitioning。
+          settled = true;
+          finishTransition = null;
+          transitioning = false;
+          transitionStartedAt = 0;
+          renderMenu();
+        }
+      }
+
+      // 全局卡死自愈：收到任意 overlay 消息时检查 dragging/expanded/transitioning 是否异常卡住
+      // （以起始时间超时为凭，不会打断正在进行的正常切换），一旦确认就强制复位并恢复窗口尺寸。
+      // 目标：无论怎么卡，一来消息就能自愈，桌宠重新可点、菜单能收回。
+      // skipLonely：周期自愈任务调用时传 true —— 孤独表演（30 秒无互动）不能被周期任务
+      // 反复 resetLonely 推迟，否则永远触发不了；只有“真来了一条消息”才顺带 resetLonely。
+      function resetStuckState(skipLonely) {
+        var now = Date.now();
+        var healed = false;
+        // transitioning 卡死：setExpanded 的 resize 回执丢失/被丢弃，点击/长按全被吃。
+        if (transitioning && transitionStartedAt && (now - transitionStartedAt) > TRANSITION_TIMEOUT_MS) {
+          transitioning = false;
+          transitionStartedAt = 0;
+          if (finishTransition) {
+            var fin = finishTransition;
+            finishTransition = null;
+            fin(false);
+          }
+          renderMenu();
+          healed = true;
+        }
+        // dragging 卡死：dragEnd 丢失且看门狗也失效（鱼一直倾斜不复位）的第二道兜底。
+        if (dragging && dragStartedAt && (now - dragStartedAt) > DRAG_STUCK_MS) {
+          dragStartedAt = 0;
+          forceEndDrag();
+          healed = true;
+        }
+        if (!healed) return;
+        // 展开态自愈：菜单展开后若一直收不回（宿主窗口仍顶着 +146），强制收一次，
+        // 让窗口高度退回默认、鱼身不再被 dfy-hidden 藏住，点击/长按恢复响应。
+        if (expanded && !dragging && !transitioning) {
+          expandedSince = 0;
+          void setExpanded(false);
+        }
+        if (!skipLonely) resetLonely();
+      }
+
+      function updatePosition(message) {
+        if (expanded && panelOrigin && petAnchor) {
+          petAnchor.x += message.x - panelOrigin.x;
+          petAnchor.y += message.y - panelOrigin.y;
+          panelOrigin = { x: message.x, y: message.y };
+        } else if (!expanded) {
+          petAnchor = { x: message.x, y: message.y };
+        }
+        selfInfo.x = message.x;
+        selfInfo.y = message.y;
+      }
+
+      function showHint(text, duration) {
+        hint.textContent = text;
+        hint.classList.add('show');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(function () { hint.classList.remove('show'); }, duration || 1200);
+      }
+
+      function setStateLabel(state) {
+        stateLabel.textContent = STATE_LABELS[state] || '';
+        stateLabel.classList.toggle('show', !!STATE_LABELS[state]);
+      }
+
+      function resolveForm(form) {
+        return (window.PET_DATA && window.PET_DATA.forms && window.PET_DATA.forms[form]) ? form : 'deepy';
+      }
+
+      // 宿主当前宽度档对应的像素宽度（small/medium/large），用于驱动大肥鱼的尺寸档。
+      var hostSizeWidth = 110;
+
+      function preload(dataUri) {
+        return new Promise(function (resolve) {
+          var image = new Image();
+          image.onload = function () { resolve(image); };
+          image.onerror = function () { resolve(null); };
+          image.src = dataUri;
+        });
+      }
+
+      function setCanvasSize(frameW, frameH) {
+        if (canvas.width !== frameW || canvas.height !== frameH) {
+          canvas.width = frameW;
+          canvas.height = frameH;
+        }
+        ctx.imageSmoothingEnabled = false;
+      }
+
+      function clearAnimation() {
+        anim = null;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // 按状态解析 base 动作并播放；base 即当前 state 的常驻动作。
+      function playStateAction(state) {
+        var form = resolveForm(currentForm);
+        var mapping = STATE_ACTIONS[form] || STATE_ACTIONS.deepy;
+        var actionName = mapping[state] || mapping.idle || 'idle';
+        if (!pack || !pack.animations[actionName]) actionName = 'idle';
+        baseAction = actionName;
+        playAction(actionName, { loop: true, next: null });
+      }
+
+      function playAction(name, options) {
+        if (!pack) return;
+        var opts = options || {};
+        var definition = pack.animations[name];
+        if (!definition) {
+          definition = pack.animations.idle;
+          name = 'idle';
+        }
+        if (!definition) return;
+        var frames = (definition.frames || []).map(function (frame) {
+          return {
+            i: Number(frame.i) || 0,
+            ms: Math.max(16, Number(frame.ms) || 100)
+          };
+        });
+        if (!frames.length) return;
+        var sheet = sprites[definition.sheet];
+        if (!sheet) return;
+        var index = 0;
+        if (opts.resumeName === name && anim && anim.name === name) {
+          index = anim.index % frames.length;
+        }
+        anim = {
+          name: name,
+          definition: definition,
+          frames: frames,
+          sheet: sheet,
+          index: index,
+          startedAt: performance.now(),
+          loop: opts.loop !== undefined ? opts.loop : definition.loop !== false,
+          next: opts.next || null,
+          onFinish: opts.onFinish || null
+        };
+        var frame = frames[index];
+        setCanvasSize(definition.frameW, definition.frameH);
+        lastFrameTime = performance.now();
+        drawFrame(anim, frame);
+      }
+
+      function pickIdleVariant() {
+        if (!pack) return;
+        var variant = IDLE_VARIANTS[Math.floor(Math.random() * IDLE_VARIANTS.length)];
+        if (!pack.animations[variant]) return;
+        // 一次性播放变体后回到 idle 基础帧，实现 idle ↔ 变体随机轮换（摸鱼）。
+        playAction(variant, { loop: false, next: 'idle' });
+      }
+
+      function playOneShot(name, fallbackName) {
+        if (!pack) return;
+        if (!pack.animations[name]) name = fallbackName || baseAction;
+        if (!pack.animations[name]) return;
+        playAction(name, {
+          loop: false,
+          next: baseAction,
+          onFinish: function () { playAction(baseAction, { loop: true, next: null }); }
+        });
+      }
+
+      function readFormSetting() {
+        return aicode.fs.read('data://pet-settings.json').then(function (file) {
+          var parsed = {};
+          try {
+            parsed = JSON.parse((file && file.content) || '{}');
+          } catch (error) {
+            parsed = {};
+          }
+          var seconds = Number(parsed.clickInterval);
+          if (isFinite(seconds)) {
+            clickIntervalSec = Math.min(10, Math.max(1, seconds));
+          }
+          // 大肥鱼尺寸档：用宿主宽度（small/medium/large）驱动它最接近的档位。
+          var hostWidth = Number(parsed.width);
+          if (isFinite(hostWidth) && hostWidth > 0) {
+            hostSizeWidth = hostWidth;
+            if (currentForm === 'dafeiyu') window.Dafeiyu.applySizeByWidth(hostSizeWidth);
+          }
+          if (typeof parsed.autoEmote === 'boolean') {
+            autoEmoteEnabled = parsed.autoEmote;
+          }
+          if (typeof parsed.showBubble === 'boolean') {
+            showBubble = parsed.showBubble;
+            window.Dafeiyu.setBubble(showBubble); // 同步给大肥鱼 DOM 分支
+          }
+          autoEmoteIntervalSec = clampAutoEmoteInterval(
+            parsed.autoEmoteInterval !== undefined ? parsed.autoEmoteInterval : autoEmoteIntervalSec);
+          return resolveForm(parsed.form);
+        }).catch(function (e) {
+          var code = (e && (e.code || e.message)) || e;
+          // 读取失败（宿主瞬态/设置文件正被配置页重写）时不强推 deepy：
+          // 保持当前形态，避免大肥鱼被一次失败读取回退；启动阶段 currentForm 为空则仍回 deepy 兑底。
+          return currentForm || 'deepy';
+        });
+      }
+
+      async function loadForm(form, preserveState) {
+        var token = ++formLoadToken;
+        var previousForm = currentForm;
+        // 切离大肥鱼时先停掉 DOM 分支，避免鱼身残留。
+        if (form !== 'dafeiyu' && window.Dafeiyu.isActive()) window.Dafeiyu.deactivate();
+        var data = (window.PET_DATA && window.PET_DATA.forms) ? window.PET_DATA.forms[form] : null;
+        var loadedPack = data || null;
+        // 大肥鱼走 DOM 渲染分支：不加载 canvas 包，改为激活 DOM 鱼身（隐藏 canvas）。
+        if (form === 'dafeiyu') {
+          if (token !== formLoadToken) { return false; }
+          // 防御：DOM 鱼身模块未就绪时不能静默返回（否则 currentForm 已改、画面却空白，
+          // 下一次 applyFormFromSettings 也不会再纠正），回退到 deepy canvas 兜底。
+          if (!window.Dafeiyu || typeof window.Dafeiyu.activate !== 'function') {
+            console.warn('[pet] dafeiyu 模块未就绪，回退 deepy');
+            return loadForm('deepy', preserveState);
+          }
+          currentForm = form;
+          pack = null;
+          sprites = {};
+          anim = null;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          window.Dafeiyu.activate(hostSizeWidth);
+          window.Dafeiyu.applyState(preserveState || 'idle');
+          // 加载后按鱼身高撑起窗口，避免沿用 canvas 形态的固定窗口把鱼裁切。
+          // 注意：初始化阶段 initialized 仍为 false，此处 dfyFit 会提前返回，
+          // 因此初始化流程在 initialized=true 后会补一次 dfyFit（见下方启动逻辑）。
+          dfyFit();
+          return true;
+        }
+        if (!loadedPack || !loadedPack.animations || !loadedPack.animations.idle) {
+          if (form === 'deepy') {
+            clearAnimation();
+            return false;
+          }
+          return loadForm('deepy', preserveState);
+        }
+        var sheets = {};
+        var names = Object.keys(loadedPack.animations).map(function (key) {
+          return loadedPack.animations[key].sheet;
+        }).filter(function (sheet, index, all) {
+          return sheet && all.indexOf(sheet) === index;
+        });
+        var images = await Promise.all(names.map(function (sheet) {
+          return preload(data.sheets[sheet]);
+        }));
+        if (token !== formLoadToken) { return false; } // 已被更新的加载请求取代，丢弃本次结果。
+        names.forEach(function (sheet, index) {
+          if (images[index]) sheets[sheet] = images[index];
+        });
+        if (!Object.keys(sheets).length) {
+          if (form !== 'deepy') return loadForm('deepy', preserveState);
+          clearAnimation();
+          return false;
+        }
+        currentForm = form;
+        pack = loadedPack;
+        sprites = sheets;
+        applyCanvasSize(); // 切回 canvas 形态时按当前 overlay 档位重设显示尺寸
+        var state = preserveState || 'idle';
+        baseAction = ((STATE_ACTIONS[form] || STATE_ACTIONS.deepy)[state]) || 'idle';
+        playAction(baseAction, {
+          loop: true,
+          next: null,
+          resumeName: previousForm === form ? (anim && anim.name) : null
+        });
+        lastFrameTime = performance.now();
+        scheduleIdleVariant();
+        scheduleLazyBreak();
+        scheduleAutoEmote(true);
+        return true;
+      }
+
+      function scheduleIdleVariant() {
+        clearTimeout(idleVariantTimer);
+        idleVariantTimer = setTimeout(function tick() {
+          if (!dragging && !lonelyOverlay && currentState === 'idle' && anim && anim.name === 'idle') {
+            pickIdleVariant();
+          }
+          idleVariantTimer = setTimeout(tick, 7000 + Math.random() * 6000);
+        }, 7000 + Math.random() * 6000);
+      }
+
+      // 偷懒穿插：思考/工作时低频（12~20s）以约 30% 概率插一次短动作，播完回落本职动作。
+      function scheduleLazyBreak() {
+        clearTimeout(lazyTimer);
+        lazyTimer = setTimeout(function tick() {
+          if (!dragging && !lonelyOverlay && pack && anim && anim.name === baseAction &&
+              (currentState === 'thinking' || currentState === 'working')) {
+            if (Math.random() < LAZY_CHANCE) {
+              var list = (LAZY_ACTIONS[resolveForm(currentForm)] || LAZY_ACTIONS.deepy)
+                .filter(function (name) { return pack.animations[name]; });
+              if (list.length) {
+                playOneShot(list[Math.floor(Math.random() * list.length)], baseAction);
+              }
+            }
+          }
+          lazyTimer = setTimeout(tick, 12000 + Math.random() * 8000);
+        }, 12000 + Math.random() * 8000);
+      }
+
+      function drawFrame(current, frame) {
+        var definition = current.definition;
+        var col = frame.i % definition.cols;
+        var row = Math.floor(frame.i / definition.cols);
+        setCanvasSize(definition.frameW, definition.frameH);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          current.sheet,
+          col * definition.frameW, row * definition.frameH,
+          definition.frameW, definition.frameH,
+          0, 0, definition.frameW, definition.frameH
+        );
+        drawLonelyOverlay();
+      }
+
+      // 30 秒无互动的孤独表演 overlay（眼泪 / 地上画圈），纯 canvas 2D 绘制。
+      function drawLonelyOverlay() {
+        if (!lonelyOverlay) return;
+        var elapsed = performance.now() - lonelyOverlay.startedAt;
+        if (elapsed >= LONELY_DURATION_MS) {
+          lonelyOverlay = null;
+          return;
+        }
+        var w = canvas.width;
+        var h = canvas.height;
+        ctx.save();
+        if (lonelyOverlay.kind === 'tears') {
+          var drip = (elapsed % 1200) / 1200;
+          var length = Math.min(1, elapsed / 700) * (h * 0.16);
+          var headY = h * 0.34;
+          drawTear(w * 0.36, headY + length * 0.4, length * 0.7, drip, elapsed);
+          drawTear(w * 0.64, headY + length * 0.4, length * 0.7, drip, elapsed + 260);
+        } else if (lonelyOverlay.kind === 'circle') {
+          var progress = Math.min(1, elapsed / 2600);
+          var cx = w * 0.5;
+          var cy = h * 0.86;
+          var rx = w * 0.3;
+          var ry = h * 0.07;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+          ctx.lineWidth = Math.max(1.5, w * 0.012);
+          ctx.lineCap = 'round';
+          ctx.setLineDash([w * 0.03, w * 0.022]);
+          ctx.lineDashOffset = -elapsed * 0.04;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx, ry, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawTear(x, y, size, drip, seed) {
+        var wobble = Math.sin((seed + drip * 400) / 180) * size * 0.08;
+        var gradient = ctx.createLinearGradient(x, y - size, x, y + size);
+        gradient.addColorStop(0, 'rgba(120, 190, 255, 0.05)');
+        gradient.addColorStop(0.55, 'rgba(96, 165, 250, 0.62)');
+        gradient.addColorStop(1, 'rgba(56, 120, 220, 0.9)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(x, y - size);
+        ctx.bezierCurveTo(x + size * 0.5 + wobble, y - size * 0.2, x + size * 0.42 + wobble, y + size * 0.5, x, y + size);
+        ctx.bezierCurveTo(x - size * 0.42 + wobble, y + size * 0.5, x - size * 0.5 + wobble, y - size * 0.2, x, y - size);
+        ctx.fill();
+      }
+
+      function startLonely() {
+        if (currentForm === 'dafeiyu') {
+          // DOM 形态：只冒一句孤独台词，不走 canvas 泪滴/画圈 overlay。
+          if (currentState !== 'sleep' && !expanded) {
+            window.Dafeiyu.applyState('idle');
+            speak('无聊…理理我嘛', 2400);
+          }
+          scheduleLonely();
+          return;
+        }
+        if (!pack || currentState === 'sleep' || expanded) {
+          scheduleLonely();
+          return;
+        }
+        var form = resolveForm(currentForm);
+        var lines = LONELY_LINES[form] || LONELY_LINES.deepy;
+        speak(pickLine(lines), 2400);
+        setStateLabel('lonely');
+        if (form === 'deepy') {
+          lonelyOverlay = { kind: 'tears', startedAt: performance.now() };
+          playOneShot('error', 'idle');
+        } else {
+          lonelyOverlay = { kind: 'circle', startedAt: performance.now() };
+          playAction('idle', { loop: true, next: null });
+        }
+        scheduleLonely();
+      }
+
+      function scheduleLonely() {
+        clearTimeout(lonelyTimer);
+        lonelyTimer = setTimeout(startLonely, LONELY_DELAY_MS);
+      }
+
+      function clampAutoEmoteInterval(seconds) {
+        var value = Number(seconds);
+        if (!isFinite(value)) return autoEmoteIntervalSec;
+        return Math.min(AUTO_EMOTE_MAX_SEC, Math.max(AUTO_EMOTE_MIN_SEC, Math.round(value)));
+      }
+
+      // 自动表情：只在空闲（idle）、未拖拽、未展开菜单、未睡觉、无孤独表演时自己做一个短动作。
+      // 递归 setTimeout（而非 setInterval）：每轮重新读 autoEmoteIntervalSec，间隔变更下一轮自动生效。
+      function autoEmoteTick() {
+        if (autoEmoteEnabled && !dragging && !expanded && !transitioning && !lonelyOverlay &&
+            currentState === 'idle') {
+          // 大肥鱼：空闲自动表情走 DOM 分支（自带动作 + 台词）。
+          if (currentForm === 'dafeiyu') {
+            window.Dafeiyu.emote();
+            scheduleAutoEmote(true);
+            return;
+          }
+          if (pack && anim && anim.name === baseAction) {
+            var form = resolveForm(currentForm);
+            var list = (AUTO_EMOTE_ACTIONS[form] || AUTO_EMOTE_ACTIONS.deepy)
+              .filter(function (name) { return pack.animations[name]; });
+            if (list.length) {
+              playOneShot(list[Math.floor(Math.random() * list.length)], baseAction);
+              var lines = AUTO_LINES[form] || AUTO_LINES.deepy;
+              speak(pickLine(lines), 1600);
+            }
+          }
+        }
+        // 每轮（含未触发条件时）重排下一轮，重新读 autoEmoteIntervalSec。
+        scheduleAutoEmote(true);
+      }
+
+      // 停掉当前倒计时（清定时器 + 清「正在倒计时」标记），供强制重排前调用。
+      function stopAutoEmoteTimer() {
+        clearTimeout(autoEmoteTimer);
+        autoEmoteTimerActive = false;
+      }
+
+      // 重排自动表情计时器。
+      // force=false（默认）：若倒计时已在进行则不重排 —— 避免 agent 轮询每 2.5 秒在
+      //   working↔idle 间反复切换时把一个已在倒数的计时器 clearTimeout 后重新计满。
+      // force=true：真正需要重启的时机才强制重排 —— 初始化后、自动表情触发后
+      //   （autoEmoteTick 末尾）、用户手动点击后、设置变更（间隔/开关）时。
+      function scheduleAutoEmote(force) {
+        if (!force && autoEmoteTimerActive) return;
+        stopAutoEmoteTimer();
+        autoEmoteTimerActive = true;
+        autoEmoteTimer = setTimeout(autoEmoteTick, Math.max(500, autoEmoteIntervalSec * 1000));
+      }
+
+      function applyAutoEmote(enabled, seconds) {
+        if (typeof enabled === 'boolean') autoEmoteEnabled = enabled;
+        autoEmoteIntervalSec = clampAutoEmoteInterval(seconds);
+        scheduleAutoEmote(true);
+      }
+
+      function resetLonely() {
+        if (lonelyOverlay) {
+          lonelyOverlay = null;
+          setStateLabel(currentState);
+        }
+        clearTimeout(lonelyTimer);
+        lonelyTimer = setTimeout(startLonely, LONELY_DELAY_MS);
+      }
+
+      function tick(now) {
+        requestAnimationFrame(tick);
+        var dt = lastFrameTime ? now - lastFrameTime : 0;
+        if (dt > 0 && dt < 250) {
+          if (anim) drawFrame(anim, anim.frames[anim.index]);
+        }
+        lastFrameTime = now;
+        if (!anim) return;
+        var current = anim;
+        var frame = current.frames[current.index];
+        if (now - current.startedAt >= frame.ms) {
+          current.startedAt = now;
+          lastFrameTime = now;
+          var nextIndex = current.index + 1;
+          if (nextIndex >= current.frames.length) {
+            if (current.loop) {
+              current.index = 0;
+            } else {
+              var finish = current.onFinish;
+              var next = current.next;
+              anim = null;
+              if (typeof finish === 'function') {
+                finish();
+              } else if (next && pack && pack.animations[next]) {
+                playAction(next, { loop: true, next: null });
+              }
+              return;
+            }
+          } else {
+            current.index = nextIndex;
+          }
+          drawFrame(current, current.frames[current.index]);
+        }
+      }
+      requestAnimationFrame(tick);
+
+      async function applyFormFromSettings() {
+        // 启动时序内（initialized=false）不响应设置驱动的形态切换，避免大肥鱼
+        // 激活过程中被 resize/update 插入的 loadForm 打断回退；启动形态由 init 统一以
+        // settings.form 为准加载。
+        if (!initialized) return;
+        // 显式切换尚未完成时让路：此刻用户刚通过 form 消息发起切换，若读 settings
+        // 仍取到旧缓存就会把刚切的形态读回旧值（卡选中态）。等显式 loadForm 完成后再说。
+        if (explicitFormLoading) return;
+        var form = await readFormSetting();
+        // 与已知 settings.form 一致说明设置并未真的变化（多为 agent 轮询 update /
+        // 宿主 resize 在配置页写完前的陈旧读），不动作，避免把刚显式切换的形态打回。
+        if (form === lastKnownSettingsForm && form === currentForm) return;
+        lastKnownSettingsForm = form;
+        await loadForm(form, currentState);
+      }
+
+      // resize/update 触发的形态同步入口：pet 悬浮窗里 fs.read 不可用（METHOD_UNKNOWN），
+      // 直接走 applyFormFromSettings 实际拿不到 settings 里真实存的形态。这里优先用
+      // lastHostForm（runtime 通过 form/state 消息下发的宿主最后已知形态），存在则直接换装、
+      // 不依赖 fs.read；仅当宿主从未推送过形态（lastHostForm 为空）时才回退到 fs.read 路径。
+      function applyFormFromHost() {
+        if (!initialized) return Promise.resolve();
+        if (explicitFormLoading) return Promise.resolve();
+        if (lastHostForm && lastHostForm !== currentForm) {
+          return loadForm(lastHostForm, currentState);
+        }
+        // lastHostForm 已与当前一致，或宿主尚未推送过形态 → 交给 fs.read 路径兜底。
+        return applyFormFromSettings();
+      }
+
+      // ── 自愈兜底（不依赖 fs.read，也不依赖单次 push 是否送达）──
+      // 病根一：pet 悬浮窗环境里 aicode.fs.read 不可用（真机报 METHOD_UNKNOWN），
+      // 旧版收敛循环每 4 秒靠 fs.read 读 settings.form，一旦 read 失败就拿不到目标形态，
+      // 形态同步 / 自愈全瘫 → 切形态没反应、卡形态（1.0.1→1.0.6 的真根因）。
+      // 病根二：pet 的 currentForm / dragging / expanded / transitioning 全靠宿主单向推送
+      //（overlay.postMessage 是 fire-and-forget，pet 端无回执），一旦某条推送丢失，或 loadForm
+      // 静默失败（图集解码瞬时失败回退 deepy / formLoadToken 竞态返回 false），内存状态就与
+      // 宿主真实意图脱钩，且永远不会自己收敛。
+      // 新方案：以「宿主最后一次下发的形态 lastHostForm」为唯一可靠基准。form 消息 / 带 form
+      // 的 state 消息（petReady 回发）都会更新 lastHostForm；本循环每 FORM_RECONCILE_MS 拿它与
+      // currentForm 对比，不一致就重试 loadForm。fs.read 可用时仅作为额外信号，不可用完全不影响收敛。
+      var FORM_RECONCILE_MS = 4000;
+      setInterval(function () {
+        if (!initialized || explicitFormLoading) return;
+        // 卡死标志自愈：传 skipLonely=true，周期任务里不重排孤独计时器，
+        // 否则 30 秒孤独表演会被反复推迟到永远触发不了。
+        resetStuckState(true);
+        // 主路径（不依赖 fs.read）：宿主要的形态与当前形态不一致 → 重试 loadForm。
+        // lastHostForm 尚未收到任何宿主形态推送时为 null，此时跳过，交由 form/state 消息驱动。
+        if (lastHostForm && lastHostForm !== currentForm) {
+          void loadForm(lastHostForm, currentState).then(function (applied) {
+            // 仍未切成目标形态（图集仍加载不出）→ 清掉 currentForm，下一轮继续重试。
+            if (applied !== true && currentForm === lastHostForm) currentForm = null;
+          });
+        }
+        // 额外信号（可选）：fs.read 恰好可用时读一次 settings.form，与宿主推送交叉验证；
+        // 不可用（METHOD_UNKNOWN 等）则静默跳过，绝不让它阻塞或报错打断上面的主路径。
+        readFormSetting().then(function (form) {
+          if (form && form !== lastHostForm) {
+            // fs 与宿主推送不一致（多为推送丢失），信任 fs 读到的设置并驱动一次切换。
+            lastHostForm = form;
+            if (form !== currentForm) void loadForm(form, currentState);
+          }
+        }).catch(function () { /* fs.read 不可用：忽略，主路径已足够收敛 */ });
+      }, FORM_RECONCILE_MS);
+
+      // 睡觉时被点击：播唥醒动作（WAKE_ACTIONS，deepy/girl 均为 waking）→ 播完回落 idle →
+      // 把 currentState 真正置为 idle，后续点击恢复正常，再补一句台词反馈。
+      // 保留点击节流 / resetLonely / postInteraction / expanded 判断（均在本函数调用前已完成）。
+      function wakeFromSleep() {
+        var form = resolveForm(currentForm);
+        var wakeAction = WAKE_ACTIONS[form] || WAKE_ACTIONS.deepy;
+        if (!pack || !pack.animations[wakeAction]) {
+          // 无 waking 动作包：直接回 idle，保证不卡在睡觉。
+          handleStateChange('idle');
+          speak(pickLine(CLICK_LINES));
+          return;
+        }
+        currentState = 'idle';   // 先解除睡觉态，避免播动作期间仍被视为 sleep
+        baseAction = ((STATE_ACTIONS[form] || STATE_ACTIONS.deepy).idle) || 'idle';
+        setStateLabel('idle');
+        playOneShot(wakeAction, baseAction); // 一次性 waking，播完 onFinish 回 idle 常态
+        speak(pickLine(WAKE_LINES));
+        scheduleAutoEmote(true); // 唥醒算一次互动，重置自动表情计时，避免撞车
+      }
+
+      function handleStateChange(state) {
+        currentState = state;
+        setStateLabel(state);
+        // 大肥鱼：转发给 DOM 状态机（台词 + CSS 动作），不碰 canvas 动画。
+        if (currentForm === 'dafeiyu') {
+          window.Dafeiyu.applyState(state);
+          return;
+        }
+        if (!pack) return;
+        if (state === 'idle') {
+          // 仅恢复常态动作，不重排自动表情计时器：agent 轮询每 2.5s 在 working↔idle
+          // 间反复切，若此处重排会把一个已在倒数的计时器清零重来，10s 永远数不满。
+          playAction('idle', { loop: true, next: null });
+        } else {
+          playStateAction(state);
+        }
+      }
+
+      setStateLabel('idle');
+      renderMenu();
+      (async function () {
+        try {
+          var self = await aicode.overlay.self();
+          selfInfo = self;
+          petAnchor = { x: self.x, y: self.y };
+          applyWindowSize(self.width, self.height);
+          await updateDragRegion();
+          // 先读宿主宽度档（供大肥鱼取最接近尺寸档），再加载形态。
+          // 只读一次设置同时拿到 hostSizeWidth 与 form，避免两次异步读取间被
+          // resize/update 消息插入 applyFormFromSettings 造成竞态回退。
+          var bootForm = await readFormSetting();
+          await loadForm(bootForm, 'idle');
+          // 记录启动形态为已知 settings.form 基线，后续 applyFormFromSettings 仅在设置
+          // 真的变更时才介入。
+          lastKnownSettingsForm = bootForm;
+          initialized = true;
+          // 大肥鱼：loadForm 内的 dfyFit 因 initialized=false 提前返回，
+          // 这里补一次，保证启动/重建后窗口按鱼身正确撑起，不被 canvas 默认尺寸裁切。
+          if (currentForm === 'dafeiyu') dfyFit();
+          postInteraction('petReady');
+          showHint('拖动 / 长按');
+          scheduleLonely();
+          scheduleAutoEmote(true);
+        } catch (error) {
+          console.error(error);
+        }
+      })();
+
+      // 启动看门狗：boot 异步链（overlay.self / readFormSetting / loadForm）若某一步 promise
+      // 永不 resolve，initialized 会永远停在 false，长按展开 / 窗口自适应 / 上面的形态收敛
+      // 全部失效，表现为“整体无响应、卡死”。这里兜底：超时仍未完成就强制置 initialized 并
+      // 按 settings.form 兜底加载，保证桌宠永不永久假死（boot 稍后完成则幂等，无副作用）。
+      setTimeout(function () {
+        if (initialized) return;
+        initialized = true;
+        readFormSetting().then(function (form) {
+          lastKnownSettingsForm = form;
+          if (form !== currentForm) return loadForm(form, currentState);
+          return null;
+        }).catch(function (e) {
+        });
+      }, 8000);
+
+      document.querySelectorAll('[data-action]').forEach(function (button) {
+        button.addEventListener('click', async function () {
+          if (!expanded || transitioning) return;
+          var action = button.dataset.action;
+          if (await setExpanded(false)) {
+            aicode.overlay.postMessage({ type: 'menuAction', action: action }).catch(function (e) {
+              showHint('操作失败');
+            });
+          }
+        });
+      });
+      document.getElementById('menuClose').addEventListener('click', function () {
+        void setExpanded(false);
+      });
+
+      aicode.overlay.onMessage(function (message) {
+        if (!message || !message.type) return;
+        // 先跑一遍卡死自愈：dragging/expanded/transitioning 任一超时卡住就强制复位，
+        // 保证后续 click/longPress 不再被互斥标志吃掉（“一直被选中”的自愈入口）。
+        resetStuckState();
+        if (message.type === 'click') {
+          if (transitioning) return;
+          var now = performance.now();
+          if (now - lastClickAt < clickIntervalSec * 1000) return;
+          lastClickAt = now;
+          resetLonely();
+          if (expanded) {
+            void setExpanded(false);
+            return;
+          }
+          postInteraction('pet');
+          // 睡觉时点击 → 唥醒（先于大肥鱼转发；canvas 形态走下面的 wakeFromSleep）。
+          if (currentState === 'sleep' && currentForm !== 'dafeiyu') {
+            wakeFromSleep();
+            return;
+          }
+          // 大肥鱼：宿主点击转发给 DOM 分支（自带台词 + 蹦跳）。
+          if (currentForm === 'dafeiyu') {
+            window.Dafeiyu.onHostClick();
+            scheduleAutoEmote(true);
+            return;
+          }
+          var options = CLICK_ACTIONS[resolveForm(currentForm)] || CLICK_ACTIONS.deepy;
+          playOneShot(options[Math.floor(Math.random() * options.length)], baseAction);
+          speak(pickLine(CLICK_LINES));
+          // 手动点击算第一个表情，重置自动计时器，避免手动+自动撞车。
+          scheduleAutoEmote(true);
+        } else if (message.type === 'longPress') {
+          resetLonely();
+          void setExpanded(!expanded);
+        } else if (message.type === 'hint') {
+          // 来自 main（postHint）的台词气泡（喂食/睡眠/叫醒等），受气泡开关控制。
+          speak(message.text || '');
+        } else if (message.type === 'dragStart') {
+          dragging = true;
+          dragStartedAt = Date.now();
+          postInteraction('activity');
+          resetLonely();
+          hint.classList.remove('show');
+          armDragWatchdog();   // 拖拽开始即布防：dragEnd 丢失时超时强制收尾
+          // 大肥鱼：走 DOM 拖拽分支（倾斜 + 台词），不碰 canvas 物理与动画。
+          if (currentForm === 'dafeiyu') {
+            dfyDragFrom = { x: message.x, y: message.y };
+            // 新一轮拖拽开始，清掉上一轮可能残留的落定标志。
+            dfyDragSettle = false;
+            window.Dafeiyu.onDragStart();
+            return;
+          }
+          var dragAction = DRAG_ACTIONS[resolveForm(currentForm)] || 'idle';
+          if (pack && pack.animations[dragAction]) {
+            playAction(dragAction, { loop: true, next: null });
+          }
+        } else if (message.type === 'dragEnd') {
+          dragging = false;
+          dragStartedAt = 0;
+          clearDragWatchdog();   // 正常收到松手，撤掉看门狗
+          postInteraction('activity');
+          resetLonely();
+          updatePosition(message);
+          // 大肥鱼：先按位移换朝向，再恢复呼吸常态（DOM 分支，不碰 canvas 动画）。
+          if (currentForm === 'dafeiyu') {
+            var dfxDx = (dfyDragFrom && typeof message.x === 'number') ? message.x - dfyDragFrom.x : null;
+            var dfxDy = (dfyDragFrom && typeof message.y === 'number') ? message.y - dfyDragFrom.y : null;
+            dfyDragFrom = null;
+            window.Dafeiyu.onDragEnd(dfxDx, dfxDy);
+            // 松手后补上拖拽中推迟的窗口自适应（气泡显隐/尺寸变化）。先置落定标志再补算：
+            // 落定期内 dfyResizeAnchoredBottom 只调高度、绝不动 x/y —— 此时 selfInfo.y 可能
+            // 仍是拖动前旧值（宿主拖动期间未必下发 resize 消息同步 y），一旦用 y 反向补偿
+            // 就会把窗口拉回拖动前位置（弹回）。只保护紧随松手的这一次 fit，补完立即清除，
+            // 后续 fit 恢复正常底部锚定；新拖拽 / 宿主 resize 消息也会清掉它。
+            dfyDragSettle = true;
+            flushPendingFit();
+            dfyDragSettle = false;
+            return;
+          }
+          // 恢复当前状态的常态动作并停止拖拽循环（松手后不弹跳）。
+          playStateAction(currentState);
+        } else if (message.type === 'form') {
+          var nextForm = resolveForm(message.form);
+          if (message.seconds !== undefined) {
+            var seconds = Number(message.seconds);
+            if (isFinite(seconds)) clickIntervalSec = Math.min(10, Math.max(1, seconds));
+          }
+          if (message.clickInterval !== undefined) {
+            var intervalFromForm = Number(message.clickInterval);
+            if (isFinite(intervalFromForm)) clickIntervalSec = Math.min(10, Math.max(1, intervalFromForm));
+          }
+          // 先记下目标形态并标记显式切换中，再发起加载：即使配置页 saveSettings 尚未
+          // 落盘，紧随的 update/resize 也会读到「设置已是目标形态」而让路，不会用旧
+          // settings.form 发起竞争 loadForm 把切换打回。
+          lastKnownSettingsForm = nextForm;
+          // 记下宿主要求的目标形态：这是不依赖 fs.read 的收敛基准。
+          lastHostForm = nextForm;
+          if (nextForm !== currentForm) {
+            resetLonely();
+            explicitFormLoading = true;
+            void loadForm(nextForm, currentState).then(function (applied) {
+              explicitFormLoading = false;
+              // 显式切换失败（图集没加载出来 / 兕底也没成）时清掉 currentForm，
+              // 让下一次 form 消息 / update 必定重试，避免画面卡在旧形态（toast 弹了但没变）。
+              if (applied !== true && currentForm === nextForm) return;
+              if (applied !== true) currentForm = null;
+            }, function (e) {
+              explicitFormLoading = false;
+              currentForm = null;   // 抛错同上：允许后续重试
+            });
+          } else {
+            explicitFormLoading = false;
+            // 已是该形态但可能上次 loadForm 静默失败过（currentForm 与画面不一致），
+            // 再补一次加载保证画面与形态真正对齐；loadForm 内部有 token 闸，不会打架。
+            void loadForm(nextForm, currentState);
+          }
+        } else if (message.type === 'clickInterval') {
+          var interval = Number(message.seconds);
+          if (isFinite(interval)) clickIntervalSec = Math.min(10, Math.max(1, interval));
+        } else if (message.type === 'autoEmote') {
+          // 来自配置页（经 main.js overlay.setAutoEmote 转发）：开关 + 间隔即时生效。
+          applyAutoEmote(message.enabled, message.interval);
+          window.Dafeiyu.setAutoEmote(message.enabled); // 大肥鱼同步开关
+          showHint(autoEmoteEnabled ? '自动表情：开' : '自动表情：关');
+        } else if (message.type === 'bubble') {
+          // 来自配置页（经 main.js overlay.setBubble 转发）：聊天气泡开关即时生效，两套形态共用。
+          showBubble = message.enabled !== false;
+          window.Dafeiyu.setBubble(showBubble);
+        } else if (message.type === 'agentState') {
+          // 来自 runtime 的 agent 状态推送（现仅 waking；空闲不再由 runtime 发）。
+          var agentState = String(message.agentState || 'idle');
+          // 大肥鱼：仅弹一句台词（借用 thinking 台词/动作），不走 canvas 动画。
+          if (currentForm === 'dafeiyu') {
+            if (agentState !== 'idle') {
+              window.Dafeiyu.applyState('thinking');
+              if (message.line) speak(String(message.line), 2600);
+            }
+            return;
+          }
+          if (agentState === 'idle') {
+            // 空闲：只恢复当前 state 的常态动作，不重置孤独/idle 变体计时（宠物页自管 idle）。
+            if (pack && !dragging) playStateAction(currentState);
+            return;
+          }
+          if (dragging) return; // 拖拽中不插入 agent 动画，避免覆盖拖拽动作。
+          resetLonely();
+          if (message.line) speak(String(message.line), 2600);
+          var mapping = AGENT_STATE_ACTIONS[agentState];
+          if (mapping && pack) {
+            var agentAction = mapping[resolveForm(currentForm)] || mapping.deepy;
+            if (pack.animations[agentAction]) {
+              if (mapping.loop) {
+                playAction(agentAction, { loop: true, next: null });
+              } else {
+                playOneShot(agentAction, baseAction);
+              }
+            }
+          }
+        } else if (message.type === 'update') {
+          void applyFormFromHost();
+          readFormSetting().then(function () { scheduleAutoEmote(true); });
+        } else if (message.type === 'resize') {
+          void applyFormFromHost();
+          // 大肥鱼窗口高度由 dfyFit 算出（鱼高+气泡+余量），与 canvas 的「+146 展开菜单」
+          // 公式无关；用 canvas 公式对比会让 !expected 恒成立，反复 applyWindowSize
+          // 并重设 selfInfo.x/y，与 dfyResizeAnchoredBottom 的 y 反向补偿打架，表现就是拖不动。
+          var dfyTrustHost = currentForm === 'dafeiyu';
+          var expected = dfyTrustHost ||
+            (message.width === selfInfo.width &&
+            message.height === selfInfo.height + (expanded ? 146 : 0));
+          transitioning = false;
+          if (!expected) {
+            expanded = false;
+            applyWindowSize(message.width, message.height);
+          }
+          selfInfo.x = message.x;
+          selfInfo.y = message.y;
+          if (dfyTrustHost) {
+            // 直接信任宿主下发的尺寸/位置，同步 selfInfo 供 dfyResizeAnchoredBottom
+            // 下次计算 dh 用（避免老 height 让 dh 算错、拖动后跳位）。
+            selfInfo.width = message.width;
+            selfInfo.height = message.height;
+          }
+          // 宿主 resize 消息带来了最新几何（x/y/width/height），selfInfo.y 已同步为最新，
+          // 后续 fit 的 y 反向补偿有可靠参考，可以退出拖动后的「只调高度」落定期。
+          dfyDragSettle = false;
+          if (expanded) {
+            panelOrigin = { x: message.x, y: message.y };
+          } else {
+            panelOrigin = null;
+            petAnchor = { x: message.x, y: message.y };
+          }
+          renderMenu();
+          updateDragRegion().catch(function (e) {
+          });
+          // 菜单收起后窗口回到默认高度，若有气泡需按内容重新撑高，防止鱼/气泡被裁。
+          // dfyFit 内部在拖拽中会自己推迟（pendingFit），这里不用再判 dragging。
+          if (currentForm === 'dafeiyu') {
+            // 传 trustCurrentHeight=true：宿主下发的 height 已足够容纳鱼（≥ 头部不裁切下限）时，
+            // dfyFit 短路不再改窗口，避免与宿主刚下发的位置打架（弹回）。只有明显不足时才补高。
+            dfyFit(true);
+            // 宿主可能仅调整了宽度档（小/中/大），把新宽度档下发给大肥鱼。
+            // applySizeByWidth 内部已加同档位短路，同档时不会重复触发 dfyFit。
+            if (typeof message.width === 'number' && message.width > 0) {
+              window.Dafeiyu.applySizeByWidth(message.width);
+            }
+          }
+          applyCanvasSize(); // canvas 形态按 overlay 最新宽高重设显示尺寸（dafeiyu 跳过）
+          if (finishTransition) finishTransition(expected);
+          finishTransition = null;
+          resetLonely();
+        } else if (message.type === 'state') {
+          // runtime 回发的 state 消息会带 form（见 main.js petReady：{type:'state',state,form}）。
+          // 这是启动阶段唯一不依赖 fs.read 的形态来源，优先于 readFormSetting 使用。
+          if (message.form) {
+            var stateForm = resolveForm(message.form);
+            lastHostForm = stateForm;
+            lastKnownSettingsForm = stateForm;
+            if (stateForm !== currentForm) {
+              void loadForm(stateForm, message.state || 'idle');
+            }
+          }
+          handleStateChange(message.state);
+          resetLonely();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ package com.aiverse.feature.agent.domain.container
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.domain.tool.explorer.shellQuote
 import com.aiverse.feature.workspace.domain.remote.RemoteAuth
+import com.aiverse.feature.workspace.domain.RemoteAgentConfigTransport
 import com.aiverse.feature.credentials.domain.model.GitCredential
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,14 +17,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.connection.channel.direct.LocalPortForwarder
+import net.schmizz.sshj.connection.channel.direct.Parameters
+import net.schmizz.sshj.sftp.RemoteFile
 import net.schmizz.sshj.sftp.SFTPClient
+import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RenameFlags
 import java.util.EnumSet
 import java.util.UUID
+import java.io.ByteArrayOutputStream
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.userauth.UserAuthException
 import com.hierynomus.sshj.common.KeyDecryptionFailedException
@@ -347,34 +356,77 @@ class RemoteSshConnection @Inject constructor(
         }
     }
 
+    internal suspend fun agentConfigSnapshotSync(
+        docs: Map<String, String>,
+        config: RemoteConnectionConfig?,
+        transport: RemoteAgentConfigTransport?
+    ) {
+        if (config == null) {
+            check(docs.isEmpty())
+            return
+        }
+        if (!isConnected() || config != this.config) throw IllegalStateException("SSH 未连接")
+        checkActive()
+        val snapshot = BuiltinDocsSync.snapshot(docs)
+        uploadDocs(snapshot)
+    }
+
+    /** 中止信号：连接已断时让同步/刷新尽快停手，避免在失效连接上继续传输。 */
+    internal fun checkActive() {
+        check(isConnected() && config != null) { "SSH 未连接" }
+    }
+
     /**
-     * 把内置文档同步到远程 ~/.aiverse/docs/，让远程模式下 AI 也能像本地模式一样
-     * 查阅 ~/.aiverse/docs/ 下的设置说明文档。每次连接/重连后全量覆盖，使 App 升级后
-     * 远程文档随之更新。正文通过 SFTP 写入并替换。
-     *
-     * @param docs 相对 docs/ 的路径（可含子目录，如 guide/terminal.md）→ 文件内容。
+     * 开一条端口映射：通过**专属** SSH transport 建立到远端 `[targetHost]:[targetPort]` 的 direct-tcpip 通道，
+     * 并在本机 `127.0.0.1` 上绑定一个临时端口监听（accept 循环跑在守护线程）。返回带真实绑定端口的句柄，
+     * 调用方持有并在 [PortForwardHandle.close] 时关闭监听 + 专属 transport。映射与共享连接通道隔离。
      */
-    suspend fun uploadDocs(docs: Map<String, String>) {
-        if (docs.isEmpty()) return
+    internal suspend fun openPortForward(targetHost: String, targetPort: Int): PortForwardHandle {
+        val cfg = config ?: throw IllegalStateException("SSH 未配置")
+        val client = withContext(Dispatchers.IO) { newSshClient(cfg) }
+        try {
+            // 本机先绑一个 127.0.0.1:0 的临时监听，拿到 OS 分配的真实端口后再交给 sshj 建立转发。
+            val serverSocket = ServerSocket()
+            serverSocket.reuseAddress = true
+            serverSocket.bind(InetSocketAddress("127.0.0.1", 0))
+            val localPort = serverSocket.localPort
+            val parameters = Parameters("127.0.0.1", localPort, targetHost, targetPort)
+            val forwarder = withContext(Dispatchers.IO) { client.newLocalPortForwarder(parameters, serverSocket) }
+            Thread({ runCatching { forwarder.listen() } }, "aiverse-port-fwd-$localPort")
+                .apply { isDaemon = true; start() }
+            return PortForwardHandle(client, forwarder, serverSocket, localPort)
+        } catch (e: Exception) {
+            runCatching { client.disconnect() }
+            throw e
+        }
+    }
+
+    /**
+     * 把内置文档同步到远程 `~/.aiverse/docs/`，让远程模式下 AI 也能像本地模式一样
+     * 查阅 `~/.aiverse/docs/` 下的设置说明文档。每次连接/重连后**增量**同步（首次全量，之后只传输差异），
+     * 使 App 升级后远程文档随之更新。正文通过 SFTP 写入并原子替换。
+     */
+    private suspend fun uploadDocs(
+        snapshot: BuiltinDocsSync.Snapshot
+    ) {
+        if (snapshot.documents.isEmpty()) return
         val client = sshClient ?: return
         val home = remoteHome ?: return
-        val destDir = home.trimEnd('/') + "/.aiverse/docs"
+        val docs = home.trimEnd('/') + "/.aiverse/docs"
         withContext(Dispatchers.IO) {
             runCatching {
                 // 先建全部子目录并清掉旧 .md：版本间调整文档分类会改变路径，只覆盖不清理会让旧文件残留
-                val subDirs = docs.keys.mapNotNull { key ->
+                val subDirs = snapshot.documents.keys.mapNotNull { key ->
                     key.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }
                 }.distinct()
-                val mkdirArgs = (listOf(destDir) + subDirs.map { "$destDir/$it" }).joinToString(" ") { "'$it'" }
+                val mkdirArgs = (listOf(docs) + subDirs.map { "$docs/$it" }).joinToString(" ") { "'$it'" }
                 val prepSession = client.startSession()
-                prepSession.exec("mkdir -p $mkdirArgs; find '$destDir' -type f -name '*.md' -delete").join()
+                prepSession.exec("mkdir -p $mkdirArgs; find '$docs' -type f -name '*.md' -delete").join()
                 prepSession.close()
-                for ((name, content) in docs) {
-                    val dest = "$destDir/$name"
-                    writeRemoteFile(dest, content.toByteArray(Charsets.UTF_8))
-                }
-                FileLogger.i(TAG, "已同步 ${docs.size} 个文档到远程 $destDir")
+                val sync = BuiltinDocsSync(DocsSftpBackend(this@RemoteSshConnection, docs))
+                sync.sync(snapshot)
             }.onFailure { FileLogger.w(TAG, "同步文档到远程失败", it) }
+                .onSuccess { result -> if (result.changed) FileLogger.i(TAG, "已同步 ${snapshot.documents.size} 个文档到远程 $docs") }
         }
     }
 
@@ -408,20 +460,24 @@ class RemoteSshConnection @Inject constructor(
 
     /**
      * 把 App 的 git 凭据注入远程服务器（仅当用户开启「自动注入」时调用）：
-     * 写 `~/.aiverse/git-credentials`（store 格式）+ `~/.aiverse/gitconfig` + `~/.aiverse/gitconfig.credential`。
+     * 写 `~/.aiverse/git-credentials`（store 格式）+ `~/.aiverse/gitconfig`（顶层 credential helper）
+     * + `~/.aiverse/gitconfig.credential`（includeIf 分包）。成功返回 true，失败记录日志并返回 false。
      *
-     * 生效机制：[RemoteSshEngine] 执行命令时注入 `GIT_CONFIG_GLOBAL=$HOME/.aiverse/gitconfig`，其中
-     * `[include] path=~/.gitconfig` 保留服务器用户自己的全局配置（署名等），`[includeIf "gitdir:<工作区根>/"]`
-     * 限定只有工作区根目录下的仓库才加载 store helper——不影响用户在服务器上手动 git，也不影响其它目录的仓库。
+     * 生效机制：git 的 `[credential.helper]` 只能在 **顶层** 全局配置生效，`includeIf` 内的 helper 会被忽略。
+     * 故先写 `~/.aiverse/gitconfig`：`[include] path=~/.gitconfig` 保留用户自己的全局配置（署名等），
+     * `[credential] helper = !…` 顶层 helper 仅指向一个极薄脚本，它再转发到 credential 分包：
+     * - `~/.aiverse/git-credentials`（store 格式，chmod 600）。
+     * - `[includeIf "gitdir:<工作区根>/"] path=gitconfig.credential`，仅工作区根目录下的仓库才加载 helper。
+     * 这样不影响用户在服务器上手动 git，也不影响其它目录的仓库。
      *
      * @param credentials 要注入的凭据列表（每 host 一条）。
      * @param workspaceRoot 远程工作区根路径（AI 的 ~/workspace 映射目录），限定注入范围。
      */
-    suspend fun uploadGitCredentialConfig(credentials: List<GitCredential>, workspaceRoot: String) = credentialSyncMutex.withLock {
-        val client = sshClient ?: return@withLock
-        val home = remoteHome ?: return@withLock
+    suspend fun uploadGitCredentialConfig(credentials: List<GitCredential>, workspaceRoot: String): Boolean = credentialSyncMutex.withLock {
+        val client = sshClient ?: return@withLock false
+        val home = remoteHome ?: return@withLock false
         val aiverseDir = home.trimEnd('/') + "/.aiverse"
-        val wsRoot = workspaceRoot.trimEnd('/').ifEmpty { return@withLock }
+        val wsRoot = workspaceRoot.trimEnd('/').ifEmpty { return@withLock false }
         withContext(Dispatchers.IO) {
             runCatching {
                 sftpOperationMutex.withLock { sftp().mkdirs(aiverseDir) }
@@ -430,8 +486,7 @@ class RemoteSshConnection @Inject constructor(
                     "https://${enc(c.username)}:${enc(c.token)}@${c.host}"
                 }.let { if (it.isNotEmpty()) "$it\n" else "" }
 
-
-                // 上传 credential helper 脚本（本地由 ContainerInstaller 提取），配置为唯一 helper；
+                // 上传 credential helper 脚本（本地由 ContainerInstaller 提取），配置为唯一顶层 helper；
                 // 服务器上没有 App，用 AIVERSE_CRED_NO_PROMPT 让未命中时直接空退出而非等待弹窗。
                 containerInstaller.extractCredentialHelper()
                 val helperScript = java.io.File(containerInstaller.aiverseDir, "git-credential-aiverse").readText()
@@ -441,34 +496,45 @@ class RemoteSshConnection @Inject constructor(
                     "#!/bin/sh\nexport AIVERSE_CRED_NO_PROMPT=1\n"
                 )
                 writeRemoteFile("$aiverseDir/git-credential-aiverse", remoteHelperScript.toByteArray(Charsets.UTF_8), executable = true)
-                writeRemoteFile("$aiverseDir/git-credentials", encodeCreds(creds).toByteArray(Charsets.UTF_8))
-
+                    ?: return@runCatching false
+                // store 文件 chmod 600（SFTP 不支持 setfacl）；chmod 失败则回滚，不留下明文风险。
+                val credWritten = writeRemoteFile("$aiverseDir/git-credentials", encodeCreds(creds).toByteArray(Charsets.UTF_8))
+                if (credWritten == null || !credWritten) {
+                    runCatching { sftpOperationMutex.withLock { sftp().rm("$aiverseDir/git-credentials") } }
+                    return@runCatching false
+                }
+                runCatching { sftpOperationMutex.withLock { sftp().chmod("$aiverseDir/git-credentials", 384) } }
+                    .onFailure { FileLogger.w(TAG, "设置 git-credentials 权限失败", it) }
 
                 val gitconfig = buildString {
                     append("[include]\n")
                     append("    path = ~/.gitconfig\n")
+                    append("[credential]\n")
+                    append("    helper = !AIVERSE_CRED_NO_PROMPT=1 $aiverseDir/git-credential-aiverse\n")
                     append("[includeIf \"gitdir:${gitConfigValue(wsRoot)}/\"]\n")
-                    append("    path = ~/.aiverse/gitconfig.credential\n")
+                    append("    path = $aiverseDir/gitconfig.credential\n")
                 }
                 writeRemoteFile("$aiverseDir/gitconfig", gitconfig.toByteArray(Charsets.UTF_8))
+                    ?: return@runCatching false
 
                 val credentialConfig = buildString {
                     append("[credential]\n")
                     append("    helper = !AIVERSE_CRED_NO_PROMPT=1 $aiverseDir/git-credential-aiverse\n")
                 }
                 writeRemoteFile("$aiverseDir/gitconfig.credential", credentialConfig.toByteArray(Charsets.UTF_8))
+                    ?: return@runCatching false
                 FileLogger.i(TAG, "已注入 git 凭据到远程 $aiverseDir（限定 $wsRoot/）")
-            }.onFailure { FileLogger.w(TAG, "注入 git 凭据到远程失败", it) }
+                true
+            }.onFailure { FileLogger.w(TAG, "注入 git 凭据到远程失败", it) }.getOrDefault(false)
         }
     }
 
     /**
-     * 撤销远程注入：删除 App 管理的三个配置/凭据文件。
-     * `GIT_CONFIG_GLOBAL` 指向不存在的文件时 git 静默跳过，注入即失效，服务器用户配置不受影响。
+     * 撤销远程注入：删除 App 管理的配置/凭据文件。成功返回 true，失败记录日志并返回 false。
      */
-    suspend fun removeGitCredentialConfig() = credentialSyncMutex.withLock {
-        val client = sshClient ?: return@withLock
-        val home = remoteHome ?: return@withLock
+    suspend fun removeGitCredentialConfig(): Boolean = credentialSyncMutex.withLock {
+        val client = sshClient ?: return@withLock false
+        val home = remoteHome ?: return@withLock false
         val aiverseDir = home.trimEnd('/') + "/.aiverse"
         withContext(Dispatchers.IO) {
             runCatching {
@@ -480,16 +546,20 @@ class RemoteSshConnection @Inject constructor(
                     }
                 }
                 FileLogger.i(TAG, "已撤销远程 git 凭据注入")
-            }.onFailure { FileLogger.w(TAG, "撤销远程 git 凭据注入失败", it) }
+                true
+            }.onFailure { FileLogger.w(TAG, "撤销远程 git 凭据注入失败", it) }.getOrDefault(false)
         }
     }
 
+    /**
+     * 写远程文件。成功返回 true；失败记录日志并返回 false（不抛异常，让调用方决定回滚）。
+     */
     private suspend fun writeRemoteFile(
         dest: String,
         bytes: ByteArray,
         executable: Boolean = false,
         overwrite: Boolean = true
-    ) = sftpOperationMutex.withLock {
+    ): Boolean = sftpOperationMutex.withLock {
         val client = sftp()
         val temporary = "$dest.tmp.${UUID.randomUUID()}"
         try {
@@ -508,10 +578,109 @@ class RemoteSshConnection @Inject constructor(
             } else if (client.statExistence(dest) == null) {
                 client.rename(temporary, dest)
             }
+            true
+        } catch (e: Exception) {
+            FileLogger.w(TAG, "写远程文件失败: $dest", e)
+            false
         } finally {
             runCatching { client.rm(temporary) }
         }
     }
+
+    /**
+     * 读远程文本文件，无文件或读失败返回 null。供 [writeGitExclude]/[removeGitExclude] 按内容精准增删。
+     */
+    private suspend fun readRemoteFile(path: String): String? = sftpOperationMutex.withLock {
+        val client = sftp()
+        runCatching {
+            if (client.statExistence(path) == null) return@withLock null
+            client.open(path, EnumSet.of(OpenMode.READ)).use { input ->
+                val buffer = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(32 * 1024)
+                var offset = 0L
+                while (true) {
+                    val n = input.read(offset, chunk, 0, chunk.size)
+                    if (n < 0) break
+                    if (n == 0) continue
+                    buffer.write(chunk, 0, n)
+                    offset += n
+                }
+                buffer.toString("UTF-8")
+            }
+        }.onFailure { FileLogger.w(TAG, "读远程文件失败: $path", it) }.getOrNull()
+    }
+
+    /**
+     * 写 `<workspaceRoot>/.git/info/exclude`：让「仅本工作区」的仓库忽略 App 管理的本地配置文件
+     * （如 git 凭据 `[credential]` 分包），并附 hash 备注供下次按内容精准剔除。幂等：已含该行时不重复追加。
+     */
+    internal suspend fun writeGitExclude(workspaceRoot: String) {
+        val root = workspaceRoot.trimEnd('/').ifEmpty { return }
+        val target = "$root/.git/info/exclude"
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val hash = BuiltinDocsSync.sha256(GIT_EXCLUDE_LINE.toByteArray(Charsets.UTF_8))
+                val existing = readRemoteFile(target)
+                if (existing != null && existing.contains(GIT_EXCLUDE_LINE)) {
+                    // 已存在时确保 hash 备注与实际内容一致，便于下次按内容精准剔除
+                    writeRemoteFile(target, buildExclude(existing, hash).toByteArray(Charsets.UTF_8))
+                    return@runCatching
+                }
+                val content = if (existing != null) {
+                    ensureTrailingNewline(existing) + GIT_EXCLUDE_LINE + "\n"
+                } else {
+                    GIT_EXCLUDE_LINE + "\n"
+                }
+                writeRemoteFile(target, buildExclude(content, hash).toByteArray(Charsets.UTF_8))
+                FileLogger.i(TAG, "已写 $target（限定 $root/.git/info/exclude）")
+            }.onFailure { FileLogger.w(TAG, "写 git exclude 失败: $root", it) }
+        }
+    }
+
+    /**
+     * 清理 `<workspaceRoot>/.git/info/exclude` 中由 App 写入的段落（按 hash 备注或已知前缀匹配），
+     * 保留用户自己的 exclude 规则。仅动与 [GIT_EXCLUDE_LINE] 相关的行。
+     */
+    internal suspend fun removeGitExclude(workspaceRoot: String) {
+        val root = workspaceRoot.trimEnd('/').ifEmpty { return }
+        val target = "$root/.git/info/exclude"
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val content = readRemoteFile(target) ?: return@runCatching
+                val hash = readExcludeHash(target)
+                if (hash != null) {
+                    val cleaned = stripExcludeSection(content, hash)
+                    if (cleaned != content) writeRemoteFile(target, cleaned.toByteArray(Charsets.UTF_8))
+                    return@runCatching
+                }
+                // 无 hash 备注的历史遗留：按已知前缀整行剔除
+                if (content.contains(GIT_EXCLUDE_LINE)) {
+                    writeRemoteFile(target, content.replace(GIT_EXCLUDE_LINE + "\n", "").toByteArray(Charsets.UTF_8))
+                }
+            }.onFailure { FileLogger.w(TAG, "清理 git exclude 失败: $root", it) }
+        }
+    }
+
+    /** 读 exclude 里 App 段落的 hash 备注，无则 null。 */
+    private suspend fun readExcludeHash(workspaceRoot: String): String? {
+        val root = workspaceRoot.trimEnd('/').ifEmpty { return null }
+        val content = readRemoteFile("$root/.git/info/exclude") ?: return null
+        val marker = "# aiverse:credential-exclude:"
+        val line = content.lineSequence().firstOrNull { it.startsWith(marker) } ?: return null
+        return line.substringAfter(marker).trim().takeIf { it.matches(Regex("[0-9a-f]{64}")) }
+    }
+
+    private fun buildExclude(content: String, hash: String): String {
+        val base = content.replace(Regex("# aiverse:credential-exclude:[0-9a-f]{64}[\\t ]*\\n?"), "")
+        return ensureTrailingNewline(base) + "# aiverse:credential-exclude:$hash\n"
+    }
+
+    private fun stripExcludeSection(content: String, hash: String): String =
+        content.replace(GIT_EXCLUDE_LINE + "\n", "")
+            .replace(Regex("# aiverse:credential-exclude:${Regex.escape(hash)}[\\t ]*\\n?"), "")
+
+    private fun ensureTrailingNewline(text: String): String =
+        if (text.endsWith("\n")) text else "$text\n"
 
     /** gitconfig 值转义：转义反斜杠与双引号并去换行，避免工作区路径注入结构性配置项。 */
     private fun gitConfigValue(value: String): String =
@@ -522,6 +691,116 @@ class RemoteSshConnection @Inject constructor(
     /** 与 app 侧一致的编码：base64 后整体反转（属混淆，非加密）。 */
     private fun encodeCreds(plain: String): String =
         android.util.Base64.encodeToString(plain.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP).reversed()
+
+    internal companion object {
+        /** 写进 `<root>/.git/info/exclude` 的那行：把 App 管理的本地 credential 配置文件加入 git 忽略。 */
+        internal const val GIT_EXCLUDE_LINE = "/.git/config.aiverse-credential"
+    }
+}
+
+/** 一条端口映射：底层 SSH transport + 本地监听。[close] 关闭监听并断开专属 transport。 */
+internal class PortForwardHandle internal constructor(
+    private val client: SSHClient,
+    private val forwarder: LocalPortForwarder,
+    /** 本机监听用的 server socket，与 forwarder 一并关闭。 */
+    private val serverSocket: ServerSocket,
+    /** 本机实际绑定的监听端口（127.0.0.1 上，由 OS 分配）。 */
+    val localPort: Int
+) {
+    fun close() {
+        runCatching { forwarder.close() }
+        runCatching { serverSocket.close() }
+        runCatching { client.disconnect() }
+    }
+}
+
+/**
+ * 内置文档同步的远端后端：把 [BuiltinDocsSync] 的动作落到 SFTP，并保证路径安全与原子替换。
+ * 所有路径先经合法性校验（白名单前缀 + 无 `..`/绝对路径），再经临时文件替换、旧版备份。
+ */
+private class DocsSftpBackend(
+    private val connection: RemoteSshConnection,
+    private val root: String
+) : BuiltinDocsSync.Backend {
+
+    private val sftp get() = runBlocking { connection.sftp() }
+
+    /** 把快照内的相对路径（如 `guide/overview.md`）映射为远程文档目录下的绝对路径。 */
+    private fun resolve(path: String): String {
+        val base = root.trimEnd('/')
+        val rel = path.trimStart('/')
+        return if (rel.isEmpty()) base else "$base/$rel"
+    }
+
+    override fun type(path: String): BuiltinDocsSync.EntryType? {
+        val attrs = sftp.statExistence(resolve(path)) ?: return null
+        return when (attrs.type) {
+            FileMode.Type.REGULAR -> BuiltinDocsSync.EntryType.FILE
+            FileMode.Type.DIRECTORY -> BuiltinDocsSync.EntryType.DIRECTORY
+            FileMode.Type.SYMLINK -> BuiltinDocsSync.EntryType.SYMLINK
+            else -> BuiltinDocsSync.EntryType.OTHER
+        }
+    }
+
+    override fun readFile(path: String): ByteArray = readAll(resolve(path))
+
+    override fun fileHash(path: String): String = BuiltinDocsSync.sha256(readFile(path))
+
+    override fun createDirectory(path: String) {
+        sftp.mkdirs(resolve(path))
+    }
+
+    override fun replaceAtomically(path: String, bytes: ByteArray) {
+        val remote = resolve(path)
+        val tmp = remote + ".tmp." + UUID.randomUUID()
+        try {
+            sftp.open(tmp, EnumSet.of(OpenMode.WRITE, OpenMode.CREAT, OpenMode.EXCL)).use { f ->
+                var offset = 0
+                while (offset < bytes.size) {
+                    val n = minOf(32 * 1024, bytes.size - offset)
+                    f.write(offset.toLong(), bytes, offset, n)
+                    offset += n
+                }
+            }
+            sftp.rename(tmp, remote, EnumSet.of(RenameFlags.ATOMIC, RenameFlags.OVERWRITE))
+        } finally {
+            runCatching { sftp.rm(tmp) }
+        }
+    }
+
+    override fun backupFile(path: String, backupPath: String, expectedHash: String) {
+        val from = resolve(path)
+        val to = resolve(backupPath)
+        if (sftp.statExistence(from) == null) return
+        check(hashOf(from) == expectedHash) { "Built-in docs backup hash mismatch" }
+        sftp.rename(from, to, EnumSet.of(RenameFlags.ATOMIC, RenameFlags.OVERWRITE))
+    }
+
+    override fun cleanupTemporary(path: String) {
+        val remote = resolve(path)
+        runCatching { sftp.rm(remote + ".tmp.*") }
+    }
+
+    override fun deleteFile(path: String) {
+        sftp.rm(resolve(path))
+    }
+
+    private fun hashOf(path: String): String = BuiltinDocsSync.sha256(readAll(path))
+
+    /** 读取远程文件全部字节：SFTPClient 无直接 read-to-ByteArray，经 [RemoteFile] 随机读拼接。 */
+    private fun readAll(remote: String): ByteArray =
+        sftp.open(remote).use { rf ->
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(32 * 1024)
+            var offset = 0L
+            while (true) {
+                val n = rf.read(offset, buf, 0, buf.size)
+                if (n <= 0) break
+                out.write(buf, 0, n)
+                offset += n
+            }
+            out.toByteArray()
+        }
 }
 
 /** 远程 SSH 连接状态，供 UI 指示器与工作区初始化时序判断。 */

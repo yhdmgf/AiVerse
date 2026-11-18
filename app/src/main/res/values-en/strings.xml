@@ -6,6 +6,7 @@
     <string name="plugin_default_provider_missing">The default plugin provider has been deleted, or the plugin that provided it has been disabled or uninstalled. Please choose a different model.</string>
     <string name="plugin_tool_hook_denied">A plugin blocked this tool call.</string>
     <string name="plugin_review_denied">A plugin permission review rejected this tool call.</string>
+    <string name="plugin_delegation_failed">Delegated tool execution via plugin %1$s failed: %2$s</string>
     <string name="common_tool_missing_argument">Missing parameter: %1$s.</string>
     <string name="plan_mode_invalid_action">Invalid action: %1$s. Supported values: enter or exit.</string>
     <string name="plan_mode_already_active">Already in PLAN mode.</string>
@@ -262,6 +263,8 @@
     <string name="settings_percent_value">%1$d%%</string>
     <string name="settings_compaction_threshold_input_hint">Integer percentage between 1 and 100</string>
     <string name="settings_general_tools">Tools</string>
+    <string name="settings_mcp_lazy_tools">MCP lazy tool loading (experimental)</string>
+    <string name="settings_mcp_lazy_tools_desc">With many tools, expose only search/call entries to reduce context; built-in tools are unaffected. Off by default.</string>
     <string name="settings_sendfile_max_size">sendFile max file size</string>
     <string name="settings_sendfile_max_size_desc">Per-file size cap; exceeding it fails the whole batch</string>
     <string name="settings_mb_value">%1$d MB</string>
@@ -362,6 +365,23 @@
     <string name="settings_about">About</string>
     <string name="settings_memory">Memory</string>
     <string name="settings_plugins">Plugins</string>
+    <string name="plugin_sessions_title">Plugin sessions</string>
+    <string name="plugin_sessions_refresh">Refresh</string>
+    <string name="plugin_sessions_empty">No plugin sessions available</string>
+    <string name="plugin_sessions_no_messages">No messages</string>
+    <string name="plugin_sessions_load_more">Load earlier messages</string>
+    <string name="plugin_session_load_failed">Failed to load plugin session: %1$s</string>
+    <string name="plugin_session_send_failed">Failed to send plugin session message: %1$s</string>
+    <string name="plugin_session_refresh_failed">Failed to refresh plugin session: %1$s</string>
+    <string name="plugin_sessions_count">%1$d remote sessions</string>
+    <string name="plugin_sessions_status_running">Running</string>
+    <string name="plugin_sessions_status_failed">Failed</string>
+    <string name="plugin_sessions_status_needs_input">Needs input</string>
+    <string name="plugin_sessions_status_idle">Idle</string>
+    <string name="plugin_sessions_retry">Retry</string>
+    <string name="plugin_sessions_readonly_hint">Read-only session · messages provided by plugin</string>
+    <string name="plugin_sessions_untitled">Untitled session</string>
+    <string name="plugin_sessions_thinking_default">Thinking…</string>
     <string name="settings_tts">Read Aloud</string>
     <string name="tts_rate">Speech Rate</string>
     <string name="tts_pitch">Pitch</string>
@@ -438,6 +458,8 @@
     <string name="plugins_dev_mode">Developer sideload</string>
     <string name="plugins_dev_mode_desc">When enabled, the Dev tab lists plugin projects in the dev directory and reloads them when files change. For development only.</string>
     <string name="plugins_dev_root">Dev directory: %1$s</string>
+    <string name="plugins_docs_about">About plugins</string>
+    <string name="plugins_docs_dev">Develop plugins</string>
     <string name="plugins_mcp_transport_http">HTTP</string>
     <string name="plugins_mcp_transport_stdio">stdio</string>
     <string name="plugin_tool_not_authorized">The plugin is disabled, so this tool is unavailable</string>
@@ -516,10 +538,13 @@
     <string name="plugins_error_content_invalid">Invalid content: %1$s</string>
     <string name="plugins_error_storage_failed">Couldn\'t save. Please try again.</string>
     <string name="plugins_error_preview_expired">This import has expired. Please pick the file again.</string>
+    <string name="plugins_error_repository_mismatch">The source repository does not match the store listing: package %1$s, store %2$s. Installation was cancelled.</string>
 
     <!-- Plugin store (ported from AiCode) -->
     <string name="plugins_store_empty_title">No plugins available</string>
     <string name="plugins_store_empty_hint">This index has no published plugins yet. Add third-party plugin sources from Plugin settings in the top-right menu.</string>
+    <string name="plugins_store_badge_official">Official</string>
+    <string name="plugins_badge_official">Official source</string>
     <string name="plugins_store_badge_unofficial">Unofficial</string>
     <string name="plugins_store_retry">Retry</string>
     <string name="plugins_store_refresh_done">Index refreshed</string>
@@ -541,6 +566,21 @@
     <string name="plugins_store_detail_source">Source repository</string>
     <string name="plugins_store_detail_license">License</string>
     <string name="plugins_store_detail_homepage">Homepage</string>
+    <string name="plugins_store_detail_share">Share plugin package</string>
+
+    <!-- Export an installed plugin as a shareable zip -->
+    <string name="plugins_export_hint">Export plugin package</string>
+    <string name="plugins_export_action">Export</string>
+
+    <!-- Import a plugin directly via the aiverse://?url= protocol (testing) -->
+    <string name="plugin_import_title">Import plugin</string>
+    <string name="plugin_import_downloading">Downloading plugin…</string>
+    <string name="plugin_import_confirm">Install</string>
+    <string name="plugin_import_cancel">Cancel</string>
+    <string name="plugin_import_success">Plugin imported</string>
+    <string name="plugin_import_failed">Failed to import plugin</string>
+    <string name="plugin_import_download_failed">Failed to download plugin. Check the link and try again.</string>
+    <string name="plugin_import_link_invalid">Invalid import link</string>
 
     <!-- Plugin developer sideload (ported from AiCode) -->
     <string name="plugins_dev_empty_title">No plugins in the dev directory</string>
@@ -989,6 +1029,8 @@
     <string name="chat_reasoning_cannot_disable">This model always thinks; the lowest level is used instead</string>
     <string name="chat_reasoning_endpoint_weak">This endpoint may ignore &quot;None&quot;; switch to the provider\'s Responses endpoint to fully disable thinking</string>
     <string name="chat_reasoning_disclaimer">Levels above follow the model official documentation; actual behavior is subject to the official docs.</string>
+    <string name="chat_reasoning_level_unsupported">Model switched: the current reasoning level isn\'t supported and has been changed to a supported level</string>
+    <string name="chat_reasoning_invalid_request_hint">Request rejected: the selected reasoning level may not be supported by this model. Try a different level under &quot;Reasoning&quot;</string>
     <string name="provider_model_section_reasoning">Reasoning levels</string>
     <string name="provider_model_reasoning_hint">Tick only the levels this model really accepts; leave all unticked to use the built-in capability table</string>
     <string name="provider_model_reasoning_can_disable">Thinking can be turned off</string>
@@ -1043,6 +1085,11 @@
     <!-- About -->
     <string name="about_version">Version</string>
     <string name="about_github_repo">GitHub Repository</string>
+    <string name="about_star_prompt_title">Enjoying AiVerse?</string>
+    <string name="about_star_prompt_body">Give us a Star on GitHub — your support keeps us iterating.</string>
+    <string name="about_star_prompt_action">Star on GitHub</string>
+    <string name="about_star_prompt_dismiss">Don\'t show again</string>
+    <string name="about_star_prompt_later">Later</string>
     <string name="about_upstream_repo">Upstream Repository</string>
     <string name="about_license">Open Source License</string>
     <string name="about_feedback">Feedback</string>
@@ -1277,6 +1324,13 @@
     <string name="drawer_expand_subagents">Expand subagents</string>
     <string name="drawer_collapse_subagents">Collapse subagents</string>
     <string name="file_browser_up">Up one level</string>
+    <string name="file_browser_title">Files</string>
+    <string name="file_browser_add_folder">Add local folder</string>
+    <string name="file_browser_add_folder_failed">Cannot add this folder. Pick a folder in device storage and grant storage permission</string>
+    <string name="file_browser_upload_file">Upload files</string>
+    <string name="file_browser_upload_folder">Upload folder</string>
+    <string name="file_browser_upload_failed">Upload failed. Check storage permission and write access to the target folder</string>
+    <string name="file_browser_remove_folder">Remove this folder</string>
     <string name="file_browser_empty">Empty folder</string>
     <string name="file_browser_error">Failed to read folder</string>
     <string name="file_browser_refresh">Refresh</string>
@@ -1380,6 +1434,7 @@
     <string name="chat_perm_deny">Deny</string>
     <string name="chat_perm_always_allow">Always Allow</string>
     <string name="chat_perm_session_label">Session "%1$s"</string>
+    <string name="chat_perm_plugin_source">Plugin request: %1$s (%2$s)</string>
     <string name="chat_plan_completed">Plan completed</string>
     <string name="chat_continue_feedback">Continue feedback</string>
     <string name="chat_approve_and_implement">Approve and implement</string>
@@ -2477,6 +2532,9 @@
     <string name="workspace_new_workspace">New Workspace</string>
     <string name="workspace_name_hint">e.g. my-project</string>
     <string name="workspace_name_exists">A workspace with this name already exists</string>
+    <string name="workspace_rename">Rename Workspace</string>
+    <string name="workspace_rename_hint">Display name only; the folder is unchanged</string>
+    <string name="workspace_rename_exists">Another workspace already uses this display name</string>
     <string name="workspace_remote_root_create_failed">Failed to create the remote workspace directory. Check the path and server permissions.</string>
     <string name="workspace_remote_default_create_failed">Failed to create the default remote workspace. Check server permissions and disk space.</string>
     <string name="workspace_add_external">Add External Workspace</string>
@@ -2972,10 +3030,30 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="phone_overlay_collapse">Collapse</string>
     <string name="phone_overlay_stop">Stop</string>
     <string name="phone_overlay_recent_action">Recent action</string>
+    <string name="phone_overlay_done_title">Done</string>
+    <string name="phone_overlay_failed_title">Operation failed</string>
+    <string name="phone_overlay_result_summary">Result</string>
+    <string name="phone_overlay_copy_result">Copy</string>
+    <string name="phone_overlay_result_copied">Copied to clipboard</string>
+    <string name="phone_overlay_back_to_app">Back to app</string>
+    <string name="phone_overlay_finish">Finish</string>
+    <string name="phone_overlay_running">AI is operating your phone…</string>
+    <string name="phone_overlay_expand_hint">Tap to expand</string>
     <string name="phone_node_editable">text field</string>
     <string name="phone_node_scrollable">list</string>
     <string name="phone_node_clickable">button</string>
     <string name="phone_node_default">node</string>
+    <string name="phone_action_open_app">Opening %1$s</string>
+    <string name="phone_action_read_screen">Reading screen</string>
+    <string name="phone_action_click_element">Tapping element [%1$d]</string>
+    <string name="phone_action_tap">Tapping (%1$d, %2$d)</string>
+    <string name="phone_action_swipe">Swiping (%1$d,%2$d)→(%3$d,%4$d)</string>
+    <string name="phone_action_long_press">Long-pressing (%1$d, %2$d)</string>
+    <string name="phone_action_input_text">Typing text</string>
+    <string name="phone_action_press_key">Pressing %1$s</string>
+    <string name="phone_action_click_text">Tapping “%1$s”</string>
+    <string name="phone_action_click_text_summary">Tap by text/description: %1$s</string>
+    <string name="phone_action_click_text_query">%1$s (description: %2$s)</string>
     <string name="plugin_saved_path">Saved: %1$s</string>
     <string name="settings_roles">Roles</string>
     <string name="roles_add">New role</string>
@@ -3026,4 +3104,18 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="plugins_store_upload_invalid_type">Only .zip plugin packages are allowed</string>
     <string name="plugins_store_upload_too_large">Plugin package must be 10MB or smaller</string>
     <string name="plugins_store_upload_read_failed">Couldn\'t read the selected file</string>
+    <string name="plugins_store_upload_id_exists_title">Plugin ID already exists</string>
+    <string name="plugins_store_upload_id_exists_body">The store already has a plugin with ID "%1$s". Overwrite and update it, or submit under a new ID?</string>
+    <string name="plugins_store_upload_overwrite">Overwrite</string>
+    <string name="plugins_store_upload_change_id">Change ID</string>
+    <string name="plugins_store_upload_new_id_hint">To avoid overwriting "%1$s", enter a new plugin ID</string>
+    <string name="plugins_store_upload_new_id_label">New plugin ID</string>
+    <string name="plugins_store_upload_new_id_confirm">Upload</string>
+    <string name="plugins_store_upload_new_id_invalid">Invalid plugin ID format. Expected xx.yy</string>
+    <string name="plugins_store_upload_author_dialog_title">Enter Author Name</string>
+    <string name="plugins_store_upload_author_dialog_message">The author name serves as your plugin ownership identifier. It will be fixed after the first entry to prevent others from impersonating your plugin ID.</string>
+    <string name="plugins_store_upload_author_label">Author Name</string>
+    <string name="plugins_store_upload_author_required">Author name is required</string>
+    <string name="plugins_store_upload_author_confirm">Confirm</string>
+    <string name="phone_permission_deny_package">Safety guard: this app is on the "do not touch" list (banking, payment, or brokerage), so the AI neither reads nor operates it</string>
 </resources>

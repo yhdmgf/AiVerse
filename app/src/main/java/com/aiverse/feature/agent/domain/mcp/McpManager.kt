@@ -8,6 +8,7 @@ import com.aiverse.feature.agent.domain.mcp.auth.McpOAuthManager
 import com.aiverse.feature.agent.domain.tool.ToolRegistry
 import com.aiverse.feature.settings.data.repository.ContainerSettingsRepository
 import com.aiverse.feature.settings.data.repository.ExecutionMode
+import com.aiverse.feature.settings.data.repository.GeneralSettingsRepository
 import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,6 +41,13 @@ data class McpServerStatus(
     enum class State { CONNECTING, CONNECTED, NEEDS_AUTH, FAILED, DISABLED }
 }
 
+/** 已连接 MCP server 上单个工具的描述，供 mcp_search 元工具返回。 */
+data class McpConnectedTool(
+    val name: String,
+    val description: String,
+    val inputSchema: JsonElement
+)
+
 // reloadMutex 串行化重连，避免设置页连点导致并发注册/反注册竞态。
 @Singleton
 class McpManager @Inject constructor(
@@ -47,6 +57,7 @@ class McpManager @Inject constructor(
     private val containerEngine: LinuxContainerEngine,
     private val workspaceRepository: WorkspaceRepository,
     private val containerSettingsRepository: ContainerSettingsRepository,
+    private val generalSettingsRepository: GeneralSettingsRepository,
     private val oauthManager: McpOAuthManager
 ) {
     private companion object {
@@ -74,6 +85,13 @@ class McpManager @Inject constructor(
         scope.launch {
             configRepository.externalChanges.collect {
                 FileLogger.i(TAG, "检测到 MCP 配置文件外部变更，自动重载")
+                reload()
+            }
+        }
+        // 「MCP 工具按需加载（实验）」开关变化：自动重载，使裁剪/全量注册立即生效（drop(1) 跳过启动首帧）。
+        scope.launch {
+            generalSettingsRepository.mcpLazyToolsFlow.drop(1).collect {
+                FileLogger.i(TAG, "MCP 工具按需加载开关变化，自动重载")
                 reload()
             }
         }
@@ -163,14 +181,21 @@ class McpManager @Inject constructor(
 
             val tools = client.tools.map { McpTool(client, it) }
             val enabledTools = tools.filter { it.remoteName !in cfg.disabledTools }
+            // 「MCP 工具按需加载（实验）」开启时，只保留连接（activeClients）供 mcp_search / mcp_call
+            // 反查，不再把 MCP 工具逐个注册进 registry——模型侧只看到两个元工具入口，省上下文。
+            // 判据用 `tool is McpTool`（不用 EXTERNAL_TOOL，避免误裁 PluginToolAdapter）。
+            // 关闭开关时走原有路径，行为与逐字等价。
+            val lazyToolsEnabled = generalSettingsRepository.mcpLazyToolsSnapshot()
             synchronized(activeClients) {
                 activeClients[cfg.name] = client
                 enabledTools.forEach { tool ->
+                    if (lazyToolsEnabled && tool is McpTool) return@forEach
                     toolRegistry.register(tool.name, tool)
                     registeredToolNames.add(tool.name)
                 }
             }
-            FileLogger.i(TAG, "[${cfg.name}] 连接成功，注册 ${enabledTools.size}/${tools.size} 个工具（${System.currentTimeMillis() - t0}ms）")
+            val registeredCount = if (lazyToolsEnabled) 0 else enabledTools.size
+            FileLogger.i(TAG, "[${cfg.name}] 连接成功，注册 ${registeredCount}/${tools.size} 个工具（${System.currentTimeMillis() - t0}ms）")
             McpServerStatus(cfg.name, McpServerStatus.State.CONNECTED, toolCount = enabledTools.size)
         } catch (e: McpAuthRequiredException) {
             FileLogger.i(TAG, "[${cfg.name}] 需要 OAuth 授权（${System.currentTimeMillis() - t0}ms）")
@@ -187,6 +212,53 @@ class McpManager @Inject constructor(
     fun getServerTools(serverName: String): List<McpToolDescriptor> {
         return synchronized(activeClients) {
             activeClients[serverName]?.tools ?: emptyList()
+        }
+    }
+
+    /**
+     * 列出所有已连接 server 提供的工具（按 server 连接顺序），供 mcp_search 使用。
+     * 不依赖 ToolRegistry：按需加载开启时被裁剪的工具也能被搜到。
+     */
+    fun searchConnectedTools(query: String): List<McpConnectedTool> {
+        val normalized = query.trim().lowercase()
+        return synchronized(activeClients) {
+            activeClients.values.flatMap { client ->
+                client.tools.mapNotNull { descriptor ->
+                    val namespaced = McpTool.buildNamespacedName(client.serverName, descriptor.name)
+                    val description = descriptor.description
+                        ?: "MCP 工具 ${descriptor.name}（来自 ${client.serverName}）"
+                    if (normalized.isNotEmpty() &&
+                        !namespaced.lowercase().contains(normalized) &&
+                        !descriptor.name.lowercase().contains(normalized) &&
+                        !description.lowercase().contains(normalized)
+                    ) {
+                        return@mapNotNull null
+                    }
+                    val schema: JsonElement = descriptor.inputSchema
+                        ?: JsonObject(emptyMap())
+                    McpConnectedTool(
+                        name = namespaced,
+                        description = description,
+                        inputSchema = schema
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 跨 server 反查「命名空间名 → (client, descriptor)」，供 mcp_call 使用。
+     * 按需加载开启时被裁剪的工具不在 ToolRegistry 里，必须走 activeClients。
+     */
+    fun resolveConnectedTool(namespacedName: String): Pair<McpClient, McpToolDescriptor>? {
+        return synchronized(activeClients) {
+            for (client in activeClients.values) {
+                val descriptor = client.tools.firstOrNull {
+                    McpTool.buildNamespacedName(client.serverName, it.name) == namespacedName
+                }
+                if (descriptor != null) return@synchronized client to descriptor
+            }
+            null
         }
     }
 

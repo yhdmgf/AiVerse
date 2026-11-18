@@ -2,12 +2,14 @@ package com.aiverse.feature.phonecontrol.domain
 
 import com.aiverse.R
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Bundle
 import android.text.InputType
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.aiverse.core.util.FileLogger
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -28,15 +30,47 @@ class PhoneAccessibilityService : AccessibilityService() {
 
         /** 服务是否在运行。 */
         val isRunning: Boolean get() = instance != null
+
+        /** 最近一次无障碍事件上报的前台应用包名（供打开应用后等待前台）。 */
+        @Volatile
+        var foregroundPackage: String? = null
+
+        private const val TAG = "PhoneA11yService"
+
+        /** 快照最大可信时长：超过则先重建再查，避免按过期坐标点到别的控件。 */
+        private const val SNAPSHOT_MAX_AGE_MS = 2_000L
+
+        /** 实时遍历找节点的最大访问节点数。 */
+        private const val MAX_SEARCH_NODES = 600
+
+        /** 向上回溯可点击祖先的最大层数。 */
+        private const val CLICK_ANCESTOR_MAX_DEPTH = 6
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // 运行时再叠加一次检索标志，双保险：即便 xml 缺 flag 也能取到交互窗口与不重要视图。
+        runCatching {
+            serviceInfo = serviceInfo.apply {
+                flags = flags or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            }
+        }
+        PhoneScreenSnapshot.rebuildNow(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // 服务不主动采集；读屏由调用方按需触发。
+        // 记录前台应用并在界面变化时刷新常驻快照，点击时直接查快照，不用每次重遍历整棵树。
+        val evt = event ?: return
+        evt.packageName?.toString()?.takeIf { it.isNotBlank() }?.let { foregroundPackage = it }
+        when (evt.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
+            AccessibilityEvent.TYPE_VIEW_SCROLLED -> PhoneScreenSnapshot.requestRebuild(this)
+        }
     }
 
     override fun onInterrupt() {
@@ -61,28 +95,116 @@ class PhoneAccessibilityService : AccessibilityService() {
         val clickable: Boolean
     )
 
-    /** 读取当前屏幕的可交互元素列表（id 按遍历顺序编号，label 敏感信息已打码）。 */
+    /** 读取当前屏幕的可交互元素列表（基于常驻快照；id 按快照遍历顺序编号，label 敏感信息已打码）。 */
     fun readScreenElements(): List<ScreenElement> {
-        val root = rootInActiveWindow ?: return emptyList()
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-        collectElements(root, nodes)
-        return nodes.mapIndexed { index, node ->
+        rebuildSnapshotIfStale()
+        return PhoneScreenSnapshot.nodes().mapIndexed { index, node ->
             ScreenElement(
                 id = index + 1,
-                role = roleOf(node),
-                label = maskSensitive(labelOf(node)),
-                clickable = node.isClickable
+                role = roleOf(node.className, node.editable, node.clickable),
+                label = maskSensitive(labelOf(node.text, node.contentDescription, node.className)),
+                clickable = node.clickable
             )
         }
     }
 
-    /** 按元素 id 无障碍点击（与 [readScreenElements] 相同的遍历顺序编号）。 */
-    fun clickElement(id: Int): Boolean {
+    /** 按元素 id 点击：先查快照边界发中心点手势，失败退回实时节点无障碍 ACTION_CLICK。 */
+    suspend fun clickElement(id: Int): Boolean {
+        rebuildSnapshotIfStale()
+        val hit = PhoneScreenSnapshot.nodes().getOrNull(id - 1)
+        if (hit != null && hit.clickable) {
+            val cx = hit.bounds.centerX().toFloat()
+            val cy = hit.bounds.centerY().toFloat()
+            if (runCatching { tap(cx, cy) }.getOrDefault(false)) return true
+        }
+        // 手势没成（或快照里无该编号、节点不可点）：按遍历顺序实时遍历一次，回溯可点击祖先发 ACTION_CLICK。
         val root = rootInActiveWindow ?: return false
         val nodes = mutableListOf<AccessibilityNodeInfo>()
         collectElements(root, nodes)
         val node = nodes.getOrNull(id - 1) ?: return false
+        return clickNodeOrAncestor(node)
+    }
+
+    /**
+     * 按文本/描述点击（复刻 Muse click 三段式）。
+     *
+     * ① 查常驻快照，命中且边界未过期则发中心点手势；② 实时遍历找节点，向上回溯可点击祖先发
+     * ACTION_CLICK；③ 都不成再对实时节点发中心点手势兜底。三条路都失败返回 false。
+     */
+    suspend fun clickByText(text: String?, contentDescription: String?): Boolean {
+        if (text.isNullOrBlank() && contentDescription.isNullOrBlank()) return false
+        val query = text?.takeIf { it.isNotBlank() } ?: contentDescription.orEmpty()
+        rebuildSnapshotIfStale()
+
+        // ① 快照命中：无障碍事件到达时已建好，这里只是一次线性扫描，打开应用后能立刻点。
+        val snapshotHit = PhoneScreenSnapshot.find(query)
+        if (snapshotHit != null && snapshotHit.bounds.width() > 0) {
+            val cx = snapshotHit.bounds.centerX().toFloat()
+            val cy = snapshotHit.bounds.centerY().toFloat()
+            if (tap(cx, cy)) return true
+        }
+
+        // ② 快照没有或点不动：实时遍历一次（界面刚变化、快照还没跟上时走这里）。
+        val root = rootInActiveWindow ?: return false
+        val node = findNodeBfs(root, text, contentDescription) ?: return false
+        if (clickNodeOrAncestor(node)) return true
+
+        // ③ 坐标兜底：祖先不可点时，对实时节点自身发中心点手势。
+        val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+        if (bounds.isEmpty) return false
+        return tap(bounds.centerX().toFloat(), bounds.centerY().toFloat())
+    }
+
+    /** 快照过期（>2s 未更新）或为空时立即重建，避免按过期坐标点到别的控件。 */
+    private fun rebuildSnapshotIfStale() {
+        if (PhoneScreenSnapshot.isEmpty() ||
+            System.currentTimeMillis() - PhoneScreenSnapshot.updatedAt > SNAPSHOT_MAX_AGE_MS
+        ) {
+            PhoneScreenSnapshot.rebuildNow(this)
+        }
+    }
+
+    /** 点击节点；节点本身不可点时向上找可点击祖先（很多列表项的可点击区在父层）。 */
+    private fun clickNodeOrAncestor(node: AccessibilityNodeInfo): Boolean {
+        var current: AccessibilityNodeInfo? = node
+        var depth = 0
+        while (current != null && depth < CLICK_ANCESTOR_MAX_DEPTH) {
+            if (current.isClickable) {
+                return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            current = current.parent
+            depth++
+        }
         return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    private fun findNodeBfs(
+        root: AccessibilityNodeInfo,
+        text: String?,
+        contentDescription: String?
+    ): AccessibilityNodeInfo? {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited = 0
+        try {
+            while (queue.isNotEmpty() && visited < MAX_SEARCH_NODES) {
+                val node = queue.removeFirst()
+                visited++
+                val nodeText = node.text?.toString()
+                val nodeDesc = node.contentDescription?.toString()
+                val textHit = !text.isNullOrBlank() && nodeText != null &&
+                    nodeText.contains(text, ignoreCase = true)
+                val descHit = !contentDescription.isNullOrBlank() && nodeDesc != null &&
+                    nodeDesc.contains(contentDescription, ignoreCase = true)
+                if ((textHit || descHit) && node.isVisibleToUser) return node
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+        } catch (e: Exception) {
+            FileLogger.w(TAG, "按文本查找节点失败", e)
+        }
+        return null
     }
 
     private fun collectElements(node: AccessibilityNodeInfo?, out: MutableList<AccessibilityNodeInfo>) {
@@ -93,17 +215,24 @@ class PhoneAccessibilityService : AccessibilityService() {
 
     private fun labelOf(node: AccessibilityNodeInfo): String {
         if (node.isPassword) return ""
-        node.text?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
-        node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
-        return node.viewIdResourceName?.substringAfterLast('/') ?: ""
+        return labelOf(
+            node.text?.toString(),
+            node.contentDescription?.toString(),
+            node.className?.toString()
+        ).ifEmpty { node.viewIdResourceName?.substringAfterLast('/') ?: "" }
     }
 
-    private fun roleOf(node: AccessibilityNodeInfo): String {
-        val cls = node.className?.toString()?.substringAfterLast('.')?.lowercase() ?: ""
+    private fun labelOf(text: String?, desc: String?, className: String?): String {
+        text?.takeIf { it.isNotBlank() }?.let { return it }
+        desc?.takeIf { it.isNotBlank() }?.let { return it }
+        return className?.substringAfterLast('.') ?: ""
+    }
+
+    private fun roleOf(className: String?, editable: Boolean, clickable: Boolean): String {
+        val cls = className?.substringAfterLast('.')?.lowercase() ?: ""
         return when {
-            node.isEditable -> getString(R.string.phone_node_editable)
-            node.isScrollable -> getString(R.string.phone_node_scrollable)
-            node.isClickable -> getString(R.string.phone_node_clickable)
+            editable -> getString(R.string.phone_node_editable)
+            clickable -> getString(R.string.phone_node_clickable)
             else -> cls.ifEmpty { getString(R.string.phone_node_default) }
         }
     }

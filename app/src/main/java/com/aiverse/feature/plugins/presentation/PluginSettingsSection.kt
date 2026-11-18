@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,17 +33,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import androidx.compose.runtime.rememberCoroutineScope
 import com.aiverse.R
+import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.AdaptiveModalBottomSheet
+import com.aiverse.core.util.FileLogger
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ArrowLeft
 import compose.icons.feathericons.Plus
 import compose.icons.feathericons.Settings
+import compose.icons.feathericons.Share2
+import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * 设置 → 插件主入口（AiCode 移植版）：插件列表（已安装 / 开发中 / 商店 tab）、
@@ -62,6 +75,8 @@ internal fun PluginSettingsSection(
     onNavigateBack: () -> Unit = {}
 ) {
     val viewModel: PluginsViewModel = hiltViewModel()
+    // 商店详情页的分享走商店 ViewModel（下载/缓存插件包由它复用 PluginIndexClient）。
+    val storeViewModel: PluginStoreViewModel = hiltViewModel()
     val plugins by viewModel.plugins.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val devMode by viewModel.devMode.collectAsStateWithLifecycle()
@@ -77,6 +92,8 @@ internal fun PluginSettingsSection(
     val downloadMirror by viewModel.downloadMirror.collectAsStateWithLifecycle()
 
     val languageTag = currentLanguageTag()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selectedPluginId by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var selectedStoreItem by remember { mutableStateOf<PluginStoreItem?>(null) }
@@ -88,6 +105,44 @@ internal fun PluginSettingsSection(
     }
     val selectedPlugin = plugins.firstOrNull { it.id == selectedPluginId }
 
+    // 商店详情分享：等插件包在本地就绪（未下载则先下载），再用 FileProvider 授权拉系统分享。
+    // 文件名沿用商店包原名（{id}_{version}.zip），不改名。
+    val shareLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    // 分享失败提示：复用商店既有下载失败文案（不在 .kt 硬编码中文）。
+    val shareFailedMessage = stringResource(R.string.plugins_store_error_download)
+    fun sharePluginPackage(file: File) {
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }.getOrNull()
+        if (uri == null) {
+            Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
+            return
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        shareLauncher.launch(Intent.createChooser(send, context.getString(R.string.plugins_store_detail_share)))
+    }
+    LaunchedEffect(storeViewModel) {
+        storeViewModel.shareResult.collect { result ->
+            result.onSuccess(::sharePluginPackage).onFailure { e ->
+                FileLogger.w("PluginSettingsSection", "分享插件包失败", e)
+                Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    // 已安装插件导出：打包成 zip 后复用同一 FileProvider 分享流程；失败复用商店下载失败文案。
+    LaunchedEffect(viewModel) {
+        viewModel.exportResult.collect { result ->
+            result.onSuccess(::sharePluginPackage).onFailure { e ->
+                FileLogger.w("PluginSettingsSection", "导出插件包失败", e)
+                Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // 详情/商店详情/开发详情显示时，系统返回应先回插件列表（清选中状态），
     // 而不是冒泡到 SettingsScreen 直接退出插件分区（之前返回会跳设置主菜单，且状态不清导致再点插件卡详情、需重启）。
     val inDetail = selectedPlugin != null || selectedStoreItem != null || selectedDevProject != null
@@ -97,6 +152,10 @@ internal fun PluginSettingsSection(
         selectedDevProject = null
     }
 
+    // 导入/预览确认弹层宿主：放在所有提前 return 的子页分支之前，确保商店详情页点「安装」
+    // 也能立即弹出预览（之前只渲染在插件列表页，详情页提前 return 导致预览要返回列表才出现）。
+    PluginImportHost(viewModel = viewModel)
+
     if (selectedPlugin != null) {
         val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
         Column(modifier = Modifier.fillMaxSize()) {
@@ -104,6 +163,7 @@ internal fun PluginSettingsSection(
             PluginDetailSection(
                 plugin = selectedPlugin,
                 onToggleEnabled = { viewModel.setEnabled(selectedPlugin.id, it) },
+                onExport = { viewModel.exportPlugin(selectedPlugin.id) },
                 bridgeFactory = { page, post, onClose ->
                     viewModel.createWebBridge(
                         page = page,
@@ -226,9 +286,6 @@ internal fun PluginSettingsSection(
                 onOpenStoreDetail = { selectedStoreItem = it }
             )
         }
-
-        // 导入/预览确认弹层（复用并行子代理落地的 [PluginImportHost]）
-        PluginImportHost(viewModel = viewModel)
     }
 
     if (showSettings) {
@@ -253,7 +310,10 @@ internal fun PluginSettingsSection(
  * 点击返回会清选中状态回到插件列表（而非冒泡到 SettingsScreen 退出插件分区）。
  */
 @Composable
-private fun PluginBackBar(onBack: () -> Unit) {
+internal fun PluginBackBar(
+    onBack: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -267,6 +327,9 @@ private fun PluginBackBar(onBack: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }
+        // trailing 顶到右侧；默认 null（已装/开发详情页不传，行为不变）。
+        Spacer(modifier = Modifier.weight(1f))
+        trailing?.invoke()
     }
 }
 

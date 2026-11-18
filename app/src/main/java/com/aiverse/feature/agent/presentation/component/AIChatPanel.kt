@@ -133,6 +133,7 @@ import com.aiverse.feature.agent.presentation.MessageRole
 import com.aiverse.feature.agent.presentation.OptimizeEvent
 import com.aiverse.feature.agent.presentation.QueuedRequest
 import com.aiverse.feature.agent.presentation.hasVisibleContent
+import com.aiverse.feature.agent.presentation.StreamingAssistantMessage
 import com.aiverse.feature.agent.presentation.component.LocalChatFileAccess
 import com.aiverse.feature.agent.domain.model.Role
 import com.aiverse.feature.agent.presentation.RoleSwitcherViewModel
@@ -246,6 +247,40 @@ internal data class ChatRenderItem(
 )
 
 /** 消息条数超过此值后，渲染项列表改在后台线程重建。 */
+internal fun reconcileStreamingAssistants(
+    previous: List<StreamingAssistantMessage>,
+    current: StreamingAssistantMessage?,
+    renderedMessages: List<AgentUIMessage>,
+    sessionId: String?,
+): List<StreamingAssistantMessage> {
+    if (current == null || current.sessionId != sessionId) return emptyList()
+    val renderedIds = renderedMessages.mapTo(HashSet()) { it.id }
+    val pending = previous.filter {
+        it.sessionId == sessionId && it.messageId !in renderedIds
+    }.associateTo(LinkedHashMap()) {
+        it.messageId to if (it.messageId == current.messageId) it else it.copy(settled = true)
+    }
+    if (current.messageId !in renderedIds) pending[current.messageId] = current
+    return pending.values.toList()
+}
+
+internal fun canAcknowledgeStreamingAssistant(
+    current: StreamingAssistantMessage?,
+    previous: List<StreamingAssistantMessage>,
+    renderedMessages: List<AgentUIMessage>,
+    sessionId: String?,
+    messagesReady: Boolean,
+): Boolean {
+    if (!messagesReady || current == null || current.sessionId != sessionId ||
+        !current.settled || !current.persisted) return false
+    val renderedIds = renderedMessages.mapTo(HashSet()) { it.id }
+    if (previous.any { it.sessionId == sessionId && it.messageId != current.messageId && it.messageId !in renderedIds }) {
+        return false
+    }
+    return current.messageId in renderedIds ||
+        (!current.content.hasVisibleContent() && !current.reasoning.hasVisibleContent())
+}
+
 private const val ASYNC_CHAT_ITEMS_THRESHOLD = 120
 
 private class AsyncChatItems(val sessionId: String?, val items: List<ChatRenderItem>)
@@ -816,10 +851,35 @@ fun AIChatPanel(
     val isCompacting by viewModel.isCompacting.collectAsStateWithLifecycle()
     val retryState by viewModel.retryState.collectAsStateWithLifecycle()
     val keySwitchState by viewModel.keySwitchState.collectAsStateWithLifecycle()
-    val streamingText by viewModel.streamingText.collectAsStateWithLifecycle()
-    val streamingReasoning by viewModel.streamingReasoning.collectAsStateWithLifecycle()
-    val reasoningTiming by viewModel.reasoningTiming.collectAsStateWithLifecycle()
+    val streamingAssistant by viewModel.streamingAssistant.collectAsStateWithLifecycle()
     val preparingTool by viewModel.preparingTool.collectAsStateWithLifecycle()
+
+    var retainedAssistants by remember(currentSessionId) {
+        mutableStateOf<List<StreamingAssistantMessage>>(emptyList())
+    }
+    // 后台列表尚未提交时继续承载原响应，不能拿更新更早到达的数据库快照撤走流式内容。
+    val streamingAssistants = remember(retainedAssistants, streamingAssistant, messages, currentSessionId) {
+        reconcileStreamingAssistants(retainedAssistants, streamingAssistant, messages, currentSessionId)
+    }
+    SideEffect { retainedAssistants = streamingAssistants }
+    LaunchedEffect(streamingAssistant, messages, currentSessionId, messagesReady, streamingAssistants) {
+        val assistant = streamingAssistant
+        if (assistant != null && canAcknowledgeStreamingAssistant(
+                assistant, streamingAssistants, messages, currentSessionId, messagesReady
+            )) {
+            viewModel.acknowledgeRenderedAssistant(assistant.sessionId, assistant.messageId)
+        }
+    }
+    val lastStreamingAssistant = streamingAssistants.lastOrNull()
+    val displayStreamingText = lastStreamingAssistant?.content
+    val displayStreamingReasoning = lastStreamingAssistant?.reasoning
+    // 流式期间跟随最后一条流式助手；思考计时取自该条助手的思考起止（运行器维护）。
+    val reasoningTiming = lastStreamingAssistant?.reasoningStartMs?.let { start ->
+        start to lastStreamingAssistant.reasoningEndMs
+    }
+    val showStreaming = streamingAssistants.any { it.content.hasVisibleContent() }
+    val showReasoning = streamingAssistants.any { it.reasoning.hasVisibleContent() }
+
     // 等待模型或工具执行时的状态文案：
     // 1. 若当前有正在执行的工具（runningTool）或模型正在准备的工具（preparingTool，工具名先到参数还在流式），
     //    直接说清在做什么（「正在读取文件」、「正在编辑文件」等，见 toolRunningLabelRes）；
@@ -914,7 +974,8 @@ fun AIChatPanel(
         (if (floatingLayerHeightPx > 0) floatingLayerHeightPx + floatingGapPx
         else inputBarBottomReserveDp.toPx()).toInt()
     }
-    val markdownCache = remember { MarkdownRenderCache() }
+    // 缓存按会话隔离：切会话时重建，避免旧会话的 AST 与新会话消息串味（保留预算也随会话重置）。
+    val markdownCache = remember(currentSessionId) { MarkdownRenderCache() }
     // 工具调用（分组头 / 单条工具行）的手动展开态：放在 ViewModel 里，切页、滚出视口回收后仍保留。
     // key = 分组 key（`toolgroup:<组内首条消息 id>`）或单条消息 id。
     val toolExpansionOverrides = viewModel.toolExpansionOverrides
@@ -926,6 +987,8 @@ fun AIChatPanel(
     // 思考卡片的展开态，同款快照。
     val reasoningExpansionOverrides = viewModel.reasoningExpansionOverrides
     val reasoningOverrideSnapshot = reasoningExpansionOverrides.toMap()
+    // 「思考自动展开」偏好：没有手动展开/收起记录的思考卡片默认展开。
+    val autoExpandReasoning by viewModel.autoExpandReasoning.collectAsStateWithLifecycle()
     // 正在执行的工具 id 集合：只让集合内容参与 remember key，避免实时输出逐字刷新导致整表重建。
     val runningToolIds by remember { derivedStateOf { runningTool.mapTo(HashSet()) { it.messageId } } }
     val scope = rememberCoroutineScope()
@@ -954,7 +1017,7 @@ fun AIChatPanel(
     // Idle/Result（如工具执行间隙、轮次边界），此时仅靠 isBusy 会误判本轮已结束。
     // 只要仍有流式文本、运行中/准备中的工具或压缩在途，本轮就未真正收尾；
     // 以「busy 或 仍有在途工作」作为整轮进行中信号，保证本轮结束前所有朗读按钮都不出现。
-    val turnInProgress = isBusy || streamingText != null || runningTool.isNotEmpty() ||
+    val turnInProgress = isBusy || streamingAssistants.isNotEmpty() || runningTool.isNotEmpty() ||
         preparingTool != null || isCompacting
     // 自动朗读：整轮回复真正完成（turnInProgress 下降沿）且开关开启时，朗读最后一条助手消息。
     val autoRead by viewModel.ttsController.autoReadFlow.collectAsStateWithLifecycle(initialValue = false)
@@ -1198,6 +1261,15 @@ fun AIChatPanel(
     // 「优化输入」状态与一次性事件：按钮 loading/停止态 + 失败 Snackbar（成功改为输入栏常驻撤销小按钮，见 canUndoOptimize）。
     val isOptimizing by viewModel.isOptimizing.collectAsStateWithLifecycle()
     val optimizeSnackbarHostState = remember { SnackbarHostState() }
+    // 切换模型后思考档位被自动收敛的提示：复用「优化输入」同一个 Snackbar 宿主（同一时刻只显示一条，后到者排队）。
+    LaunchedEffect(Unit) {
+        viewModel.reasoningConvergedEvents.collect {
+            optimizeSnackbarHostState.showSnackbar(
+                message = context.getString(R.string.chat_reasoning_level_unsupported),
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
     LaunchedEffect(Unit) {
         viewModel.optimizeEvents.collect { event ->
             when (event) {
@@ -1361,89 +1433,22 @@ fun AIChatPanel(
         takePictureLauncher.launch(uri)
     }
 
-    // 缓冲流式文本与思考过程：流式期间跟随 streamingText / streamingReasoning；流式刚结束而数据库尚未完成派发期间（messages 末尾仍是 USER/TOOL 消息），
-    // 持续保留本轮完整文本与思考，撑住底部气泡，彻底杜绝「字快打完了突然整段蒸发消失（空白闪回）」或「思考块突然消失又冒出」；
-    // 一旦 messages 列表末尾正式接纳了本轮助手消息，立即清空让位。
-    var retainedStreamingText by remember { mutableStateOf<String?>(null) }
-    var retainedStreamingReasoning by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(currentSessionId) {
-        retainedStreamingText = null
-        retainedStreamingReasoning = null
-    }
-
-    val lastMsg = messages.lastOrNull()
-    // Issue #122：最后一条「非 ⚡ 插入」消息 id。插入的排队消息落库只作为普通气泡显示，不应视为
-    // 本轮输出边界，故 retained 快照的清理 key 也跳过它，避免插入消息触发 retained 清空造成次要闪断。
-    val lastNonInterjectedMsgId = messages.lastOrNull { it.id !in interjectedMessageIds }?.id
-    // 本轮助手消息是否已经在消息列表中正式就位渲染：
-    // 只有末尾消息是 ASSISTANT 且正文与思考前缀吻合，才代表本轮输出已落库进 messages 列表
-    val isAssistantSettled = lastMsg?.role == MessageRole.ASSISTANT && run {
-        val currentText = streamingText ?: retainedStreamingText
-        val currentReasoning = streamingReasoning ?: retainedStreamingReasoning
-        val textSettled = if (currentText.isNullOrBlank()) {
-            true
-        } else {
-            val prefix = currentText.trimStart().take(20)
-            prefix.isEmpty() || lastMsg.content.trimStart().startsWith(prefix)
-        }
-        val reasoningSettled = if (currentReasoning.isNullOrBlank()) {
-            true
-        } else {
-            val prefix = currentReasoning.trimStart().take(20)
-            prefix.isEmpty() || (lastMsg.reasoning?.trimStart()?.startsWith(prefix) == true)
-        }
-        textSettled && reasoningSettled
-    }
-
-    LaunchedEffect(streamingText, isAssistantSettled) {
-        val st = streamingText
-        if (st != null && st.hasVisibleContent()) {
-            retainedStreamingText = st
-        } else if (isAssistantSettled) {
-            retainedStreamingText = null
-        }
-    }
-
-    LaunchedEffect(streamingReasoning, isAssistantSettled) {
-        val sr = streamingReasoning
-        if (sr != null && sr.hasVisibleContent()) {
-            retainedStreamingReasoning = sr
-        } else if (isAssistantSettled) {
-            retainedStreamingReasoning = null
-        }
-    }
-
-    // retained 快照只在「流式已结束、落库消息尚未出现」的短窗口里兜底，撑住底部气泡不闪空；
-    // 末尾消息一旦出现或更替（有新消息落库），或整轮结束，兜底使命即结束。
-    // 不能只按 lastMsg.role 判定：多步工具回合里末尾在 TOOL→TOOL 之间来回，role 不变则本 effect
-    // 不重启；而助手消息落库又常与紧随其后的工具消息被合并派发，UI 观察不到「助手消息成为末尾」
-    // 那一帧，isAssistantSettled 的前缀校验恒不成立——两条清除路径同时失效，旧思考/正文就会一直
-    // 挂在尾巴上、新内容反而出现在它上方。改按末尾消息 id 判定，任何新消息落库都会触发清空。
-    LaunchedEffect(isBusy, lastNonInterjectedMsgId) {
-        retainedStreamingText = null
-        retainedStreamingReasoning = null
-    }
-
-    val displayStreamingText = if (isAssistantSettled) null else (streamingText ?: retainedStreamingText)
-    val showStreaming = displayStreamingText?.hasVisibleContent() == true
-
-    val displayStreamingReasoning = if (isAssistantSettled) null else (streamingReasoning ?: retainedStreamingReasoning)
-    val showReasoning = displayStreamingReasoning?.hasVisibleContent() == true
-
     // 打字机渲染进度：持有在 LazyColumn 之外，尾巴 item 滚出视口被 dispose 后进度不丢。
+    // active 跟随流式助手未 settled：流式刚结束而落库消息尚未出现的短窗口里继续撑住底部气泡，
+    // 彻底杜绝「字快打完了突然整段蒸发消失（空白闪回）」或「思考块突然消失又冒出」。
     val typewriter = rememberTypewriterStreamingText(
         text = displayStreamingText ?: "",
-        active = streamingText != null,
-        sessionKey = currentSessionId
+        active = lastStreamingAssistant?.settled == false,
+        sessionKey = lastStreamingAssistant?.messageId
     )
     val typewriterRenderText = typewriter.text
     // 思考过程同样走打字机：与回复文本共用同一速率自适应逻辑。
-    // 正文开始输出（streamingText 非空）即视为思考结束：思考打字机立即收尾，
-    // 避免思考还没打完、正文已开始导致两者叠着慢慢打。
+    // 正文开始输出即视为思考结束：思考打字机立即收尾，避免思考还没打完、正文已开始导致两者叠着慢慢打。
     val typewriterReasoningText = rememberTypewriterStreamingText(
         text = displayStreamingReasoning ?: "",
-        active = streamingReasoning != null && streamingText == null,
-        sessionKey = currentSessionId
+        active = lastStreamingAssistant?.settled == false &&
+            lastStreamingAssistant.reasoningEndMs == null && displayStreamingText.isNullOrEmpty(),
+        sessionKey = lastStreamingAssistant?.messageId
     ).text
 
     // 自动滚动跟随
@@ -1623,7 +1628,7 @@ fun AIChatPanel(
     LaunchedEffect(listState, messagesReady) {
         if (!messagesReady) return@LaunchedEffect
         snapshotFlow {
-            Triple(streamingText?.length, streamingReasoning?.length, latestMessageCount.value)
+            Triple(displayStreamingText?.length, displayStreamingReasoning?.length, latestMessageCount.value)
         }.collect { calibrateToAnchor() }
     }
 
@@ -1788,10 +1793,12 @@ fun AIChatPanel(
                     cache = markdownCache,
                     durationMs = reasoningDurations[item.message.id],
                     expandedOverride = reasoningOverrideSnapshot[item.message.id],
+                    defaultExpanded = autoExpandReasoning,
                     onExpandedChange = {
                         viewModel.setReasoningExpanded(item.message.id, it)
                         onToolItemToggled()
-                    }
+                    },
+                    scrollState = viewModel.reasoningScrollStates.getOrPut(item.message.id) { newReasoningScrollState() },
                 )
             }
             group != null -> {
@@ -1846,6 +1853,7 @@ fun AIChatPanel(
                     onToolExpandedChange = { isExpanded -> viewModel.setToolExpanded(message.id, isExpanded) },
                     onToolToggle = onToolItemToggled,
                     reasoningExpandedOverride = reasoningOverrideSnapshot[message.id],
+                    reasoningDefaultExpanded = autoExpandReasoning,
                     onReasoningExpandedChange = {
                         viewModel.setReasoningExpanded(message.id, it)
                         onToolItemToggled()
@@ -2215,17 +2223,26 @@ fun AIChatPanel(
                                         expandedOverride = currentSessionId?.let {
                                             reasoningOverrideSnapshot[viewModel.streamingReasoningKey(it)]
                                         },
+                                        defaultExpanded = autoExpandReasoning,
                                         onExpandedChange = { expanded ->
                                             currentSessionId?.let {
                                                 viewModel.setReasoningExpanded(viewModel.streamingReasoningKey(it), expanded)
                                             }
                                             onToolItemToggled()
                                         },
+                                        scrollState = currentSessionId?.let { sid ->
+                                            viewModel.reasoningScrollStates.getOrPut(viewModel.streamingReasoningKey(sid)) { newReasoningScrollState() }
+                                        } ?: newReasoningScrollState(),
+                                        streamingCacheKey = lastStreamingAssistant?.messageId?.let { "$it:reasoning" },
                                     )
                                 }
                                 when (tailKind) {
                                     TailKind.THINKING -> ThinkingBubble(label = thinkingLabel)
-                                    TailKind.STREAMING -> StreamingBubble(text = typewriterRenderText, cache = markdownCache)
+                                    TailKind.STREAMING -> StreamingBubble(
+                                        text = typewriterRenderText,
+                                        cache = markdownCache,
+                                        streamingCacheKey = lastStreamingAssistant?.messageId?.let { "$it:content" },
+                                    )
                                     TailKind.COMPACTING -> CompactionProgressBubble()
                                     TailKind.RETRYING -> {
                                         val rs = retryState
@@ -2291,7 +2308,7 @@ fun AIChatPanel(
             // 阻塞式确认面板（权限 / askUserQuestion / 计划审批）已内嵌进上方会话流末尾，
             // 不再挤在输入框上方——键盘弹起时它们可随列表滚动，不再被压缩高度。
 
-            // 「优化输入」Snackbar：显示在输入框上方，不遮挡消息与输入框。
+            // 「优化输入」/「思考档位收敛」Snackbar：显示在输入框上方，不遮挡消息与输入框。
             SnackbarHost(hostState = optimizeSnackbarHostState)
 
             ChatInputBar(

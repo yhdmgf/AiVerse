@@ -21,7 +21,7 @@ class PluginSkillSource @Inject constructor(
     private val manager: PluginManager
 ) : SkillSource {
 
-    override fun listSkills(): List<Skill> = manager.activeSkills()
+    override fun listSkills(force: Boolean): List<Skill> = manager.activeSkills()
 
     /** 全部插件技能，不论插件是否启用，供设置页全量展示。 */
     fun listAllSkills(): List<Skill> = manager.allSkills()

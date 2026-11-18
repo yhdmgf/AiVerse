@@ -444,6 +444,7 @@ class BackupManagerImpl @Inject constructor(
         compactionThresholdPercent = if (options.appSettings) generalSettingsRepository.compactionThresholdPercentSnapshot() else 90,
         sendFileMaxSizeMb = if (options.appSettings) generalSettingsRepository.sendFileMaxSizeMbSnapshot() else 100,
         deleteExternalWorkspaceSessions = if (options.appSettings) generalSettingsRepository.deleteExternalWorkspaceSessionsSnapshot() else false,
+        mcpLazyTools = if (options.appSettings) generalSettingsRepository.mcpLazyToolsSnapshot() else false,
         logLevel = if (options.appSettings) logSettingsRepository.snapshot() else null,
         visionProviderId = if (options.appSettings) visionModelSettingsRepository.getVisionProviderId() else "",
         visionModel = if (options.appSettings) visionModelSettingsRepository.getVisionModel() else "",
@@ -527,12 +528,12 @@ class BackupManagerImpl @Inject constructor(
     private fun backupLocalWorkspaces(): List<Workspace> =
         workspaceRepository.workspaces.value.filter { it.type != WorkspaceType.EXTERNAL_LOCAL }
 
-    /** 第一遍：统计每个本地工作区将备份的文件数（写 metadata 用）。 */
+    /** 第一遍：统计每个本地工作区将备份的文件数（写 metadata 用），并带上显示名别名供还原恢复。 */
     private fun collectWorkspaceMetas(): List<WorkspaceBackupMeta> =
         backupLocalWorkspaces().mapNotNull { ws ->
             var count = 0
             walkWorkspaceFiles(ws) { _, _ -> count++ }
-            if (count > 0) WorkspaceBackupMeta(ws.name, count) else null
+            if (count > 0) WorkspaceBackupMeta(ws.name, count, ws.displayName) else null
         }
 
     /** 第二遍：把各本地工作区文件写入 tar（`workspaces/<name>/<相对路径>`）。 */
@@ -763,7 +764,35 @@ class BackupManagerImpl @Inject constructor(
             error("不是有效的 AiVerse 备份文件：缺少 metadata.json")
         }
         FileLogger.i(TAG, "tar 解析完成，开始还原元数据段")
+        applyRestoredWorkspaceAliases(meta, restoreMapping)
         return stats + RestoreStats(skills = restoredSkills.size, plugins = restoredPlugins.size) + restoreMeta(meta, restoreMapping)
+    }
+
+    /**
+     * 还原工作区显示名（别名）：备份 meta 带别名且目标工作区当前无别名时写入。
+     * 按**还原后的目录名**（[restoreMapping] 的 value，重名已由 uniqueName 加后缀）写，非备份名；
+     * 仅处理内部工作区（外部/远程不纳入备份，不在还原映射里）。
+     */
+    private suspend fun applyRestoredWorkspaceAliases(
+        meta: BackupMetadata,
+        restoreMapping: Map<String, Workspace>
+    ) {
+        val aliasByBackupName = meta.workspaces
+            .mapNotNull { m -> m.alias?.takeIf { it.isNotBlank() }?.let { m.name to it } }
+            .toMap()
+        if (aliasByBackupName.isEmpty()) return
+        for ((backupName, resolved) in restoreMapping) {
+            if (resolved.type != WorkspaceType.INTERNAL) continue
+            val alias = aliasByBackupName[backupName] ?: continue
+            val latest = workspaceRepository.workspaces.value.firstOrNull {
+                it.name == resolved.name && it.type == WorkspaceType.INTERNAL
+            }
+            // 目标已有别名（如本机重装前已重命名）时不覆盖，尊重本机现状
+            if (latest == null || !latest.displayName.isNullOrBlank()) continue
+            runCatching { workspaceRepository.setWorkspaceAlias(latest, alias) }
+                .onFailure { FileLogger.w(TAG, "还原工作区别名失败: ${resolved.name} -> $alias", it) }
+                .onSuccess { FileLogger.i(TAG, "还原工作区别名: ${resolved.name} -> $alias") }
+        }
     }
 
     /** 逐行解析 jsonl 条目，每 [PAGE_SIZE] 条回调一次批量插入；返回该文件的总条数。 */
@@ -835,6 +864,7 @@ class BackupManagerImpl @Inject constructor(
             roleDao.upsertAll(snapshot.roles.map { it.toEntity() })
             ensureDefaultRole()
         }
+        applyRestoredWorkspaceAliases(snapshot.toMetadata(), restoreMapping)
         return stats + RestoreStats(
             chatSessions = snapshot.chatSessions.size,
             agentMessages = snapshot.agentMessages.size,
@@ -903,6 +933,7 @@ class BackupManagerImpl @Inject constructor(
             generalSettingsRepository.restoreCompactionThresholdPercent(meta.compactionThresholdPercent)
             generalSettingsRepository.restoreSendFileMaxSizeMb(meta.sendFileMaxSizeMb)
             generalSettingsRepository.restoreDeleteExternalWorkspaceSessions(meta.deleteExternalWorkspaceSessions)
+            generalSettingsRepository.restoreMcpLazyTools(meta.mcpLazyTools)
             logSettingsRepository.restore(meta.logLevel)
             if (meta.visionProviderId.isNotBlank() || meta.visionModel.isNotBlank()) {
                 visionModelSettingsRepository.setVisionModel(meta.visionProviderId, meta.visionModel)

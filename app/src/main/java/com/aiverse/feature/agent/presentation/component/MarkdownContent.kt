@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -82,47 +84,22 @@ import kotlin.math.min
 private val CodeFontFamily = FontFamily(Font(R.font.jetbrains_mono_nl))
 
 internal class MarkdownRenderCache(
-    private val maxEntries: Int = 80
+    maxEntries: Int = 80,
+    maxChars: Int = 512 * 1024
 ) {
-    private val parsedStates = object : LinkedHashMap<String, MarkdownParseState.Success>(
-        maxEntries,
-        0.75f,
-        true
-    ) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, MarkdownParseState.Success>?): Boolean {
-            return size > maxEntries
-        }
-    }
+    // AST 与全文同时存活，以文本字符预算约束缓存，而不是估算精确堆字节数。
+    private val snapshots = MarkdownSnapshotCache<MarkdownParseState.Success>(maxEntries, maxChars) { it.content }
 
-    fun get(text: String): MarkdownParseState.Success? =
-        parsedStates[text] ?: parsedStates[text.trim()]
+    fun get(text: String): MarkdownParseState.Success? = snapshots.get(text)
 
     /**
      * 在缓存中寻找是 [text] 前缀的最长解析态。
      * 流式转落库交接瞬间，全文可能比上一帧打字机内容多出尾部字符，直接拿最长前缀 AST 兜底，
      * 确保首帧以排版好的 Markdown 呈现，彻底消灭裸纯文本（- **xxx**）闪现。
      */
-    fun getBestPrefix(text: String): MarkdownParseState.Success? {
-        val exact = get(text)
-        if (exact != null) return exact
-        var bestMatch: MarkdownParseState.Success? = null
-        var bestLength = 0
-        for ((key, value) in parsedStates) {
-            if (key.length in (bestLength + 1)..text.length && text.startsWith(key)) {
-                bestMatch = value
-                bestLength = key.length
-            }
-        }
-        return bestMatch
-    }
+    fun getBestPrefix(text: String): MarkdownParseState.Success? = snapshots.getBestPrefix(text)
 
-    fun put(state: MarkdownParseState.Success) {
-        parsedStates[state.content] = state
-        val trimmed = state.content.trim()
-        if (trimmed != state.content) {
-            parsedStates[trimmed] = state
-        }
-    }
+    fun put(state: MarkdownParseState.Success, streamKey: String? = null) = snapshots.put(state, streamKey)
 }
 
 internal fun formatTokenCount(tokens: Long): String = when {
@@ -144,6 +121,8 @@ internal fun MarkdownContent(
     /** 长文本虚拟化渲染：正文改用 LazyColumn 逐块渲染（调用方需配合 heightIn 等有限高度约束
      *  才能触发懒加载），避免超大 md 一次性全量组合/测量造成的卡顿。 */
     lazyScroll: Boolean = false,
+    lazyListState: LazyListState? = null,
+    streamingCacheKey: String? = null,
     /** 聊天字号（外观设置）：非 null 时覆盖正文/列表/引用字号与行高。 */
     fontSizeSp: Int? = null,
     /** TTS 朗读进度（0..1，已读比例；null=未朗读）。已读部分用主题色高亮，随进度逐段变色。 */
@@ -229,7 +208,9 @@ internal fun MarkdownContent(
         Highlights.Builder().theme(SyntaxThemes.atom(darkMode = codeIsDark))
     }
 
-    val processed = remember(text) { MarkdownPreprocessor.process(text) }
+    val processed = remember(text, streamingCacheKey) {
+        MarkdownPreprocessor.process(text, cacheResult = streamingCacheKey == null)
+    }
     val baseTransformer = LocalMarkdownImageTransformer.current
     val mathTransformer = remember(baseTransformer, body.fontSize.value) {
         MathImageTransformer(baseTransformer, body.fontSize.value)
@@ -277,7 +258,9 @@ internal fun MarkdownContent(
         if (parsedState is MarkdownParseState.Success) {
             lastSuccessState = parsedState
             // 同步写入缓存：让同轮次接力的落库消息首帧即可命中，避免 LaunchedEffect 异步延迟导致的裸纯文本闪烁
-            cache?.put(parsedState)
+            // 流式态（streamingCacheKey != null）只在解析结果已跟上原文时写入，且带 streamKey 归属，
+            // 交接时按 streamKey 释放，不把中间态污染给落库消息。
+            if (parsedState.content == processed) cache?.put(parsedState, streamingCacheKey)
         }
 
         // Success 渲染当前结果；Loading 优先渲染本组件或前缀缓存的成功结果（杜绝裸纯文本闪现）；Error 回退原文
@@ -287,6 +270,10 @@ internal fun MarkdownContent(
             is MarkdownParseState.Error -> null
         }
 
+        // 长文本懒滚动的列表状态：调用方（如思考窗口）传入时复用其滚动位置，否则用本地记忆化回退。
+        // 在组合顶层先算好，避免在下方 remember 的渲染 lambda 里反复新建 state。
+        val fallbackLazyListState = rememberLazyListState()
+
         if (renderState != null) {
             // 长文本用 LazyColumn 逐块渲染时，animations（文本尺寸动画等）不适用，属预期。
             // 下面三个对象（successRenderer / mdComponents / mdAnimations）均 remember：不缓存的话
@@ -295,7 +282,7 @@ internal fun MarkdownContent(
                 state: MarkdownParseState.Success,
                 components: MarkdownComponents,
                 modifier: Modifier
-            ) -> Unit = remember(lazyScroll) {
+            ) -> Unit = remember(lazyScroll, lazyListState, fallbackLazyListState) {
                 // 顶层块逐个渲染：首块顶部不叠加 block 间距、末块底部不叠加 block 间距，
                 // 使助手气泡正文上下内边距对称（上下都由气泡的 vertical=t.sm 提供）；
                 // 块与块之间保留统一 block 间距，多段/列表/代码块之间仍有呼吸感。
@@ -303,7 +290,10 @@ internal fun MarkdownContent(
                 // 这里以 includeSpacer=false 关闭、用 index 自行控制，精确消除首/末块贴边空间。
                 if (lazyScroll) {
                     { state, components, m ->
-                        LazyColumn(modifier = m) {
+                        LazyColumn(
+                            modifier = m,
+                            state = lazyListState ?: fallbackLazyListState,
+                        ) {
                             itemsIndexed(
                                 items = state.node.children,
                                 key = { _, node -> node.startOffset },
@@ -477,16 +467,17 @@ private val LocalIsLastBlock = staticCompositionLocalOf { false }
 private object CodeHighlightCache {
     private data class Key(val code: String, val language: String?, val dark: Boolean)
 
-    private const val MAX = 128
-    private val cache = object : LinkedHashMap<Key, AnnotatedString>(MAX, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, AnnotatedString>?): Boolean = size > MAX
+    // 代码高亮结果昂贵（后台 buildHighlightedText），以代码字符数 + 结果长度做字符预算约束，
+    // 而不是固定条数：长代码块不再把短代码块挤出缓存。
+    private val cache = TextBudgetCache<Key, AnnotatedString>(128, 512 * 1024) { key, value ->
+        key.code.length.toLong() + value.length
     }
 
     fun get(code: String, language: String?, dark: Boolean): AnnotatedString? =
-        synchronized(cache) { cache[Key(code, language, dark)] }
+        cache[Key(code, language, dark)]
 
     fun put(code: String, language: String?, dark: Boolean, value: AnnotatedString) {
-        synchronized(cache) { cache[Key(code, language, dark)] = value }
+        cache.put(Key(code, language, dark), value)
     }
 }
 

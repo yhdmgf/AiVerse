@@ -3,6 +3,7 @@ package com.aiverse.feature.agent.domain.tool.shizuku
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import com.aiverse.R
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.domain.tool.AgentTool
 import com.aiverse.feature.agent.domain.tool.ParameterType
@@ -16,6 +17,7 @@ import com.aiverse.feature.phonecontrol.domain.PhoneControlStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -41,6 +43,7 @@ class PhoneControlTool @Inject constructor(
         const val ACTION_OPEN_APP = "open_app"
         const val ACTION_READ_SCREEN = "read_screen"
         const val ACTION_CLICK_ELEMENT = "click_element"
+        const val ACTION_CLICK_TEXT = "click_text"
         const val ACTION_TAP = "tap"
         const val ACTION_SWIPE = "swipe"
         const val ACTION_INPUT_TEXT = "input_text"
@@ -62,12 +65,18 @@ class PhoneControlTool @Inject constructor(
             "NOTIFICATIONS" to AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS,
             "QUICK_SETTINGS" to AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
         )
+
+        /** open_app 后等目标应用到前台的最长时长。 */
+        private const val OPEN_APP_WAIT_MS = 2_000L
+
+        /** 等前台的轮询间隔。 */
+        private const val FOREGROUND_POLL_MS = 50L
     }
 
     override val name = "PhoneControl"
 
     override val description =
-        "通过无障碍服务控制宿主手机：读屏（read_screen，返回当前屏幕可交互元素列表，如 `[1] 按钮 点赞`，AI 按文本定位元素 id）、点击元素（click_element，按 id 无障碍点击，不靠截图坐标）、打开应用（open_app）、点击坐标（tap）、滑动（swipe）、长按（long_press）、输入文字（input_text）、按键（key_event）、列出已安装应用（list_apps）。" +
+        "通过无障碍服务控制宿主手机：读屏（read_screen，返回当前屏幕可交互元素列表，如 `[1] 按钮 点赞`，AI 按文本定位元素 id）、点击元素（click_element，按 id 点击，不靠截图坐标）、按文本点击（click_text，按可见文本或 content_description 模糊定位后点击，图标按钮常只有描述）、打开应用（open_app，会等目标应用真正到前台再返回）、点击坐标（tap）、滑动（swipe）、长按（long_press）、输入文字（input_text）、按键（key_event）、列出已安装应用（list_apps）。" +
             "需先开启手机控制的无障碍服务，无需 Shizuku 授权。超高危险操作，每次执行都需用户确认。"
 
     override val permissionPolicy = ToolPermissionPolicy.ASK
@@ -77,9 +86,9 @@ class PhoneControlTool @Inject constructor(
         "action" to ToolParameter(
             name = "action",
             type = ParameterType.STRING,
-            description = "操作类型：open_app 打开应用 / read_screen 读屏（返回可交互元素列表） / click_element 点击元素（按 id） / tap 点击坐标 / swipe 滑动 / long_press 长按 / input_text 输入文字 / key_event 按键 / list_apps 列出已安装应用",
+            description = "操作类型：open_app 打开应用（会等前台） / read_screen 读屏（返回可交互元素列表） / click_element 点击元素（按 id） / click_text 按文本或描述点击 / tap 点击坐标 / swipe 滑动 / long_press 长按 / input_text 输入文字 / key_event 按键 / list_apps 列出已安装应用",
             required = true,
-            enum = listOf(ACTION_OPEN_APP, ACTION_READ_SCREEN, ACTION_CLICK_ELEMENT, ACTION_TAP, ACTION_SWIPE, ACTION_LONG_PRESS, ACTION_INPUT_TEXT, ACTION_KEY_EVENT, ACTION_LIST_APPS)
+            enum = listOf(ACTION_OPEN_APP, ACTION_READ_SCREEN, ACTION_CLICK_ELEMENT, ACTION_CLICK_TEXT, ACTION_TAP, ACTION_SWIPE, ACTION_LONG_PRESS, ACTION_INPUT_TEXT, ACTION_KEY_EVENT, ACTION_LIST_APPS)
         ),
         "element_id" to ToolParameter(
             name = "element_id",
@@ -126,7 +135,13 @@ class PhoneControlTool @Inject constructor(
         "text" to ToolParameter(
             name = "text",
             type = ParameterType.STRING,
-            description = "input_text 时必填：要输入的文字（不支持特殊字符 ;&|`$\\\\）",
+            description = "input_text 时必填：要输入的文字（不支持特殊字符 ;&|`$\\\\）；click_text 时为要点击的可见文本（模糊匹配）",
+            required = false
+        ),
+        "content_description" to ToolParameter(
+            name = "content_description",
+            type = ParameterType.STRING,
+            description = "click_text 时可选：元素的 content_description（图标按钮常只有描述、没有文字），text 与此至少给一个",
             required = false
         ),
         "keycode" to ToolParameter(
@@ -160,7 +175,17 @@ class PhoneControlTool @Inject constructor(
                 "打开应用：${args["package_name"]?.jsonPrimitive?.contentOrNull ?: "（未指定）"}"
             ACTION_READ_SCREEN -> "读屏：读取当前屏幕可交互元素列表（无障碍窗口树）"
             ACTION_CLICK_ELEMENT ->
-                "点击元素：${args["element_id"]?.jsonPrimitive?.intOrNull ?: "?"}（按 id 无障碍点击）"
+                "点击元素：${args["element_id"]?.jsonPrimitive?.intOrNull ?: "?"}（按 id 点击）"
+            ACTION_CLICK_TEXT -> {
+                val text = args["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val desc = args["content_description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val query = when {
+                    text.isNotBlank() && desc.isNotBlank() ->
+                        context.getString(R.string.phone_action_click_text_query, text, desc)
+                    else -> text.ifBlank { desc }.ifBlank { "（未指定）" }
+                }
+                context.getString(R.string.phone_action_click_text_summary, query)
+            }
             ACTION_TAP ->
                 "点击：(${args["x"]?.jsonPrimitive?.intOrNull ?: "?"} , ${args["y"]?.jsonPrimitive?.intOrNull ?: "?"})"
             ACTION_SWIPE ->
@@ -193,6 +218,7 @@ class PhoneControlTool @Inject constructor(
                 ACTION_OPEN_APP -> openApp(args)
                 ACTION_READ_SCREEN -> readScreen()
                 ACTION_CLICK_ELEMENT -> clickElement(args)
+                ACTION_CLICK_TEXT -> clickText(args)
                 ACTION_TAP -> tap(args)
                 ACTION_SWIPE -> swipe(args)
                 ACTION_LONG_PRESS -> longPress(args)
@@ -219,8 +245,9 @@ class PhoneControlTool @Inject constructor(
             return ToolResult.Error("非法的包名：$pkg")
         }
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在打开 $pkg")
+        status.begin(context.getString(R.string.phone_action_open_app, pkg))
         val ok = service.openApp(pkg)
+        if (ok) awaitForeground(service, pkg)
         status.end()
         return if (ok) {
             ToolResult.Success(JsonPrimitive("已打开应用 $pkg"))
@@ -231,7 +258,7 @@ class PhoneControlTool @Inject constructor(
 
     private suspend fun readScreen(): ToolResult {
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在读屏")
+        status.begin(context.getString(R.string.phone_action_read_screen))
         val elements = service.readScreenElements()
         status.end()
         if (elements.isEmpty()) {
@@ -247,7 +274,7 @@ class PhoneControlTool @Inject constructor(
         val id = args["element_id"]?.jsonPrimitive?.intOrNull
             ?: return ToolResult.Error("缺少必需参数：element_id")
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在点击元素 [$id]")
+        status.begin(context.getString(R.string.phone_action_click_element, id))
         val ok = service.clickElement(id)
         status.end()
         return if (ok) {
@@ -257,13 +284,45 @@ class PhoneControlTool @Inject constructor(
         }
     }
 
+    private suspend fun clickText(args: Map<String, JsonElement>): ToolResult {
+        val text = args["text"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val contentDescription = args["content_description"]?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+        if (text == null && contentDescription == null) {
+            return ToolResult.Error("缺少必需参数：text 或 content_description")
+        }
+        val service = PhoneAccessibilityService.current() ?: return a11yError()
+        val query = text ?: contentDescription.orEmpty()
+        status.begin(context.getString(R.string.phone_action_click_text, query))
+        val ok = service.clickByText(text, contentDescription)
+        status.end()
+        return if (ok) {
+            ToolResult.Success(JsonPrimitive("已点击「$query」"))
+        } else {
+            ToolResult.Error("点击失败：界面上没找到「$query」，可先 read_screen 看当前结构")
+        }
+    }
+
+    /**
+     * 轮询等待目标包名成为前台（复刻 Muse awaitForeground：最多 2s、每 50ms 查一次）。
+     *
+     * 不等的话紧接着的点击会落在旧界面上扑空。超时静默返回，由后续操作自己暴露问题。
+     */
+    private suspend fun awaitForeground(service: PhoneAccessibilityService, targetPackage: String) {
+        val deadline = System.currentTimeMillis() + OPEN_APP_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (PhoneAccessibilityService.foregroundPackage == targetPackage) return
+            delay(FOREGROUND_POLL_MS)
+        }
+    }
+
     private suspend fun tap(args: Map<String, JsonElement>): ToolResult {
         val x = args["x"]?.jsonPrimitive?.intOrNull
             ?: return ToolResult.Error("缺少必需参数：x")
         val y = args["y"]?.jsonPrimitive?.intOrNull
             ?: return ToolResult.Error("缺少必需参数：y")
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在点击 ($x, $y)")
+        status.begin(context.getString(R.string.phone_action_tap, x, y))
         val ok = service.tap(x.toFloat(), y.toFloat())
         status.end()
         return if (ok) {
@@ -284,7 +343,7 @@ class PhoneControlTool @Inject constructor(
             ?: return ToolResult.Error("缺少必需参数：y2（终点 y）")
         val duration = args["duration"]?.jsonPrimitive?.intOrNull ?: 300
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在滑动 ($x1,$y1)→($x2,$y2)")
+        status.begin(context.getString(R.string.phone_action_swipe, x1, y1, x2, y2))
         val ok = service.swipe(x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), duration.toLong())
         status.end()
         return if (ok) {
@@ -300,7 +359,7 @@ class PhoneControlTool @Inject constructor(
         val y = args["y"]?.jsonPrimitive?.intOrNull
             ?: return ToolResult.Error("缺少必需参数：y")
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在长按 ($x, $y)")
+        status.begin(context.getString(R.string.phone_action_long_press, x, y))
         val ok = service.longPress(x.toFloat(), y.toFloat())
         status.end()
         return if (ok) {
@@ -317,7 +376,7 @@ class PhoneControlTool @Inject constructor(
             return ToolResult.Error("输入文本包含不允许的字符（;&|`$\\\\）")
         }
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在输入文字")
+        status.begin(context.getString(R.string.phone_action_input_text))
         val ok = service.typeText(text)
         status.end()
         return if (ok) {
@@ -333,7 +392,7 @@ class PhoneControlTool @Inject constructor(
         val globalAction = GLOBAL_ACTIONS[keycodeName]
             ?: return ToolResult.Error("不支持的按键：$keycodeName（支持：${GLOBAL_ACTIONS.keys.joinToString("/")}）")
         val service = PhoneAccessibilityService.current() ?: return a11yError()
-        status.begin("正在执行按键 $keycodeName")
+        status.begin(context.getString(R.string.phone_action_press_key, keycodeName))
         val ok = service.performGlobal(globalAction)
         status.end()
         return if (ok) {

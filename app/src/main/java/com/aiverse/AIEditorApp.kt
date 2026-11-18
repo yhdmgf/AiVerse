@@ -206,6 +206,10 @@ class AIEditorApp : Application(), Configuration.Provider {
     @Inject
     lateinit var executionModeRepository: com.aiverse.feature.settings.data.repository.ExecutionModeRepository
 
+    /** 进程级 Agent 运行器：Application 级字段注入，后台运行不被 VM 销毁打断。必须在主线程启动。 */
+    @Inject
+    lateinit var agentRunManager: com.aiverse.feature.agent.presentation.run.AgentRunManager
+
     /** 应用语言偏好仓库：持久化用户选择的语言，供 attachBaseContext 同步读取。 */
     @Inject
     lateinit var languageSettings: LanguageSettingsRepository
@@ -221,6 +225,9 @@ class AIEditorApp : Application(), Configuration.Provider {
     /** 远程 SSH 连接管理器：远程模式下启动即用配置建立连接。 */
     @Inject
     lateinit var remoteSshConnection: com.aiverse.feature.agent.domain.container.RemoteSshConnection
+
+    @Inject
+    lateinit var remoteAgentConfigCache: com.aiverse.feature.workspace.domain.RemoteAgentConfigCache
 
     /** 全局网络可用性监听：网络恢复/切换链路时驱动即时重连。 */
     @Inject
@@ -300,6 +307,8 @@ class AIEditorApp : Application(), Configuration.Provider {
         createNotificationChannels()
         // 启动凭据请求监听：容器内 credential helper 写来的 cred-req-* → 全局弹窗回填 → 回喂 git 续跑。
         credentialRequestBridge.start()
+        // 启动进程级 Agent 运行器（常驻协程：事件总线/队列调度）。
+        agentRunManager.start()
         // 启动即把最新的内置指南手册提取到私有配置目录
         appScope.launch {
             ContainerInstaller.extractDocs(this@AIEditorApp)
@@ -497,7 +506,11 @@ class AIEditorApp : Application(), Configuration.Provider {
         runCatching {
             val docs = linkedMapOf<String, String>()
             collectAssetDocs("docs", "", docs)
-            remoteSshConnection.uploadDocs(docs)
+            remoteSshConnection.agentConfigSnapshotSync(
+                docs,
+                remoteSshConnection.config,
+                remoteAgentConfigCache.sshTransport
+            )
         }.onFailure { FileLogger.w(TAG, "同步内置文档到远程失败", it) }
     }
 

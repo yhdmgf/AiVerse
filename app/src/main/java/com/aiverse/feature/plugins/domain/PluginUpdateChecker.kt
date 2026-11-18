@@ -76,7 +76,7 @@ class PluginUpdateChecker @Inject constructor(
                     installedVersion = installedVersion,
                     repository = plugin.repository,
                     source = source,
-                    official = PluginOfficialRepositories.isOfficial(plugin.repository)
+                    official = PluginOfficialRepositories.isOfficialAuthor(plugin.author)
                 )
             }
         }

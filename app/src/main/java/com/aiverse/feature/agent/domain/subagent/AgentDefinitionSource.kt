@@ -32,4 +32,25 @@ internal object AgentDefinitionDirectoryScanner {
         FileLogger.w(TAG, "扫描子代理定义目录失败: $root", e)
         emptyList()
     }
+
+    /**
+     * 从一整套远程配置快照的文件表解析子代理定义（远程加速路径）：[files] 是「容器相对路径 → 文件全文」，
+     * 一次批量读取的结果。只取顶层 `*.md`（相对路径不含 `/`），每个文件一个定义，按名称排序；
+     * 单文件解析异常逐个跳过并记日志；整体异常降级为空列表，不向上抛。
+     */
+    fun scan(root: String, files: Map<String, String>): List<AgentDefinition> = runCatching {
+        val base = root.trimEnd('/')
+        files.filterKeys { rel -> !rel.contains('/') && rel.endsWith(".md", ignoreCase = true) }
+            .mapNotNull { (rel, text) ->
+                val fileName = rel.substringAfterLast('/')
+                runCatching {
+                    AgentDefinitionParser.parseText(text, fileName.removeSuffix(".md"), "$base/$fileName")
+                }.onFailure { FileLogger.w(TAG, "解析子代理定义失败，已跳过: $fileName", it) }
+                    .getOrNull()
+            }
+            .sortedBy { it.name.lowercase() }
+    }.getOrElse { e ->
+        FileLogger.w(TAG, "解析子代理定义快照失败: $root", e)
+        emptyList()
+    }
 }

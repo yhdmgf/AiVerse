@@ -52,6 +52,20 @@ fun ReasoningCapability.selectableLevelsForUi(): List<ReasoningEffort> =
 /** 是否给「思考」总开关：能关闭，或能力未知（交给用户试）。 */
 fun ReasoningCapability.showsThinkingToggle(): Boolean = canDisable || !isKnown
 
+/**
+ * 「思考强度」可选档位的统一过滤：
+ * - 能力已知：能关闭时把「关闭」排在最前，只列模型真实支持的档位（AUTO 由适配器按协议解析，不单独列出）；
+ * - 能力未知（中转站改名 / 自定义模型）：列出全部档位，保留 AUTO 作默认，由用户按模型实际支持情况自选。
+ *
+ * 与 [selectableLevelsForUi] 的差异：未知能力时这里保留 AUTO（聊天页用 AUTO 表示「开思考但用模型默认」，
+ * 且默认档位回退到 AUTO）；子代理编辑页的档位是「必选一个具体强度」，因此把 AUTO 排除。
+ */
+fun ReasoningCapability.reasoningLevelsForUi(): List<ReasoningEffort> = when {
+    !isKnown -> ReasoningEffort.entries
+    canDisable -> listOf(ReasoningEffort.NONE) + levels
+    else -> levels.ifEmpty { ReasoningEffort.entries }
+}
+
 /** 适配器侧协议判定：按实现类分派，OpenAI 系再看是否切了新版端点。 */
 fun reasoningProtocolOf(provider: AIProvider): ReasoningProtocol = when (provider) {
     is AnthropicAdapter -> ReasoningProtocol.ANTHROPIC

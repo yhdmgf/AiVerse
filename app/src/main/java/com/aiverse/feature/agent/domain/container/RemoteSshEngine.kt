@@ -245,12 +245,10 @@ class RemoteSshEngine @Inject constructor(
     /** 拼接 cd 到 projectPath 再执行 command 的完整命令；projectPath 为 null 则直接执行。
      *  优先 cd 到 ~/workspace（符号链接），让 AI 执行 pwd 时看到 ~/workspace 而非真实路径。
      *  ~/workspace 不存在（符号链接未建成）时 fallback 到 projectPath。
-     *  注入 GIT_CONFIG_GLOBAL 指向 App 管理的 ~/.aiverse/gitconfig：
-     *  仅当用户开启「自动注入」时该文件存在（含 include 用户全局配置 + includeIf 限定工作区根），
-     *  文件不存在时 git 静默跳过——不影响用户在服务器上手动 git。 */
+     *  凭据生效走 git 自身的 `[includeIf "gitdir:…"]`（由 [RemoteSshConnection.uploadGitCredentialConfig]
+     *  写入用户全局配置），不再在此设置全局 `GIT_CONFIG_GLOBAL`：那样会接管所有目录的 git，影响服务器用户自己的仓库。 */
     private fun buildCdCommand(command: String, projectPath: String?): String {
-        val prefix = "export GIT_CONFIG_GLOBAL=\"\$HOME/.aiverse/gitconfig\"; "
-        if (projectPath == null) return prefix + command
-        return prefix + "cd ~/workspace 2>/dev/null || cd ${shellQuote(projectPath)} 2>/dev/null; $command"
+        if (projectPath == null) return command
+        return "cd ~/workspace 2>/dev/null || cd ${shellQuote(projectPath)} 2>/dev/null; $command"
     }
 }

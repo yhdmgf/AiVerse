@@ -289,5 +289,14 @@ internal fun pluginErrorMessage(error: PluginError): String {
         PluginErrorCode.CONTENT_INVALID -> stringResource(R.string.plugins_error_content_invalid, detail)
         PluginErrorCode.STORAGE_FAILED -> stringResource(R.string.plugins_error_storage_failed)
         PluginErrorCode.PREVIEW_EXPIRED -> stringResource(R.string.plugins_error_preview_expired)
+        PluginErrorCode.REPOSITORY_MISMATCH -> {
+            // detail 约定为「包内地址\n商店登记地址」，按首个换行拆成两个占位符。
+            val parts = detail.split('\n', limit = 2)
+            stringResource(
+                R.string.plugins_error_repository_mismatch,
+                parts.getOrElse(0) { detail },
+                parts.getOrElse(1) { "" }
+            )
+        }
     }
 }

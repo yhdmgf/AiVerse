@@ -50,11 +50,14 @@ class GeneralSettingsRepository @Inject constructor(
         val MAX_NETWORK_RETRIES_KEY = intPreferencesKey("max_network_retries")
         val MAX_SUBAGENT_RUNNING_KEY = intPreferencesKey("max_subagent_running")
         val ENTER_TO_SEND_KEY = booleanPreferencesKey("enter_to_send")
+        val AUTO_EXPAND_REASONING_KEY = booleanPreferencesKey("auto_expand_reasoning")
         val COMPACTION_THRESHOLD_PERCENT_KEY = intPreferencesKey("compaction_threshold_percent")
         val SENDFILE_MAX_SIZE_MB_KEY = intPreferencesKey("sendfile_max_size_mb")
         val GOAL_MAX_TURNS_KEY = intPreferencesKey("goal_max_turns")
         val GOAL_MAX_TOKENS_KEY = intPreferencesKey("goal_max_tokens")
         val DELETE_EXTERNAL_WORKSPACE_SESSIONS_KEY = booleanPreferencesKey("delete_external_workspace_sessions")
+        /** 「MCP 工具按需加载（实验）」：开启后 MCP 工具不逐个注册，只提供 mcp_search / mcp_call 两个入口。 */
+        val MCP_LAZY_TOOLS_KEY = booleanPreferencesKey("mcp_lazy_tools")
         /** 「提示词」页使用说明公告已展示内容的哈希；无值或与当前内容哈希不一致时重新弹出。 */
         val PROMPTS_ANNOUNCEMENT_SHOWN_HASH_KEY = stringPreferencesKey("prompts_announcement_shown_hash")
         /** 应用启动次数：主进程每次冷启动自增一，供 token 统计页概览展示。 */
@@ -199,6 +202,14 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[ENTER_TO_SEND_KEY] = enabled }
     }
 
+    /** 思考卡片是否默认展开正文；默认开启。 */
+    val autoExpandReasoningFlow: Flow<Boolean> =
+        context.generalDataStore.data.map { it[AUTO_EXPAND_REASONING_KEY] ?: true }
+
+    suspend fun setAutoExpandReasoning(enabled: Boolean) {
+        context.generalDataStore.edit { it[AUTO_EXPAND_REASONING_KEY] = enabled }
+    }
+
     /** 自动压缩触发阈值（上下文窗口的百分比）；默认 90，限定 1..100。 */
     val compactionThresholdPercentFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[COMPACTION_THRESHOLD_PERCENT_KEY] ?: DEFAULT_COMPACTION_THRESHOLD_PERCENT).coerceIn(1, 100)
@@ -271,6 +282,19 @@ class GeneralSettingsRepository @Inject constructor(
 
     /** 移除外部工作区前读取一次该偏好。 */
     suspend fun deleteExternalWorkspaceSessions(): Boolean = deleteExternalWorkspaceSessionsFlow.first()
+
+    /** 「MCP 工具按需加载（实验）」；默认关闭（关闭时行为与逐个注册完全一致）。 */
+    val mcpLazyToolsFlow: Flow<Boolean> =
+        context.generalDataStore.data.map { it[MCP_LAZY_TOOLS_KEY] ?: false }
+
+    suspend fun setMcpLazyTools(enabled: Boolean) {
+        context.generalDataStore.edit { it[MCP_LAZY_TOOLS_KEY] = enabled }
+    }
+
+    /** 备份快照：MCP 工具按需加载开关。 */
+    suspend fun mcpLazyToolsSnapshot(): Boolean = mcpLazyToolsFlow.first()
+
+    suspend fun restoreMcpLazyTools(enabled: Boolean) = setMcpLazyTools(enabled)
 
     /** 「提示词」页公告已展示内容的哈希；无值表示从未展示过。 */
     val promptsAnnouncementShownHashFlow: Flow<String?> = context.generalDataStore.data.map { prefs ->

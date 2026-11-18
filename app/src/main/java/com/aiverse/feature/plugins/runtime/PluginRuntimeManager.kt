@@ -34,8 +34,10 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
@@ -67,11 +69,13 @@ class PluginRuntimeManager @Inject constructor(
     private val tipManager: PluginTipManager,
     private val chatService: PluginChatService,
     private val modelService: PluginModelService,
+    private val sessionSourceHostService: PluginSessionHostService,
     private val secretStore: PluginSecretStore,
     private val systemService: PluginSystemService,
     private val introspectionService: PluginIntrospectionService,
     private val toolService: PluginToolService,
     private val httpService: PluginHttpService,
+    private val portService: PluginPortService,
     private val appForegroundMonitor: AppForegroundMonitor,
     private val overlayManager: PluginOverlayManager
 ) {
@@ -315,6 +319,10 @@ class PluginRuntimeManager @Inject constructor(
             "host.chat.resolveToolApproval" -> hostCall { chatService.resolveToolApproval(pluginId, params) }
             "host.chat.resolveQuestion" -> hostCall { chatService.resolveQuestion(pluginId, params) }
             "host.chat.resolvePlanApproval" -> hostCall { chatService.resolvePlanApproval(pluginId, params) }
+            "host.sessionSource.setSessions" -> hostCall { sessionSourceHostService.setSessions(pluginId, params) }
+            "host.sessionSource.setLoading" -> hostCall { sessionSourceHostService.setLoading(pluginId, params) }
+            "host.sessionSource.setError" -> hostCall { sessionSourceHostService.setError(pluginId, params) }
+            "host.sessionSource.setThinking" -> hostCall { sessionSourceHostService.setThinking(pluginId, params) }
             "host.model.listProviders" -> hostCall { modelService.listProviders(pluginId) }
             "host.model.listModels" -> hostCall { modelService.listModels(pluginId, params) }
             "host.model.create" -> hostCall { modelService.create(pluginId, params) }
@@ -370,6 +378,17 @@ class PluginRuntimeManager @Inject constructor(
             "host.tools.resolve" -> hostCall { toolService.resolve(pluginId, params) }
             "host.mcp.status" -> hostCall { introspectionService.mcpStatus(pluginId) }
             "host.http.request" -> hostCall { httpService.request(pluginId, params) }
+            "host.ports.forward" -> hostCall { buildJsonObject { put("localPort", portService.addPortMapping(pluginId, params)) } }
+            "host.ports.close" -> hostCall {
+                buildJsonObject { put("closed", portService.removePortMapping(pluginId, params)) }
+            }
+            "host.ports.list" -> hostCall {
+                buildJsonArray {
+                    portService.listPorts(pluginId).forEach { mapping ->
+                        add(buildJsonObject { mapping.forEach { (key, port) -> put(key, port) } })
+                    }
+                }
+            }
             else -> throw PluginProcessException("METHOD_UNKNOWN", "unknown host method: $method")
         }
     }

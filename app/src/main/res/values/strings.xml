@@ -6,6 +6,7 @@
     <string name="plugin_default_provider_missing">默认插件提供商已被删除，或提供它的插件已停用/卸载，请重新选择模型</string>
     <string name="plugin_tool_hook_denied">插件阻止了该工具调用</string>
     <string name="plugin_review_denied">插件代审核拒绝了该工具调用</string>
+    <string name="plugin_delegation_failed">委托给插件 %1$s 的工具执行失败：%2$s</string>
     <string name="common_tool_missing_argument">缺少参数：%1$s。</string>
     <string name="plan_mode_invalid_action">无效的 action：%1$s。支持 enter 或 exit。</string>
     <string name="plan_mode_already_active">当前已处于 PLAN（计划）模式。</string>
@@ -262,6 +263,8 @@
     <string name="settings_percent_value">%1$d%%</string>
     <string name="settings_compaction_threshold_input_hint">填 1-100 的整数百分比</string>
     <string name="settings_general_tools">工具</string>
+    <string name="settings_mcp_lazy_tools">MCP 工具按需加载（实验）</string>
+    <string name="settings_mcp_lazy_tools_desc">工具较多时只提供搜索/调用两个入口，减少上下文；内置工具不受影响。默认关闭。</string>
     <string name="settings_sendfile_max_size">sendFile 单文件上限</string>
     <string name="settings_sendfile_max_size_desc">单个文件大小上限，超过则整批发送失败</string>
     <string name="settings_mb_value">%1$d MB</string>
@@ -362,6 +365,23 @@
     <string name="settings_about">关于</string>
     <string name="settings_memory">记忆</string>
     <string name="settings_plugins">插件</string>
+    <string name="plugin_sessions_title">插件会话</string>
+    <string name="plugin_sessions_refresh">刷新</string>
+    <string name="plugin_sessions_empty">没有可用的插件会话</string>
+    <string name="plugin_sessions_no_messages">暂无消息</string>
+    <string name="plugin_sessions_load_more">加载更早消息</string>
+    <string name="plugin_session_load_failed">插件会话加载失败：%1$s</string>
+    <string name="plugin_session_send_failed">插件会话发送失败：%1$s</string>
+    <string name="plugin_session_refresh_failed">插件会话刷新失败：%1$s</string>
+    <string name="plugin_sessions_count">%1$d 个远端会话</string>
+    <string name="plugin_sessions_status_running">运行中</string>
+    <string name="plugin_sessions_status_failed">失败</string>
+    <string name="plugin_sessions_status_needs_input">待输入</string>
+    <string name="plugin_sessions_status_idle">空闲</string>
+    <string name="plugin_sessions_retry">重试</string>
+    <string name="plugin_sessions_readonly_hint">只读会话 · 消息由插件提供</string>
+    <string name="plugin_sessions_untitled">未命名会话</string>
+    <string name="plugin_sessions_thinking_default">正在思考中…</string>
     <string name="settings_tts">朗读</string>
     <string name="tts_rate">语速</string>
     <string name="tts_pitch">音调</string>
@@ -438,6 +458,8 @@
     <string name="plugins_dev_mode">开发者侧载</string>
     <string name="plugins_dev_mode_desc">启用后「开发中」标签页会列出开发目录里的插件项目；保存文件后自动重载。仅用于开发调试。</string>
     <string name="plugins_dev_root">开发目录：%1$s</string>
+    <string name="plugins_docs_about">关于插件</string>
+    <string name="plugins_docs_dev">开发插件</string>
     <string name="plugins_mcp_transport_http">HTTP</string>
     <string name="plugins_mcp_transport_stdio">stdio</string>
     <string name="plugin_tool_not_authorized">插件已停用，工具不再可用</string>
@@ -516,10 +538,13 @@
     <string name="plugins_error_content_invalid">内容无效：%1$s</string>
     <string name="plugins_error_storage_failed">保存失败，请稍后重试。</string>
     <string name="plugins_error_preview_expired">这次导入已经过期，请重新选择文件。</string>
+    <string name="plugins_error_repository_mismatch">源码仓库与商店登记不一致：包内 %1$s，商店 %2$s。已取消安装。</string>
 
     <!-- 插件商店（AiCode 移植） -->
     <string name="plugins_store_empty_title">暂无可用插件</string>
     <string name="plugins_store_empty_hint">当前索引还没有发布插件，可以在右上角「插件设置」里添加第三方插件源。</string>
+    <string name="plugins_store_badge_official">官方</string>
+    <string name="plugins_badge_official">官方渠道</string>
     <string name="plugins_store_badge_unofficial">非官方</string>
     <string name="plugins_store_retry">重试</string>
     <string name="plugins_store_refresh_done">索引刷新完成</string>
@@ -541,6 +566,21 @@
     <string name="plugins_store_detail_source">源码仓库</string>
     <string name="plugins_store_detail_license">许可证</string>
     <string name="plugins_store_detail_homepage">项目主页</string>
+    <string name="plugins_store_detail_share">分享插件包</string>
+
+    <!-- 已安装插件导出为 zip 分享 -->
+    <string name="plugins_export_hint">导出插件包</string>
+    <string name="plugins_export_action">导出</string>
+
+    <!-- 通过 aiverse://?url= 协议直接导入插件（测试） -->
+    <string name="plugin_import_title">导入插件</string>
+    <string name="plugin_import_downloading">正在下载插件…</string>
+    <string name="plugin_import_confirm">安装</string>
+    <string name="plugin_import_cancel">取消</string>
+    <string name="plugin_import_success">插件已导入</string>
+    <string name="plugin_import_failed">导入插件失败</string>
+    <string name="plugin_import_download_failed">下载插件失败，请检查链接后重试</string>
+    <string name="plugin_import_link_invalid">导入链接无效</string>
 
     <!-- 插件开发者侧载（AiCode 移植） -->
     <string name="plugins_dev_empty_title">开发目录里还没有插件</string>
@@ -989,6 +1029,8 @@
     <string name="chat_reasoning_cannot_disable">该模型无法关闭思考，已改用最低档</string>
     <string name="chat_reasoning_endpoint_weak">当前端点可能忽略「关闭」，改用该厂商的新版端点（Responses）才能真关闭</string>
     <string name="chat_reasoning_disclaimer">以上档位定义参考模型官方文档，实际行为以官方文档为准。</string>
+    <string name="chat_reasoning_level_unsupported">已切换模型：当前思考档位不被支持，已自动切换到受支持的档位</string>
+    <string name="chat_reasoning_invalid_request_hint">请求被拒绝：所选思考档位可能不被该模型支持，请在「思考强度」中改选</string>
     <string name="provider_model_section_reasoning">思考档位</string>
     <string name="provider_model_reasoning_hint">只勾选该模型真实支持的档位；全部不勾则由内置能力表自动判断</string>
     <string name="provider_model_reasoning_can_disable">可以关闭思考</string>
@@ -1043,6 +1085,11 @@
     <!-- About -->
     <string name="about_version">版本</string>
     <string name="about_github_repo">GitHub 仓库</string>
+    <string name="about_star_prompt_title">喜欢 AiVerse 吗？</string>
+    <string name="about_star_prompt_body">去 GitHub 给我们点个 Star，你的支持是我们持续迭代的动力。</string>
+    <string name="about_star_prompt_action">去点 Star</string>
+    <string name="about_star_prompt_dismiss">不再显示</string>
+    <string name="about_star_prompt_later">稍后再说</string>
     <string name="about_upstream_repo">上游仓库</string>
     <string name="about_license">开源许可证</string>
     <string name="about_feedback">意见反馈</string>
@@ -1272,6 +1319,13 @@
     <string name="drawer_expand_subagents">展开子代理</string>
     <string name="drawer_collapse_subagents">收起子代理</string>
     <string name="file_browser_up">上一级</string>
+    <string name="file_browser_title">文件树</string>
+    <string name="file_browser_add_folder">添加本机文件夹</string>
+    <string name="file_browser_add_folder_failed">无法添加该文件夹，请选择设备存储中的目录并授予存储权限</string>
+    <string name="file_browser_upload_file">上传文件</string>
+    <string name="file_browser_upload_folder">上传文件夹</string>
+    <string name="file_browser_upload_failed">上传失败，请检查存储权限与目标目录写入权限</string>
+    <string name="file_browser_remove_folder">移除此文件夹</string>
     <string name="file_browser_empty">空目录</string>
     <string name="file_browser_error">读取目录失败</string>
     <string name="file_browser_refresh">刷新</string>
@@ -1380,6 +1434,7 @@
     <string name="chat_perm_deny">拒绝</string>
     <string name="chat_perm_always_allow">始终允许</string>
     <string name="chat_perm_session_label">会话「%1$s」</string>
+    <string name="chat_perm_plugin_source">插件请求：%1$s（%2$s）</string>
     <string name="chat_plan_completed">计划已完成</string>
     <string name="chat_continue_feedback">继续反馈</string>
     <string name="chat_approve_and_implement">批准并实施</string>
@@ -2476,6 +2531,9 @@
     <string name="workspace_new_workspace">新建工作区</string>
     <string name="workspace_name_hint">例如 my-project</string>
     <string name="workspace_name_exists">已存在同名工作区</string>
+    <string name="workspace_rename">重命名工作区</string>
+    <string name="workspace_rename_hint">显示名，仅影响展示，不改动目录</string>
+    <string name="workspace_rename_exists">已有工作区使用此显示名</string>
     <string name="workspace_remote_root_create_failed">远程工作区目录创建失败，请检查路径与服务器权限</string>
     <string name="workspace_remote_default_create_failed">远程默认工作区创建失败，请检查服务器权限与磁盘空间</string>
     <string name="workspace_add_external">添加外部工作区</string>
@@ -2971,10 +3029,30 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="phone_overlay_collapse">收起</string>
     <string name="phone_overlay_stop">停止</string>
     <string name="phone_overlay_recent_action">最近操作</string>
+    <string name="phone_overlay_done_title">已完成</string>
+    <string name="phone_overlay_failed_title">操作失败</string>
+    <string name="phone_overlay_result_summary">操作结果</string>
+    <string name="phone_overlay_copy_result">复制</string>
+    <string name="phone_overlay_result_copied">已复制到剪贴板</string>
+    <string name="phone_overlay_back_to_app">回到应用</string>
+    <string name="phone_overlay_finish">完成</string>
+    <string name="phone_overlay_running">AI 正在操作手机…</string>
+    <string name="phone_overlay_expand_hint">点按展开查看</string>
     <string name="phone_node_editable">输入框</string>
     <string name="phone_node_scrollable">列表</string>
     <string name="phone_node_clickable">按钮</string>
     <string name="phone_node_default">节点</string>
+    <string name="phone_action_open_app">正在打开 %1$s</string>
+    <string name="phone_action_read_screen">正在读屏</string>
+    <string name="phone_action_click_element">正在点击元素 [%1$d]</string>
+    <string name="phone_action_tap">正在点击 (%1$d, %2$d)</string>
+    <string name="phone_action_swipe">正在滑动 (%1$d,%2$d)→(%3$d,%4$d)</string>
+    <string name="phone_action_long_press">正在长按 (%1$d, %2$d)</string>
+    <string name="phone_action_input_text">正在输入文字</string>
+    <string name="phone_action_press_key">正在执行按键 %1$s</string>
+    <string name="phone_action_click_text">正在按文本点击「%1$s」</string>
+    <string name="phone_action_click_text_summary">按文本/描述点击：%1$s</string>
+    <string name="phone_action_click_text_query">%1$s（描述：%2$s）</string>
     <string name="plugin_saved_path">已保存: %1$s</string>
     <string name="settings_roles">角色</string>
     <string name="roles_add">新建角色</string>
@@ -3025,4 +3103,18 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="plugins_store_upload_invalid_type">只能上传 .zip 插件包</string>
     <string name="plugins_store_upload_too_large">插件包不能超过 10MB</string>
     <string name="plugins_store_upload_read_failed">无法读取所选文件</string>
+    <string name="plugins_store_upload_id_exists_title">插件 ID 已存在</string>
+    <string name="plugins_store_upload_id_exists_body">商店里已有 ID 为「%1$s」的插件。要覆盖更新它，还是换个 ID 重新提交？</string>
+    <string name="plugins_store_upload_overwrite">覆盖更新</string>
+    <string name="plugins_store_upload_change_id">换个 ID</string>
+    <string name="plugins_store_upload_new_id_hint">为避免覆盖「%1$s」，请填写一个新的插件 ID</string>
+    <string name="plugins_store_upload_new_id_label">新插件 ID</string>
+    <string name="plugins_store_upload_new_id_confirm">确认上传</string>
+    <string name="plugins_store_upload_new_id_invalid">插件 ID 格式不正确，应为 xx.yy 形式</string>
+    <string name="plugins_store_upload_author_dialog_title">请输入作者名</string>
+    <string name="plugins_store_upload_author_dialog_message">作者名将作为插件所有者标识，首次填写后固定，用于防止他人冒用你的插件 ID。</string>
+    <string name="plugins_store_upload_author_label">作者名</string>
+    <string name="plugins_store_upload_author_required">作者名不能为空</string>
+    <string name="plugins_store_upload_author_confirm">确认</string>
+    <string name="phone_permission_deny_package">安全防护：该应用在「不碰」名单内（银行/支付/券商类），AI 不读也不操作</string>
 </resources>
