@@ -418,19 +418,32 @@ internal fun MarkdownContent(
                 },
             )
 
-            Markdown(
-                state = renderState,
-                modifier = modifier,
-                colors = mdColors,
-                typography = mdTypography,
-                padding = mdPadding,
-                dimens = mdDimens,
-                // 关闭段落文本的 animateContentSize：快速流式更新下它会持续追赶目标高度，反而弹性抖动。
-                animations = markdownAnimations(animateTextSize = { this }),
-                imageTransformer = mathTransformer,
-                components = mdComponents,
-                success = successRenderer,
-            )
+            // 防护：流式中间态（streamingCacheKey != null）与空白内容都不进入第三方渲染库——
+            // 该库 0.41.0 对不完整的 Markdown AST（流式逐字增长时的中间态，如只有列表 marker
+            // 没有 item、只有表头没有行）会调 .first() 抛 NoSuchElementException，表现为聊天页
+            // 绘制阶段闪退。流式期间（打字机效果由调用方保留）直接渲染纯文本，上游结束落库后
+            // （streamingCacheKey 为 null）再走 Markdown，让不完整 AST 永不进入该库。
+            if (streamingCacheKey != null || processed.isBlank()) {
+                PlainMarkdownText(
+                    text = text,
+                    color = color,
+                    modifier = modifier
+                )
+            } else {
+                Markdown(
+                    state = renderState,
+                    modifier = modifier,
+                    colors = mdColors,
+                    typography = mdTypography,
+                    padding = mdPadding,
+                    dimens = mdDimens,
+                    // 关闭段落文本的 animateContentSize：快速流式更新下它会持续追赶目标高度，反而弹性抖动。
+                    animations = markdownAnimations(animateTextSize = { this }),
+                    imageTransformer = mathTransformer,
+                    components = mdComponents,
+                    success = successRenderer,
+                )
+            }
         } else if (loading != null) {
             loading()
         } else {
