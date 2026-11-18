@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.R
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.semanticColors
+import com.aiverse.core.ui.guardRender
 import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
@@ -424,16 +425,20 @@ internal fun MarkdownContent(
             // 顶层块列表为空）会调 .first() 抛 NoSuchElementException，表现为聊天页绘制阶段闪退。
             // 流式期间（打字机效果由调用方保留）直接渲染纯文本，上游结束落库后（streamingCacheKey
             // 为 null）且解析出非空 AST 再走 Markdown，让不完整 AST 永不进入该库。
+            // 兜底守卫：库/解析器对「结构不完整」的 AST 仍可能在测量或绘制期抛
+            // NoSuchElementException（List is empty.）等异常，组合期 try/catch 拦不住，
+            // 这里在子树的最小/绘制层再包一层，异常只丢这一条消息的正文，不崩 App。
+            val bodyModifier = modifier.guardRender("chat-markdown")
             if (streamingCacheKey != null || processed.isBlank() || renderState.node.children.isEmpty()) {
                 PlainMarkdownText(
                     text = text,
                     color = color,
-                    modifier = modifier
+                    modifier = bodyModifier
                 )
             } else {
                 Markdown(
                     state = renderState,
-                    modifier = modifier,
+                    modifier = bodyModifier,
                     colors = mdColors,
                     typography = mdTypography,
                     padding = mdPadding,
@@ -451,7 +456,7 @@ internal fun MarkdownContent(
             PlainMarkdownText(
                 text = text,
                 color = color,
-                modifier = modifier
+                modifier = modifier.guardRender("chat-markdown")
             )
         }
     }

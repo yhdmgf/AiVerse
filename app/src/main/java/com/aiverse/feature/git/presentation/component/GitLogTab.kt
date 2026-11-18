@@ -118,13 +118,13 @@ private fun CommitAuthorText(
     ) {
         // 作者头像（点击跳转全部提交者）
         AuthorAvatar(
-            name = authors.first(),
+            name = authors.firstOrNull().orEmpty(),
             size = 16.dp,
             modifier = Modifier.clickable { onShowContributors(authors) }
         )
         // 第一作者名（点击跳转全部提交者）
         Text(
-            text = authors.first(),
+            text = authors.firstOrNull().orEmpty(),
             style = style,
             color = color,
             maxLines = 1,

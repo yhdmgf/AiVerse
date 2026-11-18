@@ -103,6 +103,20 @@ jobs:
         run: |
           ./gradlew :app:assembleUniversalBeta :app:assembleArmsoloBeta :app:assembleX86soloBeta
 
+      # beta/测试包同样是 R8 混淆产物，mapping 必须跟构建一起留存，否则线上崩溃无法还原。
+      - name: 上传 R8 mapping（retrace 用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapping-beta-${{ github.sha }}
+          path: |
+            app/build/outputs/mapping/beta/mapping.txt
+            app/build/outputs/mapping/beta/configuration.txt
+            app/build/outputs/mapping/beta/seeds.txt
+            app/build/outputs/mapping/beta/usage.txt
+          if-no-files-found: warn
+          retention-days: 90
+
       - name: 收集产物
         if: steps.earlycheck.outputs.skip != 'true'
         run: |
