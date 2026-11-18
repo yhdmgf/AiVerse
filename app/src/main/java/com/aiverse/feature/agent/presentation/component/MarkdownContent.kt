@@ -418,12 +418,13 @@ internal fun MarkdownContent(
                 },
             )
 
-            // 防护：流式中间态（streamingCacheKey != null）与空白内容都不进入第三方渲染库——
-            // 该库 0.41.0 对不完整的 Markdown AST（流式逐字增长时的中间态，如只有列表 marker
-            // 没有 item、只有表头没有行）会调 .first() 抛 NoSuchElementException，表现为聊天页
-            // 绘制阶段闪退。流式期间（打字机效果由调用方保留）直接渲染纯文本，上游结束落库后
-            // （streamingCacheKey 为 null）再走 Markdown，让不完整 AST 永不进入该库。
-            if (streamingCacheKey != null || processed.isBlank()) {
+            // 防护：流式中间态（streamingCacheKey != null）、空白内容、解析出空 AST
+            // （顶层无任何块）都不进入第三方渲染库——该库 0.41.0 对不完整的 Markdown AST
+            // （流式逐字增长时的中间态、只有列表 marker 没有 item、只有表头没有行、解析结果
+            // 顶层块列表为空）会调 .first() 抛 NoSuchElementException，表现为聊天页绘制阶段闪退。
+            // 流式期间（打字机效果由调用方保留）直接渲染纯文本，上游结束落库后（streamingCacheKey
+            // 为 null）且解析出非空 AST 再走 Markdown，让不完整 AST 永不进入该库。
+            if (streamingCacheKey != null || processed.isBlank() || renderState.node.children.isEmpty()) {
                 PlainMarkdownText(
                     text = text,
                     color = color,
