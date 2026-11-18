@@ -6,12 +6,11 @@
     <br />
     <a href="README.md">中文</a> · <a href="README.en.md">English</a>
   </p>
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
-  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
-  <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
+  <p align="center">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
+    <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
+    <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
+  </p>
 </p>
 
 <p align="center">
@@ -102,8 +101,6 @@ AiVerse 拥有强大的插件系统，允许第三方开发者为应用扩展新
 ### 插件安全
 
 插件来自第三方开发者，安装前请确认来源可信。插件在容器里以独立进程运行（Node 或 Python），具备读写文件、联网、执行命令的能力。商店会对插件做安全审计，宿主提供权限控制（Shizuku 命令、悬浮窗、备份读写可单独授权）。
-
-> 📖 **了解更多**：查看[插件安装与使用指南](https://www.aivapp.cn/guide/scripts)或[插件开发指南](https://www.aivapp.cn/advanced/plugin-dev)了解如何安装、使用或开发插件。
 
 ## 快速开始
 
