@@ -764,7 +764,7 @@ private fun SessionListContent(
         groups.forEach { group ->
             item(key = "group-${group.groupKey}", contentType = "group-header") {
                 SettingsGroupHeader(
-                    text = sessionGroupLabel(group.groupKey, group.sessions.first())
+                    text = group.sessions.firstOrNull()?.let { sessionGroupLabel(group.groupKey, it) } ?: ""
                 )
             }
             itemsIndexed(

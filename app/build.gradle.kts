@@ -253,6 +253,13 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 诊断构建开关（只用于排查 release 专属崩溃，产物不可对外发布）：
+            //   ./gradlew assembleRelease -Pdiag=nobf     → 不混淆，保留真实类名/方法名
+            //   ./gradlew assembleRelease -Pdiag=noopt    → 不混淆 + 不优化（只剩 shrink）
+            when ((project.findProperty("diag") as String?).orEmpty()) {
+                "nobf" -> proguardFiles("proguard-diag-nobf.pro")
+                "noopt" -> proguardFiles("proguard-diag-nobf.pro", "proguard-diag-noopt.pro")
+            }
             // 可复现构建：AGP 8.3+ 默认往 APK 写 version-control-info.textproto，
             // 其中 local_root_path 是构建机绝对路径，GitHub CI 与 F-Droid 构建服务器必然不同，
             // 会让两边 APK 字节不一致导致可复现对比失败。关闭之（版本溯源由 git tag/CI 保证）。

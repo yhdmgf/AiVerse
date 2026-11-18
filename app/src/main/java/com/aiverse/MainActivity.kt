@@ -1391,7 +1391,7 @@ fun AppNavigation(
                     OnboardingStep.SIMULATE_CHOOSE_MODEL -> {
                         val current = settingsViewModel.providers.value.firstOrNull()
                         if (current != null && current.models.isNotEmpty()) {
-                            agentViewModel.setSessionProviderModel(current.id, current.effectiveModel.ifEmpty { current.models.first() })
+                            agentViewModel.setSessionProviderModel(current.id, current.effectiveModel.ifEmpty { current.models.firstOrNull().orEmpty() })
                         }
                         onboardingCoordinator.nextStep()
                     }
@@ -1450,7 +1450,7 @@ fun AppNavigation(
                     OnboardingStep.SIMULATE_CHOOSE_MODEL -> {
                         val current = settingsViewModel.providers.value.firstOrNull()
                         if (current != null && current.models.isNotEmpty()) {
-                            agentViewModel.setSessionProviderModel(current.id, current.effectiveModel.ifEmpty { current.models.first() })
+                            agentViewModel.setSessionProviderModel(current.id, current.effectiveModel.ifEmpty { current.models.firstOrNull().orEmpty() })
                         }
                         onboardingCoordinator.nextStep()
                     }
