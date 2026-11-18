@@ -3,24 +3,16 @@ package com.aiverse.feature.backup.presentation
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,11 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.R
 import com.aiverse.core.theme.LocalUIDensityTokens
-import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.feature.backup.data.BetaHandoffRepository
 import com.aiverse.feature.backup.domain.HandoffProtocol
 import compose.icons.FeatherIcons
@@ -45,12 +35,14 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * 测试版侧的「从正式版导入数据」引导卡。
+ * 测试版侧的「从正式版导入数据」引导弹窗。
  *
  * 只在 [BetaHandoffPromptHost] 判定为 true 时弹出：当前是测试版包、本机已装正式版、
  * 自身还没有数据、用户此前没点过「暂不」。
+ *
+ * 用居中 [AlertDialog]（而非底部 sheet）：与「这是一个需要用户确认的提示」语义一致，
+ * 点弹窗外空白处即触发 [AlertDialog.onDismissRequest] → 关闭，不强制用户必须选择。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BetaHandoffPromptCard(
     onImport: () -> Unit,
@@ -58,20 +50,9 @@ fun BetaHandoffPromptCard(
 ) {
     val t = LocalUIDensityTokens.current
 
-    AdaptiveModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentWindowInsets = { WindowInsets(0.dp) },
-        dialogMaxWidth = 600.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(t.lg)
-                .padding(bottom = t.xl)
-                .navigationBarsPadding()
-        ) {
+        title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = FeatherIcons.Download,
@@ -86,38 +67,30 @@ fun BetaHandoffPromptCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-
-            Spacer(Modifier.height(t.md))
+        },
+        text = {
             Text(
                 text = stringResource(R.string.beta_handoff_prompt_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
-
-            Spacer(Modifier.height(t.lg))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(t.sm)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f).height(t.touchTarget)
-                ) {
-                    Text(stringResource(R.string.common_later))
-                }
-                Button(
-                    onClick = onImport,
-                    modifier = Modifier.weight(1f).height(t.touchTarget)
-                ) {
-                    Text(
-                        text = stringResource(R.string.backup_import_btn),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
+        },
+        confirmButton = {
+            TextButton(onClick = onImport) {
+                Text(
+                    text = stringResource(R.string.backup_import_btn),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
             }
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_later))
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface
+    )
 }
 
 /**
@@ -131,7 +104,7 @@ fun BetaHandoffPromptHost(repository: BetaHandoffRepository) {
     BetaHandoffPromptSheet(repository = repository)
 }
 
-/** 引导卡自身：本次安装内只展示一次，关闭后从组合树里移除。 */
+/** 引导弹窗自身：本次安装内只展示一次，关闭后从组合树里移除。 */
 @Composable
 private fun BetaHandoffPromptSheet(repository: BetaHandoffRepository) {
     val context = LocalContext.current

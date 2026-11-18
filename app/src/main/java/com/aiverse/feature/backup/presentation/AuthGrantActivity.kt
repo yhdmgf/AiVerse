@@ -51,7 +51,9 @@ class AuthGrantActivity : ComponentActivity() {
             else -> Unit
         }
         if (!isFromBeta()) { FileLogger.w(TAG, "调用方签名与 beta 不一致，拒绝授权"); finish(); return }
-        setContentView(null)
+        // 注意：不要调用 setContentView(null)。ComponentActivity + Compose 的 setContent {}
+        // 会自建并安装 ComposeView，先 setContentView(null) 会把 null 传给 PhoneWindow.addView，
+        // 直接抛 "Cannot add a null child view to a ViewGroup"（beta 拉起正式版授权页时崩在这里）。
         setContent { AIEditorTheme { AuthGrantScreen(onAllow = ::onAllow, onDeny = ::onDeny, onOpenExistingBackup = ::onOpenExistingBackup) } }
     }
 
