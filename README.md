@@ -12,11 +12,6 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>
   <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />
   <a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/alpine-linux"><img src="https://img.shields.io/badge/topic-alpine--linux-0078D6.svg" alt="Topic: alpine-linux" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/aiverse"><img src="https://img.shields.io/badge/topic-aiverse-0078D6.svg" alt="Topic: aiverse" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/agent"><img src="https://img.shields.io/badge/topic-agent-0078D6.svg" alt="Topic: agent" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/android"><img src="https://img.shields.io/badge/topic-android-0078D6.svg" alt="Topic: android" /></a>
-  <a href="https://github.com/yhdmgf/AiVerse/topics/mcp"><img src="https://img.shields.io/badge/topic-mcp-0078D6.svg" alt="Topic: mcp" /></a>
 </p>
 
 <p align="center">
@@ -84,6 +79,31 @@ AiVerse 是运行在 Android 上的通用 AI Coding Agent，把一套完整的 L
 - **外观与语言** — 主题明暗、预设配色、莫奈取色、自定义背景图，中英双语界面
 - **网络代理** — 支持全局代理与供应商级代理分别配置
 - **备份与还原** — 加密导出/导入供应商配置、凭据、聊天历史与工作区文件
+
+## 插件系统
+
+AiVerse 拥有强大的插件系统，允许第三方开发者为应用扩展新能力。插件是打包好的 zip 文件，安装后可以给 AI 增加新工具、新技能、新供应商，也能在设置、侧栏、聊天菜单等位置多出新的界面入口，或接入新的 MCP 服务器。所有插件都在「设置 → 插件」里统一管理。
+
+### 插件能做什么
+
+- **AI 新工具**：向 AI 注册可调用的工具，装好后出现在 AI 的工具列表里，像内置工具一样被调用
+- **技能与子代理**：给 AI 补充某类任务的标准流程（技能）或专职角色（子代理）
+- **新的界面入口**：在设置、侧栏底部、聊天菜单、文件树长按菜单等位置新增入口，点进去是插件提供的页面
+- **MCP 服务器**：把外部工具通过 MCP 接进来，随插件启停
+- **AI 供应商**：在「设置 → AI 供应商」里多一个带「插件」标签的供应商
+- **悬浮窗、备份参与等**：部分插件还会申请悬浮窗、参与备份、调用 Shizuku 等能力
+
+### 三种安装方式
+
+1. **从 zip 包安装**：拿到插件的 zip 包，进入「设置 → 插件」，点右上角「+」，从文件里选中 zip
+2. **从插件商店安装**：切到「商店」标签页，浏览或搜索插件，点安装即可
+3. **开发中目录（边改边试）**：开启开发者模式后，`~/.aiverse/plugin-dev/` 下的插件目录会自动出现，改动文件会自动重打包替换
+
+### 插件安全
+
+插件来自第三方开发者，安装前请确认来源可信。插件在容器里以独立进程运行（Node 或 Python），具备读写文件、联网、执行命令的能力。商店会对插件做安全审计，宿主提供权限控制（Shizuku 命令、悬浮窗、备份读写可单独授权）。
+
+> 📖 **了解更多**：查看[插件安装与使用指南](https://www.aivapp.cn/guide/scripts)或[插件开发指南](https://www.aivapp.cn/advanced/plugin-dev)了解如何安装、使用或开发插件。
 
 ## 快速开始
 
