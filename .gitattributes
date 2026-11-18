@@ -42,3 +42,12 @@
 *.ttf    binary
 *.otf    binary
 *.ttc    binary
+
+# ===== GitHub 语言统计修正 =====
+# 将 docs-site/（VitePress 打包成品）和 site/docs-site/ 标记为 vendored，
+# 不计入语言统计，避免 61 个 HTML 文件导致仓库被误判为 HTML 静态站点。
+docs-site/** linguist-vendored
+site/docs-site/** linguist-vendored
+# 压缩后的前端资产也忽略
+*.min.js   linguist-vendored
+*.min.css  linguist-vendored
