@@ -7,13 +7,7 @@
     <a href="README.md">中文</a> · <a href="README.en.md">English</a>
   </p>
   <p align="center">
-    <table align="center" border="0" cellpadding="4" cellspacing="0">
-      <tr>
-        <td><a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a></td>
-        <td><img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" /></td>
-        <td><a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a></td>
-      </tr>
-    </table>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" /></a>&nbsp;<img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" />&nbsp;<a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" /></a>
   </p>
 </p>
 
