@@ -226,6 +226,8 @@
     <string name="settings_startup_session_new_desc">Reuse an empty session, otherwise start a new one</string>
     <string name="settings_startup_session_recent">Recent session</string>
     <string name="settings_startup_session_recent_desc">Open the most recently updated session</string>
+    <string name="settings_auto_expand_reasoning">Auto-expand reasoning</string>
+    <string name="settings_auto_expand_reasoning_desc">Expand reasoning cards by default; turn off to expand manually</string>
     <string name="mode_build">Build</string>
     <string name="mode_plan">Plan</string>
     <string name="mode_auto">Auto</string>
@@ -545,6 +547,8 @@
     <string name="plugins_store_empty_hint">This index has no published plugins yet. Add third-party plugin sources from Plugin settings in the top-right menu.</string>
     <string name="plugins_store_badge_official">Official</string>
     <string name="plugins_badge_official">Official source</string>
+    <string name="plugins_group_builtin">Built-in</string>
+    <string name="plugins_group_custom">Custom</string>
     <string name="plugins_store_badge_unofficial">Unofficial</string>
     <string name="plugins_store_retry">Retry</string>
     <string name="plugins_store_refresh_done">Index refreshed</string>

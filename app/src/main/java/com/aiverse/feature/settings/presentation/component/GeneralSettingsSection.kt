@@ -56,6 +56,8 @@ internal fun GeneralSettingsSection(
     onSetMaxNetworkRetries: (Int) -> Unit,
     enterToSend: Boolean,
     onToggleEnterToSend: (Boolean) -> Unit,
+    autoExpandReasoning: Boolean,
+    onToggleAutoExpandReasoning: (Boolean) -> Unit,
     compactionThresholdPercent: Int,
     onSetCompactionThresholdPercent: (Int) -> Unit,
     sendFileMaxSizeMb: Int,
@@ -129,6 +131,18 @@ internal fun GeneralSettingsSection(
                         text = stringResource(startupSessionMode.labelRes()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.semanticColors.subtleText
+                    )
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = null,
+                title = stringResource(R.string.settings_auto_expand_reasoning),
+                subtitle = stringResource(R.string.settings_auto_expand_reasoning_desc),
+                trailing = {
+                    AppSwitch(
+                        checked = autoExpandReasoning,
+                        onCheckedChange = onToggleAutoExpandReasoning
                     )
                 }
             )

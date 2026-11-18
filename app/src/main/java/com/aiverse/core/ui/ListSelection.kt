@@ -196,7 +196,8 @@ fun SelectionActionBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg)
-            .height(selectionActionBarHeight()),
+            .height(selectionActionBarHeight())
+            .padding(bottom = 6.dp),
         shape = RoundedCornerShape(t.rLg),
         color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface),
         border = BorderStroke(1.dp, glassBorderOr(MaterialTheme.semanticColors.surfaceGlassBorder)),

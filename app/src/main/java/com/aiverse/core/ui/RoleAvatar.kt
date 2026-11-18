@@ -51,12 +51,14 @@ import java.io.File
  * @param role 角色；null（默认角色缺失）或 [Role.avatarValue] 为空时回退到通用用户图标。
  * @param size 头像边长（Dp，由调用点按密度缩放后传入）。
  * @param modifier 外部修饰，拼在容器最外层。
+ * @param fallbackIconScale 回退到通用用户图标时，图标边长占 [size] 的比例。
  */
 @Composable
 fun RoleAvatar(
     role: Role?,
     size: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fallbackIconScale: Float = 0.5f
 ) {
     val t = LocalUIDensityTokens.current
     // 行内徽标档（顶栏角色胶囊）：不铺内层背景；其余场景保留背景盒观感。
@@ -94,7 +96,7 @@ fun RoleAvatar(
                         imageVector = FeatherIcons.User,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(size * 0.5f)
+                        modifier = Modifier.size(size * fallbackIconScale)
                     )
                 }
             }
@@ -111,7 +113,7 @@ fun RoleAvatar(
                         imageVector = FeatherIcons.User,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(size * 0.5f)
+                        modifier = Modifier.size(size * fallbackIconScale)
                     )
                 }
             }
@@ -120,7 +122,7 @@ fun RoleAvatar(
                     imageVector = FeatherIcons.User,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(size * 0.5f)
+                    modifier = Modifier.size(size * fallbackIconScale)
                 )
             }
         }

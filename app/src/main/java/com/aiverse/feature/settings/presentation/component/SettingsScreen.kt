@@ -146,6 +146,7 @@ import compose.icons.feathericons.MoreHorizontal
 import compose.icons.feathericons.Share2
 import compose.icons.feathericons.PieChart
 import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Settings
 import compose.icons.feathericons.RefreshCw
 import compose.icons.feathericons.RotateCcw
 import compose.icons.feathericons.Save
@@ -320,6 +321,7 @@ fun SettingsScreen(
     val maxNetworkRetries by viewModel.maxNetworkRetries.collectAsStateWithLifecycle()
     val maxSubagentRunning by viewModel.maxSubagentRunning.collectAsStateWithLifecycle()
     val enterToSend by viewModel.enterToSend.collectAsStateWithLifecycle()
+    val autoExpandReasoning by viewModel.autoExpandReasoning.collectAsStateWithLifecycle()
     val compactionThresholdPercent by viewModel.compactionThresholdPercent.collectAsStateWithLifecycle()
     val sendFileMaxSizeMb by viewModel.sendFileMaxSizeMb.collectAsStateWithLifecycle()
     val goalMaxTurns by viewModel.goalMaxTurns.collectAsStateWithLifecycle()
@@ -400,6 +402,11 @@ fun SettingsScreen(
     val proxyConfig by viewModel.proxyConfig.collectAsStateWithLifecycle()
     val proxyTestState by viewModel.proxyTestState.collectAsStateWithLifecycle()
     var showTerminalSettingsSheet by remember { mutableStateOf(false) }
+
+    // 插件分区顶栏「＋」导入与「⚙」设置按钮：触发逻辑由 PluginSettingsSection 上报（zipLauncher/设置弹层
+    // 保留在组件内，不提升），SettingsScreen 顶栏只负责触发。
+    var pluginImportTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pluginSettingsTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val context = LocalContext.current
     // 技能分享/导出公共入口（顶栏 ⋯ 菜单与批量底部栏共用同一份，避免各自创建 launcher）。
@@ -967,10 +974,7 @@ fun SettingsScreen(
                 ),
                 navigationIcon = {
                     // 大屏一级分区页不给返回箭头：左栏菜单随时可切，退出设置的入口在左栏顶部。
-                    // 插件分区由 PluginSettingsSection 自管返回（详情回列表 / 列表回菜单），不再显示共享返回箭头，避免双返回。
-                    if (current != SettingsSection.Plugins && current != SettingsSection.PluginRepo &&
-                        (!expanded || parentSection != null)
-                    ) {
+                    if (!expanded || parentSection != null) {
                         IconButton(onClick = {
                             val parent = parentSection
                             if (parent != null) section = parent else onNavigateBack()
@@ -1196,6 +1200,26 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                        SettingsSection.Plugins,
+                        SettingsSection.PluginRepo -> {
+                            // 插件分区单条顶栏：共享「＋」导入与「⚙」设置（触发逻辑由 PluginSettingsSection 上报）。
+                            IconButton(onClick = { pluginImportTrigger?.invoke() }) {
+                                Icon(
+                                    FeatherIcons.Plus,
+                                    contentDescription = stringResource(R.string.plugins_install),
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            IconButton(onClick = { pluginSettingsTrigger?.invoke() }) {
+                                Icon(
+                                    FeatherIcons.Settings,
+                                    contentDescription = stringResource(R.string.plugins_settings_title),
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
                         SettingsSection.Prompts -> {
                             // 多选：批量删除自定义提示词（本地/内置来源只读、不可勾选）。
                             // 片段全部来自只读层（如未自定义时的全「本地」）时置灰开关——进多选也无项可勾。
@@ -1325,6 +1349,8 @@ fun SettingsScreen(
                     onSetMaxSubagentRunning = { viewModel.setMaxSubagentRunning(it) },
                     enterToSend = enterToSend,
                     onToggleEnterToSend = { viewModel.setEnterToSend(it) },
+                    autoExpandReasoning = autoExpandReasoning,
+                    onToggleAutoExpandReasoning = { viewModel.setAutoExpandReasoning(it) },
                     compactionThresholdPercent = compactionThresholdPercent,
                     onSetCompactionThresholdPercent = { viewModel.setCompactionThresholdPercent(it) },
                     sendFileMaxSizeMb = sendFileMaxSizeMb,
@@ -1801,10 +1827,12 @@ fun SettingsScreen(
                     }
                 }
                 SettingsSection.Plugins -> PluginSettingsSection(
-                    onNavigateBack = { section = SettingsSection.Menu }
+                    onImport = { pluginImportTrigger = it },
+                    onOpenSettings = { pluginSettingsTrigger = it }
                 )
                 SettingsSection.PluginRepo -> PluginSettingsSection(
-                    onNavigateBack = { section = SettingsSection.Plugins }
+                    onImport = { pluginImportTrigger = it },
+                    onOpenSettings = { pluginSettingsTrigger = it }
                 )
                 SettingsSection.SearchProvider -> {
                     val searchVm: com.aiverse.feature.search.presentation.SearchProviderViewModel =

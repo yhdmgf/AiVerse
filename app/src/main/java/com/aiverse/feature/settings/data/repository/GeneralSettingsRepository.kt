@@ -202,9 +202,9 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[ENTER_TO_SEND_KEY] = enabled }
     }
 
-    /** 思考卡片是否默认展开正文；默认开启。 */
+    /** 思考卡片是否默认展开正文；默认收起。 */
     val autoExpandReasoningFlow: Flow<Boolean> =
-        context.generalDataStore.data.map { it[AUTO_EXPAND_REASONING_KEY] ?: true }
+        context.generalDataStore.data.map { it[AUTO_EXPAND_REASONING_KEY] ?: false }
 
     suspend fun setAutoExpandReasoning(enabled: Boolean) {
         context.generalDataStore.edit { it[AUTO_EXPAND_REASONING_KEY] = enabled }

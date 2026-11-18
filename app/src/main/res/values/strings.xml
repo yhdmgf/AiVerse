@@ -228,6 +228,8 @@
     <string name="settings_startup_session_new_desc">复用尚未发送过消息的空会话，否则新建</string>
     <string name="settings_startup_session_recent">打开最近会话</string>
     <string name="settings_startup_session_recent_desc">直接进入最近更新的会话</string>
+    <string name="settings_auto_expand_reasoning">思考自动展开</string>
+    <string name="settings_auto_expand_reasoning_desc">默认展开思考卡片，关闭后需手动展开</string>
     <string name="mode_build">构建</string>
     <string name="mode_plan">计划</string>
     <string name="mode_auto">自动</string>
@@ -545,6 +547,8 @@
     <string name="plugins_store_empty_hint">当前索引还没有发布插件，可以在右上角「插件设置」里添加第三方插件源。</string>
     <string name="plugins_store_badge_official">官方</string>
     <string name="plugins_badge_official">官方渠道</string>
+    <string name="plugins_group_builtin">内置插件</string>
+    <string name="plugins_group_custom">自定义插件</string>
     <string name="plugins_store_badge_unofficial">非官方</string>
     <string name="plugins_store_retry">重试</string>
     <string name="plugins_store_refresh_done">索引刷新完成</string>

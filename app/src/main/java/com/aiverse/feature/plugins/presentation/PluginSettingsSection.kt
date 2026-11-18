@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,10 +49,11 @@ import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.core.util.FileLogger
+import com.aiverse.feature.settings.presentation.component.SkillMenuRow
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ArrowLeft
-import compose.icons.feathericons.Plus
-import compose.icons.feathericons.Settings
+import compose.icons.feathericons.Download
+import compose.icons.feathericons.MoreHorizontal
 import compose.icons.feathericons.Share2
 import kotlinx.coroutines.launch
 import java.io.File
@@ -72,7 +75,8 @@ import java.io.File
  */
 @Composable
 internal fun PluginSettingsSection(
-    onNavigateBack: () -> Unit = {}
+    onImport: (() -> Unit) -> Unit = {},
+    onOpenSettings: (() -> Unit) -> Unit = {}
 ) {
     val viewModel: PluginsViewModel = hiltViewModel()
     // 商店详情页的分享走商店 ViewModel（下载/缓存插件包由它复用 PluginIndexClient）。
@@ -102,6 +106,16 @@ internal fun PluginSettingsSection(
     var pluginsTab by rememberSaveable { mutableIntStateOf(0) }
     val zipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::import)
+    }
+    // 顶栏「＋」导入与「⚙」设置按钮由 SettingsScreen 统一 TopAppBar 提供；
+    // 通过上报回调把「拉起系统文件选择器」「打开设置弹层」暴露给父级（路径 B）。
+    LaunchedEffect(Unit) {
+        onImport {
+            zipLauncher.launch(
+                arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")
+            )
+        }
+        onOpenSettings { showSettings = true }
     }
     val selectedPlugin = plugins.firstOrNull { it.id == selectedPluginId }
 
@@ -159,7 +173,41 @@ internal fun PluginSettingsSection(
     if (selectedPlugin != null) {
         val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
         Column(modifier = Modifier.fillMaxSize()) {
-            PluginBackBar(onBack = { selectedPluginId = null })
+            PluginBackBar(
+                onBack = { selectedPluginId = null },
+                trailing = {
+                    // 详情页顶栏「更多」：分享/导出（打包 zip 走系统分享，复用导出结果流）。
+                    var detailMoreExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { detailMoreExpanded = true }) {
+                            Icon(
+                                FeatherIcons.MoreHorizontal,
+                                contentDescription = stringResource(R.string.common_more),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = detailMoreExpanded,
+                            onDismissRequest = { detailMoreExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { SkillMenuRow(FeatherIcons.Share2, stringResource(R.string.plugins_share)) },
+                                onClick = {
+                                    detailMoreExpanded = false
+                                    viewModel.exportPlugin(selectedPlugin.id)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { SkillMenuRow(FeatherIcons.Download, stringResource(R.string.plugins_export)) },
+                                onClick = {
+                                    detailMoreExpanded = false
+                                    viewModel.exportPlugin(selectedPlugin.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            )
             PluginDetailSection(
                 plugin = selectedPlugin,
                 onToggleEnabled = { viewModel.setEnabled(selectedPlugin.id, it) },
@@ -217,43 +265,6 @@ internal fun PluginSettingsSection(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 顶栏操作行：返回 + 加号导入 + 设置（标题由 AiVerse SettingsScreen 统一 TopBar 提供）
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = FeatherIcons.ArrowLeft,
-                        contentDescription = stringResource(R.string.common_back),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = {
-                        zipLauncher.launch(
-                            arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")
-                        )
-                    }
-                ) {
-                    Icon(
-                        imageVector = FeatherIcons.Plus,
-                        contentDescription = stringResource(R.string.plugins_install),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                IconButton(onClick = { showSettings = true }) {
-                    Icon(
-                        imageVector = FeatherIcons.Settings,
-                        contentDescription = stringResource(R.string.plugins_settings_title),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
             PluginsSection(
                 plugins = plugins,
                 loaded = loaded,
@@ -280,6 +291,12 @@ internal fun PluginSettingsSection(
                 onMemoryToggleEnabled = viewModel::setMemoryEnabled,
                 onUninstall = { plugin -> viewModel.uninstall(plugin.id) },
                 onBatchUninstall = { selected -> viewModel.uninstallAll(selected.map { it.id }) },
+                onBatchSetEnabled = { selected, enabled ->
+                    selected.forEach { viewModel.setEnabled(it.id, enabled) }
+                },
+                // 分享与导出都复用 exportPlugin：导出结果经 exportResult 流拉起系统分享。
+                onBatchExport = { selected -> selected.forEach { viewModel.exportPlugin(it.id) } },
+                onBatchShare = { selected -> selected.forEach { viewModel.exportPlugin(it.id) } },
                 initialTabPage = pluginsTab,
                 onTabPageChange = { pluginsTab = it },
                 onShowStorePreview = viewModel::showPreview,

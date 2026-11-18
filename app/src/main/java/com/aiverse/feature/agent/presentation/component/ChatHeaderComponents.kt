@@ -406,7 +406,7 @@ private fun RoleSwitcherPill(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    RoleAvatar(role = currentRole, size = t.scale(14))
+                    RoleAvatar(role = currentRole, size = t.scale(14), fallbackIconScale = 0.75f)
                     Text(
                         text = roleName,
                         style = MaterialTheme.typography.labelMedium,
@@ -428,7 +428,7 @@ private fun RoleSwitcherPill(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                RoleAvatar(role = currentRole, size = t.scale(16))
+                RoleAvatar(role = currentRole, size = t.scale(16), fallbackIconScale = 0.75f)
                 Text(
                     text = roleName,
                     style = MaterialTheme.typography.bodySmall,

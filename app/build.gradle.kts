@@ -118,6 +118,13 @@ fun versionCodeFromVersionName(name: String): Int {
     if (rcMatch != null) {
         return base + rcMatch.groupValues[1].toInt().coerceAtMost(49)
     }
+    // dev/beta 测试构建（-dev.N 或 -dev.N+hash）：versionCode 高于同版本正式版（base+50），
+    // 且随 N（距最近 tag 的提交数）递增，保证测试包能覆盖已安装的正式版/旧测试包，不被 Android 判降级。
+    // N 不参与正式版计算，正式版仍为 base+50（低于 dev 测试构建）。
+    val devMatch = Regex("""-dev\.(\d+)""", RegexOption.IGNORE_CASE).find(name)
+    if (devMatch != null) {
+        return base + 100 + devMatch.groupValues[1].toInt().coerceAtMost(999)
+    }
     val isPre = Regex("""[-.]?(dev|pre|beta|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
     return if (isPre) base else base + 50
 }

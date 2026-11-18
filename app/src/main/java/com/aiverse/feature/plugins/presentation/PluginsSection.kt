@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -90,6 +91,7 @@ import com.aiverse.feature.plugins.domain.newmodel.PluginPage
 // P3c / P3d 相关类型（PluginStoreSection/PluginStoreViewModel/PluginStoreItem/PluginStorePreview/
 // PluginWebBridge/PluginWebViewFactory/PluginWebViewCache/PluginWebBridgeInstaller/PluginWebPanelScreen）
 // 与 DevPluginsPage 均已由并行子代理落地到本包，同包直接引用，无需 import。
+import com.aiverse.feature.settings.presentation.component.CollapsibleGroupHeader
 import com.aiverse.feature.settings.presentation.component.LazyGroupItem
 import com.aiverse.feature.settings.presentation.component.McpPill
 import com.aiverse.feature.settings.presentation.component.ModelSearchField
@@ -98,6 +100,7 @@ import com.aiverse.feature.settings.presentation.component.SettingsEmptyState
 import com.aiverse.feature.settings.presentation.component.SettingsGroup
 import com.aiverse.feature.settings.presentation.component.SettingsGroupHeader
 import com.aiverse.feature.settings.presentation.component.SettingsRow
+import com.aiverse.feature.settings.presentation.component.SkillMenuRow
 import com.aiverse.feature.settings.presentation.component.openUrl
 import com.aiverse.feature.settings.presentation.component.settingsPageBackground
 import compose.icons.FeatherIcons
@@ -107,12 +110,14 @@ import compose.icons.feathericons.BookOpen
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Cloud
 import compose.icons.feathericons.Code
+import compose.icons.feathericons.Download
 import compose.icons.feathericons.Github
 import compose.icons.feathericons.Monitor
 import compose.icons.feathericons.Package
 import compose.icons.feathericons.Search
 import compose.icons.feathericons.Server
 import compose.icons.feathericons.Settings
+import compose.icons.feathericons.Share2
 import compose.icons.feathericons.ShoppingBag
 import compose.icons.feathericons.Tag
 import compose.icons.feathericons.Terminal
@@ -185,6 +190,9 @@ internal fun PluginsSection(
     onOpenStoreDetail: (PluginStoreItem) -> Unit,
     onUninstall: (InstalledPlugin) -> Unit = {},
     onBatchUninstall: (List<InstalledPlugin>) -> Unit = {},
+    onBatchSetEnabled: (List<InstalledPlugin>, Boolean) -> Unit = { _, _ -> },
+    onBatchExport: (List<InstalledPlugin>) -> Unit = {},
+    onBatchShare: (List<InstalledPlugin>) -> Unit = {},
     initialTabPage: Int = 0,
     onTabPageChange: (Int) -> Unit = {}
 ) {
@@ -324,10 +332,14 @@ internal fun PluginsSection(
             }
         }
 
-        // 多选模式：底栏换成批量操作栏（全选 / 已选 N 项 / 卸载），与 FloatingTabBar 互斥避免重叠。
+        // 多选模式：底栏换成批量操作栏（全选 / 已选 N 项 / 启用停用 / 更多：分享导出 / 卸载），
+        // 与 FloatingTabBar 互斥避免重叠。启用/停用/分享/导出仅对自定义插件（非官方渠道）有效。
         if (selection.isActive) {
             val enabled = selection.selectedCount > 0
             val allSelected = filteredKeys.isNotEmpty() && filteredKeys.all { selection.isSelected(it) }
+            // 「仅自定义有效」：选中的都是真实插件（记忆伪插件不参与多选，无需排除；
+            // 官方索引源插件也算自定义，同样可启用/停用/导出/分享）。
+            val customOnly = selectedPlugins.isNotEmpty() && selectedPlugins.all { !it.isMemoryToggle }
             SelectionActionBar(
                 selectedCount = selection.selectedCount,
                 allSelected = allSelected,
@@ -335,8 +347,31 @@ internal fun PluginsSection(
                     if (allSelected) selection.clear() else selection.replaceAll(filteredKeys)
                 },
                 onExit = { selection.exit() },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter),
+                moreActions = {
+                    DropdownMenuItem(
+                        text = { SkillMenuRow(FeatherIcons.Share2, stringResource(R.string.plugins_share)) },
+                        enabled = customOnly,
+                        onClick = { onBatchShare(selectedPlugins) }
+                    )
+                    DropdownMenuItem(
+                        text = { SkillMenuRow(FeatherIcons.Download, stringResource(R.string.plugins_export)) },
+                        enabled = customOnly,
+                        onClick = { onBatchExport(selectedPlugins) }
+                    )
+                },
+                moreActionsAvailable = true
             ) {
+                SelectionActionButton(
+                    text = stringResource(R.string.common_batch_enable),
+                    enabled = customOnly,
+                    onClick = { onBatchSetEnabled(selectedPlugins, true) }
+                )
+                SelectionActionButton(
+                    text = stringResource(R.string.common_batch_disable),
+                    enabled = customOnly,
+                    onClick = { onBatchSetEnabled(selectedPlugins, false) }
+                )
                 SelectionActionButton(
                     text = stringResource(R.string.plugins_uninstall),
                     enabled = enabled,
@@ -382,7 +417,18 @@ private fun InstalledPluginsPage(
     selection: ListSelectionState
 ) {
     val t = LocalUIDensityTokens.current
+    // 内置/自定义两组展开状态：默认都展开，收起后不丢（rememberSaveable）。
+    var builtinExpanded by rememberSaveable { mutableStateOf(true) }
+    var customExpanded by rememberSaveable { mutableStateOf(true) }
     var pendingUninstall by remember { mutableStateOf<InstalledPlugin?>(null) }
+    // 内置组 = 记忆「内置能力」伪插件（仅设置开关，非真实插件）；真实插件（含商店/本地安装，
+    // 无论官方索引源与否）都算自定义——商店安装的官方插件是用户主动安装，不应算内置。
+    val builtinPlugins = remember(filteredPlugins) {
+        filteredPlugins.filter { it.isMemoryToggle }
+    }
+    val customPlugins = remember(filteredPlugins) {
+        filteredPlugins.filter { !it.isMemoryToggle }
+    }
 
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -451,34 +497,67 @@ private fun InstalledPluginsPage(
                 item(key = "search-empty", contentType = "empty") {
                     PluginSearchEmptyState()
                 }
-            } else {
-                itemsIndexed(
-                    items = filteredPlugins,
-                    key = { _, plugin -> plugin.id },
-                    contentType = { _, _ -> "plugin-row" }
-                ) { index, plugin ->
-                    LazyGroupItem(index = index, lastIndex = filteredPlugins.lastIndex) {
-                        PluginRow(
-                            plugin = plugin,
-                            languageTag = languageTag,
-                            update = updates[plugin.id],
-                            onToggleEnabled = { onToggleEnabled(plugin, it) },
-                            onMemoryToggleEnabled = onMemoryToggleEnabled,
-                            // 记忆「伪插件」不进普通插件详情（最小侵入），点击不响应；
-                            // 其启停开关就是记忆的开关，设置页的记忆管理入口随开关显隐。
-                            onClick = { onOpenDetail(plugin) },
-                            onUninstall = { pendingUninstall = plugin },
-                            selectionMode = selection.isActive,
-                            selected = selection.isSelected(plugin.id),
-                            onToggleSelect = { selection.toggle(plugin.id) },
-                            onLongPress = {
-                                // 长按进入多选并选中当前行；已处于多选时由勾选框接管，不再响应长按。
-                                if (!selection.isActive) {
-                                    selection.enter()
-                                    selection.toggle(plugin.id)
-                                }
+            } else if (plugins.isNotEmpty()) {
+                // 单个插件行渲染，内置/自定义两组共用。
+                val pluginRow: @Composable (InstalledPlugin) -> Unit = { plugin ->
+                    PluginRow(
+                        plugin = plugin,
+                        languageTag = languageTag,
+                        update = updates[plugin.id],
+                        onToggleEnabled = { onToggleEnabled(plugin, it) },
+                        onMemoryToggleEnabled = onMemoryToggleEnabled,
+                        // 记忆「伪插件」不进普通插件详情（最小侵入），点击不响应；
+                        // 其启停开关就是记忆的开关，设置页的记忆管理入口随开关显隐。
+                        onClick = { onOpenDetail(plugin) },
+                        onUninstall = { pendingUninstall = plugin },
+                        selectionMode = selection.isActive,
+                        selected = selection.isSelected(plugin.id),
+                        onToggleSelect = { selection.toggle(plugin.id) },
+                        onLongPress = {
+                            // 长按进入多选并选中当前行；已处于多选时由勾选框接管，不再响应长按。
+                            if (!selection.isActive) {
+                                selection.enter()
+                                selection.toggle(plugin.id)
                             }
-                        )
+                        }
+                    )
+                }
+
+                item(key = "builtin-header", contentType = "header") {
+                    CollapsibleGroupHeader(
+                        text = stringResource(R.string.plugins_group_builtin),
+                        expanded = builtinExpanded,
+                        onToggle = { builtinExpanded = !builtinExpanded }
+                    )
+                }
+                if (builtinExpanded) {
+                    itemsIndexed(
+                        items = builtinPlugins,
+                        key = { _, plugin -> plugin.id },
+                        contentType = { _, _ -> "plugin-row" }
+                    ) { index, plugin ->
+                        LazyGroupItem(index = index, lastIndex = builtinPlugins.lastIndex) {
+                            pluginRow(plugin)
+                        }
+                    }
+                }
+
+                item(key = "custom-header", contentType = "header") {
+                    CollapsibleGroupHeader(
+                        text = stringResource(R.string.plugins_group_custom),
+                        expanded = customExpanded,
+                        onToggle = { customExpanded = !customExpanded }
+                    )
+                }
+                if (customExpanded) {
+                    itemsIndexed(
+                        items = customPlugins,
+                        key = { _, plugin -> plugin.id },
+                        contentType = { _, _ -> "plugin-row" }
+                    ) { index, plugin ->
+                        LazyGroupItem(index = index, lastIndex = customPlugins.lastIndex) {
+                            pluginRow(plugin)
+                        }
                     }
                 }
             }
@@ -605,7 +684,7 @@ private fun PluginRow(
                 .fillMaxWidth()
                 .padding(
                     start = Spacing.lg,
-                    end = Spacing.xs,
+                    end = Spacing.sm,
                     top = t.listCellPaddingVertical,
                     bottom = t.listCellPaddingVertical
                 ),
@@ -648,7 +727,7 @@ private fun PluginRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = Spacing.lg, end = Spacing.xs, top = t.listCellPaddingVertical, bottom = t.listCellPaddingVertical),
+                .padding(start = Spacing.lg, end = Spacing.sm, top = t.listCellPaddingVertical, bottom = t.listCellPaddingVertical),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(

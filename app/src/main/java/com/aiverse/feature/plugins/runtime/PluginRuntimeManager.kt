@@ -77,7 +77,9 @@ class PluginRuntimeManager @Inject constructor(
     private val httpService: PluginHttpService,
     private val portService: PluginPortService,
     private val appForegroundMonitor: AppForegroundMonitor,
-    private val overlayManager: PluginOverlayManager
+    private val overlayManager: PluginOverlayManager,
+    private val providerService: PluginProviderService,
+    private val permissionService: PluginPermissionService
 ) {
 
     private class Entry(
@@ -330,6 +332,15 @@ class PluginRuntimeManager @Inject constructor(
             "host.model.start" -> hostCall { modelService.start(pluginId, params, PROCESS_ORIGIN) }
             "host.model.read" -> hostCall { modelService.read(pluginId, params) }
             "host.model.cancel" -> hostCall { modelService.cancel(pluginId, params) }
+            "host.sessionSource.setMessages" -> hostCall { sessionSourceHostService.setMessages(pluginId, params) }
+            "host.sessionSource.pushEvent" -> hostCall { sessionSourceHostService.pushEvent(pluginId, params) }
+            "host.providers.listModels" -> hostCall { providerService.listModels(pluginId, params) }
+            "host.providers.addModel" -> hostCall { providerService.addModel(pluginId, params) }
+            "host.providers.deleteModel" -> hostCall { providerService.deleteModel(pluginId, params) }
+            "host.providers.setModelContext" -> hostCall { providerService.setModelContext(pluginId, params) }
+            "host.providers.setApiKey" -> hostCall { providerService.setApiKey(pluginId, params) }
+            "host.permissions.request" -> hostCall { permissionService.request(pluginId, params) }
+            "host.permissions.cancel" -> hostCall { permissionService.cancel(pluginId, params) }
             "host.clipboard.read" -> hostCall { systemService.clipboardRead(pluginId) }
             "host.clipboard.write" -> hostCall {
                 systemService.clipboardWrite(pluginId, PluginHostPaths.requireString(params, "text"))
