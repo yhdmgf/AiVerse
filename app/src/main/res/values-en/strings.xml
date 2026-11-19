@@ -100,6 +100,12 @@
     <string name="agent_input_budget_exceeded">Context exceeds the model input budget. Shorten the input or reduce tool definitions.</string>
 
     <!-- Settings menu titles -->
+    <string name="settings_tab_general">General</string>
+    <string name="settings_tab_ai">AI</string>
+    <string name="settings_tab_environment">Env</string>
+    <string name="settings_tab_permissions">Perms</string>
+    <string name="settings_tab_data">Data</string>
+    <string name="settings_tab_help">Help</string>
     <string name="settings_title">Settings</string>
     <string name="settings_select_section_hint">Pick a setting from the list</string>
     <string name="settings_providers">AI Vendors</string>

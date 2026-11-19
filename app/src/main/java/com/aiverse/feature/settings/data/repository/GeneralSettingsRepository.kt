@@ -63,6 +63,9 @@ class GeneralSettingsRepository @Inject constructor(
         /** 应用启动次数：主进程每次冷启动自增一，供 token 统计页概览展示。 */
         val LAUNCH_COUNT_KEY = intPreferencesKey("launch_count")
 
+        /** 设置首页分类页签上次停留的分组下标；下次进设置直接回到这一组。 */
+        val SETTINGS_MENU_TAB_KEY = intPreferencesKey("settings_menu_tab")
+
         /** 首字超时默认 5 分钟，与原硬编码值一致。 */
         const val DEFAULT_FIRST_BYTE_TIMEOUT_SEC = 300
 
@@ -208,6 +211,14 @@ class GeneralSettingsRepository @Inject constructor(
 
     suspend fun setAutoExpandReasoning(enabled: Boolean) {
         context.generalDataStore.edit { it[AUTO_EXPAND_REASONING_KEY] = enabled }
+    }
+
+    /** 设置首页分类页签上次停留的分组；默认第 0 组（通用）。 */
+    val settingsMenuTabFlow: Flow<Int> =
+        context.generalDataStore.data.map { it[SETTINGS_MENU_TAB_KEY] ?: 0 }
+
+    suspend fun setSettingsMenuTab(index: Int) {
+        context.generalDataStore.edit { it[SETTINGS_MENU_TAB_KEY] = index.coerceAtLeast(0) }
     }
 
     /** 自动压缩触发阈值（上下文窗口的百分比）；默认 90，限定 1..100。 */

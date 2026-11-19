@@ -11,6 +11,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,13 +61,17 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
@@ -322,6 +328,7 @@ fun SettingsScreen(
     val maxSubagentRunning by viewModel.maxSubagentRunning.collectAsStateWithLifecycle()
     val enterToSend by viewModel.enterToSend.collectAsStateWithLifecycle()
     val autoExpandReasoning by viewModel.autoExpandReasoning.collectAsStateWithLifecycle()
+    val settingsMenuTab by viewModel.settingsMenuTab.collectAsStateWithLifecycle()
     val compactionThresholdPercent by viewModel.compactionThresholdPercent.collectAsStateWithLifecycle()
     val sendFileMaxSizeMb by viewModel.sendFileMaxSizeMb.collectAsStateWithLifecycle()
     val goalMaxTurns by viewModel.goalMaxTurns.collectAsStateWithLifecycle()
@@ -407,6 +414,8 @@ fun SettingsScreen(
     // 保留在组件内，不提升），SettingsScreen 顶栏只负责触发。
     var pluginImportTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
     var pluginSettingsTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // 设置首页当前停留的分类页签由 ViewModel 持久化（DataStore），重进设置/重启 App 都回到这一组。
 
     val context = LocalContext.current
     // 技能分享/导出公共入口（顶栏 ⋯ 菜单与批量底部栏共用同一份，避免各自创建 launcher）。
@@ -752,6 +761,8 @@ fun SettingsScreen(
                 activePluginPage = page
                 section = SettingsSection.PluginPage
             },
+            tabIndex = settingsMenuTab,
+            onSelectTab = viewModel::setSettingsMenuTab,
             onOpen = {
                 if (it == SettingsSection.Log) {
                     logReturnSection = SettingsSection.Menu
@@ -985,6 +996,7 @@ fun SettingsScreen(
                 },
                 actions = {
                     when (current) {
+                        SettingsSection.Menu -> Unit
                         SettingsSection.Providers -> {
                             if (providers.isNotEmpty()) {
                                 SelectionToggleAction(selectionFor(SettingsSection.Providers))
@@ -2328,7 +2340,48 @@ private fun SettingsDetailPlaceholder() {
     }
 }
 
-/** 设置首页：每个分区一个可点击的二级菜单入口。 */
+/** 设置菜单条目：六组入口的一份数据，页签布局按它渲染，新增入口只改这里。 */
+private class SettingsMenuEntry(
+    val key: String,
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String? = null,
+    val trailingText: String? = null,
+    val onboardingStep: OnboardingStep? = null,
+    val onClick: () -> Unit
+)
+
+private class SettingsMenuGroup(
+    /** 分类页签用的短名（两个汉字以内，保证 6 个页签在手机宽度内排得下、不用横滑）。 */
+    val shortTitle: String,
+    val title: String,
+    val entries: List<SettingsMenuEntry>
+)
+
+
+/** 插件槽位入口：追加到对应分组末尾，副标题标明来源插件。 */
+@Composable
+private fun pluginSlotEntries(
+    pages: List<PluginPage>,
+    slot: String,
+    languageTag: String,
+    onOpen: (PluginPage) -> Unit
+): List<SettingsMenuEntry> = pages.filter { it.slot == slot }.map { page ->
+    SettingsMenuEntry(
+        key = "plugin:${page.pluginId}:${page.title.resolve(languageTag)}",
+        icon = pluginPageIcon(page.icon),
+        title = page.title.resolve(languageTag),
+        subtitle = stringResource(R.string.plugins_ext_entry_subtitle, page.pluginId),
+        onClick = { onOpen(page) }
+    )
+}
+
+/**
+ * 设置首页：每个分区一个可点击的二级菜单入口。
+ *
+ * 单一布局：顶部一排等宽分类页签（不横滑、不左右翻页），下面整屏只显示当前分组的入口。
+ * [tabIndex] / [onSelectTab] 控制当前分组，选中值由 ViewModel 落盘，重进设置直接回到上次那一组。
+ */
 @Composable
 internal fun SettingsMenu(
     scrollState: ScrollState,
@@ -2345,278 +2398,406 @@ internal fun SettingsMenu(
     onRerunOnboarding: () -> Unit,
     pluginPages: List<PluginPage>,
     onOpenPluginPage: (PluginPage) -> Unit,
-    onOpen: (SettingsSection) -> Unit
+    onOpen: (SettingsSection) -> Unit,
+    tabIndex: Int = 0,
+    onSelectTab: (Int) -> Unit = {}
 ) {
     val pluginLanguageTag = currentLanguageTag()
-    val t = LocalUIDensityTokens.current
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = Spacing.md)
-            .padding(bottom = Spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(t.sm)
-    ) {
-        // ── 通用设置 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_general))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.Sliders,
-                title = stringResource(SettingsSection.General.titleRes),
-                onClick = { onOpen(SettingsSection.General) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.MessageSquare,
-                title = stringResource(R.string.settings_welcome_entries),
-                subtitle = stringResource(
-                    R.string.settings_welcome_entries_count,
-                    welcomeEntries.size,
-                    WELCOME_ENTRIES_MAX
-                ),
-                onClick = onOpenWelcomeEntriesSheet
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Sliders,
-                title = stringResource(R.string.settings_appearance),
-                subtitle = stringResource(themeMode.labelRes),
-                onClick = { onOpen(SettingsSection.Appearance) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Terminal,
-                title = stringResource(R.string.terminal_settings_title),
-                onClick = onOpenTerminalSettingsSheet,
-                trailing = {
-                    Text(
-                        text = stringResource(terminalSettings.theme.nameRes),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.semanticColors.subtleText
+
+    // 六组菜单：分组标题 + 入口列表；顶部页签按这份数据生成，点哪个看哪个。
+    val groups: List<SettingsMenuGroup> = buildList {
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_general),
+                title = stringResource(R.string.settings_category_general),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "general",
+                            icon = FeatherIcons.Sliders,
+                            title = stringResource(SettingsSection.General.titleRes),
+                            onClick = { onOpen(SettingsSection.General) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "welcome-entries",
+                            icon = FeatherIcons.MessageSquare,
+                            title = stringResource(R.string.settings_welcome_entries),
+                            subtitle = stringResource(
+                                R.string.settings_welcome_entries_count,
+                                welcomeEntries.size,
+                                WELCOME_ENTRIES_MAX
+                            ),
+                            onClick = onOpenWelcomeEntriesSheet
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "appearance",
+                            icon = FeatherIcons.Sliders,
+                            title = stringResource(R.string.settings_appearance),
+                            subtitle = stringResource(themeMode.labelRes),
+                            onClick = { onOpen(SettingsSection.Appearance) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "terminal",
+                            icon = FeatherIcons.Terminal,
+                            title = stringResource(R.string.terminal_settings_title),
+                            trailingText = stringResource(terminalSettings.theme.nameRes),
+                            onClick = onOpenTerminalSettingsSheet
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "language",
+                            icon = FeatherIcons.Globe,
+                            title = stringResource(R.string.settings_language),
+                            trailingText = currentLanguageDisplayName,
+                            onClick = onOpenLanguageSheet
+                        )
+                    )
+                    addAll(
+                        pluginSlotEntries(pluginPages, PluginUiSlots.SETTINGS_GENERAL, pluginLanguageTag, onOpenPluginPage)
                     )
                 }
             )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Globe,
-                title = stringResource(R.string.settings_language),
-                onClick = onOpenLanguageSheet,
-                trailing = {
-                    Text(
-                        text = currentLanguageDisplayName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.semanticColors.subtleText
+        )
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_ai),
+                title = stringResource(R.string.settings_category_ai),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "providers",
+                            icon = FeatherIcons.Cloud,
+                            title = stringResource(SettingsSection.Providers.titleRes),
+                            onboardingStep = OnboardingStep.CONFIG_PROVIDER,
+                            onClick = { onOpen(SettingsSection.Providers) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "default-models",
+                            icon = FeatherIcons.Cpu,
+                            title = stringResource(SettingsSection.DefaultModels.titleRes),
+                            onClick = { onOpen(SettingsSection.DefaultModels) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "mcp",
+                            icon = FeatherIcons.Box,
+                            title = stringResource(SettingsSection.Mcp.titleRes),
+                            onClick = { onOpen(SettingsSection.Mcp) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "skills",
+                            icon = FeatherIcons.Book,
+                            title = stringResource(SettingsSection.Skills.titleRes),
+                            onClick = { onOpen(SettingsSection.Skills) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "plugins",
+                            icon = FeatherIcons.Box,
+                            title = stringResource(SettingsSection.Plugins.titleRes),
+                            onClick = { onOpen(SettingsSection.Plugins) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "tts",
+                            icon = FeatherIcons.Volume2,
+                            title = stringResource(SettingsSection.Tts.titleRes),
+                            onClick = { onOpen(SettingsSection.Tts) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "subagents",
+                            icon = FeatherIcons.Users,
+                            title = stringResource(SettingsSection.SubAgents.titleRes),
+                            onClick = { onOpen(SettingsSection.SubAgents) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "prompts",
+                            icon = FeatherIcons.MessageSquare,
+                            title = stringResource(SettingsSection.Prompts.titleRes),
+                            onClick = { onOpen(SettingsSection.Prompts) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "roles",
+                            icon = FeatherIcons.User,
+                            title = stringResource(SettingsSection.Roles.titleRes),
+                            onClick = { onOpen(SettingsSection.Roles) }
+                        )
+                    )
+                    // 记忆开启时才出现该入口（开关本身在插件页的记忆卡片）。
+                    if (memoryEnabled) {
+                        add(
+                            SettingsMenuEntry(
+                                key = "memory",
+                                icon = FeatherIcons.Database,
+                                title = stringResource(SettingsSection.Memory.titleRes),
+                                onClick = { onOpen(SettingsSection.Memory) }
+                            )
+                        )
+                    }
+                    addAll(
+                        pluginSlotEntries(pluginPages, PluginUiSlots.SETTINGS_AI, pluginLanguageTag, onOpenPluginPage)
                     )
                 }
             )
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_GENERAL, pluginLanguageTag, onOpenPluginPage)
-        }
-
-        // ── AI 配置 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_ai))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.Cloud,
-                title = stringResource(SettingsSection.Providers.titleRes),
-                onClick = { onOpen(SettingsSection.Providers) },
-                modifier = Modifier.onboardingTarget(OnboardingStep.CONFIG_PROVIDER)
+        )
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_environment),
+                title = stringResource(R.string.settings_category_environment),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "container",
+                            icon = FeatherIcons.HardDrive,
+                            title = stringResource(SettingsSection.Container.titleRes),
+                            onClick = { onOpen(SettingsSection.Container) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "proxy",
+                            icon = FeatherIcons.Globe,
+                            title = stringResource(SettingsSection.Proxy.titleRes),
+                            onClick = { onOpen(SettingsSection.Proxy) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "remote-servers",
+                            icon = FeatherIcons.Server,
+                            title = stringResource(SettingsSection.RemoteServers.titleRes),
+                            onClick = { onOpen(SettingsSection.RemoteServers) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "web-server",
+                            icon = FeatherIcons.Wifi,
+                            title = stringResource(SettingsSection.WebServer.titleRes),
+                            onClick = { onOpen(SettingsSection.WebServer) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "search-provider",
+                            icon = FeatherIcons.Globe,
+                            title = stringResource(SettingsSection.SearchProvider.titleRes),
+                            onClick = { onOpen(SettingsSection.SearchProvider) }
+                        )
+                    )
+                    addAll(
+                        pluginSlotEntries(
+                            pluginPages,
+                            PluginUiSlots.SETTINGS_ENVIRONMENT,
+                            pluginLanguageTag,
+                            onOpenPluginPage
+                        )
+                    )
+                }
             )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Cpu,
-                title = stringResource(SettingsSection.DefaultModels.titleRes),
-                onClick = { onOpen(SettingsSection.DefaultModels) }
+        )
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_permissions),
+                title = stringResource(R.string.settings_category_permissions),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "permissions",
+                            icon = FeatherIcons.Lock,
+                            title = stringResource(SettingsSection.Permissions.titleRes),
+                            onClick = { onOpen(SettingsSection.Permissions) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "app-permissions",
+                            icon = FeatherIcons.Shield,
+                            title = stringResource(SettingsSection.AppPermissions.titleRes),
+                            onClick = { onOpen(SettingsSection.AppPermissions) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "background-run",
+                            icon = FeatherIcons.RefreshCw,
+                            title = stringResource(SettingsSection.BackgroundRun.titleRes),
+                            onClick = { onOpen(SettingsSection.BackgroundRun) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "phone-control",
+                            icon = FeatherIcons.Zap,
+                            title = stringResource(R.string.phone_control_title),
+                            subtitle = stringResource(R.string.phone_control_enabled_desc),
+                            onClick = { onOpen(SettingsSection.PhoneControl) }
+                        )
+                    )
+                    addAll(
+                        pluginSlotEntries(
+                            pluginPages,
+                            PluginUiSlots.SETTINGS_PERMISSIONS,
+                            pluginLanguageTag,
+                            onOpenPluginPage
+                        )
+                    )
+                }
             )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Box,
-                title = stringResource(SettingsSection.Mcp.titleRes),
-                onClick = { onOpen(SettingsSection.Mcp) }
+        )
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_data),
+                title = stringResource(R.string.settings_category_data),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "token-stats",
+                            icon = FeatherIcons.BarChart2,
+                            title = stringResource(SettingsSection.TokenStats.titleRes),
+                            onClick = { onOpen(SettingsSection.TokenStats) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "storage",
+                            icon = FeatherIcons.PieChart,
+                            title = stringResource(SettingsSection.Storage.titleRes),
+                            onClick = { onOpen(SettingsSection.Storage) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "backup",
+                            icon = FeatherIcons.Save,
+                            title = stringResource(SettingsSection.Backup.titleRes),
+                            onClick = { onOpen(SettingsSection.Backup) }
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "log",
+                            icon = FeatherIcons.FileText,
+                            title = stringResource(SettingsSection.Log.titleRes),
+                            onClick = { onOpen(SettingsSection.Log) }
+                        )
+                    )
+                    addAll(
+                        pluginSlotEntries(pluginPages, PluginUiSlots.SETTINGS_DATA, pluginLanguageTag, onOpenPluginPage)
+                    )
+                }
             )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Book,
-                title = stringResource(SettingsSection.Skills.titleRes),
-                onClick = { onOpen(SettingsSection.Skills) }
+        )
+        add(
+            SettingsMenuGroup(
+                shortTitle = stringResource(R.string.settings_tab_help),
+                title = stringResource(R.string.settings_category_help),
+                entries = buildList {
+                    add(
+                        SettingsMenuEntry(
+                            key = "manual",
+                            icon = FeatherIcons.BookOpen,
+                            title = stringResource(R.string.settings_user_guide),
+                            onClick = onOpenManual
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "rerun-onboarding",
+                            icon = FeatherIcons.Zap,
+                            title = stringResource(R.string.settings_rerun_onboarding),
+                            onClick = onRerunOnboarding
+                        )
+                    )
+                    add(
+                        SettingsMenuEntry(
+                            key = "about",
+                            icon = FeatherIcons.Info,
+                            title = stringResource(SettingsSection.About.titleRes),
+                            onClick = { onOpen(SettingsSection.About) }
+                        )
+                    )
+                    addAll(
+                        pluginSlotEntries(pluginPages, PluginUiSlots.SETTINGS_HELP, pluginLanguageTag, onOpenPluginPage)
+                    )
+                }
             )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Box,
-                title = stringResource(SettingsSection.Plugins.titleRes),
-                onClick = { onOpen(SettingsSection.Plugins) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Volume2,
-                title = stringResource(SettingsSection.Tts.titleRes),
-                onClick = { onOpen(SettingsSection.Tts) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Users,
-                title = stringResource(SettingsSection.SubAgents.titleRes),
-                onClick = { onOpen(SettingsSection.SubAgents) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.MessageSquare,
-                title = stringResource(SettingsSection.Prompts.titleRes),
-                onClick = { onOpen(SettingsSection.Prompts) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.User,
-                title = stringResource(SettingsSection.Roles.titleRes),
-                onClick = { onOpen(SettingsSection.Roles) }
-            )
-            // 记忆开启时显示此入口行（右侧 chevron，纯导航进管理页）；关闭后整行隐藏。启/停开关只在插件页记忆卡片。
-            if (memoryEnabled) {
-                SettingsDivider()
-                SettingsRow(
-                    icon = FeatherIcons.Database,
-                    title = stringResource(SettingsSection.Memory.titleRes),
-                    onClick = { onOpen(SettingsSection.Memory) }
-                )
-            }
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_AI, pluginLanguageTag, onOpenPluginPage)
-        }
-
-        // ── 运行环境 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_environment))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.HardDrive,
-                title = stringResource(SettingsSection.Container.titleRes),
-                onClick = { onOpen(SettingsSection.Container) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Globe,
-                title = stringResource(SettingsSection.Proxy.titleRes),
-                onClick = { onOpen(SettingsSection.Proxy) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Server,
-                title = stringResource(SettingsSection.RemoteServers.titleRes),
-                onClick = { onOpen(SettingsSection.RemoteServers) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Wifi,
-                title = stringResource(SettingsSection.WebServer.titleRes),
-                onClick = { onOpen(SettingsSection.WebServer) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Globe,
-                title = stringResource(SettingsSection.SearchProvider.titleRes),
-                onClick = { onOpen(SettingsSection.SearchProvider) }
-            )
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_ENVIRONMENT, pluginLanguageTag, onOpenPluginPage)
-        }
-
-        // ── 权限与后台 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_permissions))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.Lock,
-                title = stringResource(SettingsSection.Permissions.titleRes),
-                onClick = { onOpen(SettingsSection.Permissions) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Shield,
-                title = stringResource(SettingsSection.AppPermissions.titleRes),
-                onClick = { onOpen(SettingsSection.AppPermissions) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.RefreshCw,
-                title = stringResource(SettingsSection.BackgroundRun.titleRes),
-                onClick = { onOpen(SettingsSection.BackgroundRun) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Zap,
-                title = stringResource(R.string.phone_control_title),
-                subtitle = stringResource(R.string.phone_control_enabled_desc),
-                onClick = { onOpen(SettingsSection.PhoneControl) }
-            )
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_PERMISSIONS, pluginLanguageTag, onOpenPluginPage)
-        }
-
-        // ── 数据与诊断 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_data))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.BarChart2,
-                title = stringResource(SettingsSection.TokenStats.titleRes),
-                onClick = { onOpen(SettingsSection.TokenStats) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.PieChart,
-                title = stringResource(SettingsSection.Storage.titleRes),
-                onClick = { onOpen(SettingsSection.Storage) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Save,
-                title = stringResource(SettingsSection.Backup.titleRes),
-                onClick = { onOpen(SettingsSection.Backup) }
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.FileText,
-                title = stringResource(SettingsSection.Log.titleRes),
-                onClick = { onOpen(SettingsSection.Log) }
-            )
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_DATA, pluginLanguageTag, onOpenPluginPage)
-        }
-
-        // ── 帮助与关于 ──
-        SettingsGroupHeader(text = stringResource(R.string.settings_category_help))
-        SettingsGroup {
-            SettingsRow(
-                icon = FeatherIcons.BookOpen,
-                title = stringResource(R.string.settings_user_guide),
-                onClick = onOpenManual
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Zap,
-                title = stringResource(R.string.settings_rerun_onboarding),
-                onClick = onRerunOnboarding
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Info,
-                title = stringResource(SettingsSection.About.titleRes),
-                onClick = { onOpen(SettingsSection.About) }
-            )
-            PluginSettingsRows(pluginPages, PluginUiSlots.SETTINGS_HELP, pluginLanguageTag, onOpenPluginPage)
-        }
+        )
     }
 
+    // 设置首页只有一种布局：顶部等宽分类页签 + 整屏只显示当前分组，不再提供列表/宫格切换。
+    SettingsMenuTabs(
+        groups = groups,
+        selectedIndex = tabIndex,
+        onSelect = onSelectTab,
+        scrollState = scrollState
+    )
 }
 
-/** 插件槽位入口行：按槽位追加到对应分组末尾，副标题标明来源。 */
+/** 分类页签：等宽、单行截断，选中态用主色描边 + 淡底。 */
 @Composable
-private fun PluginSettingsRows(
-    pages: List<PluginPage>,
-    slot: String,
-    languageTag: String,
-    onOpen: (PluginPage) -> Unit
+private fun SettingsMenuTabChip(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
-    pages.filter { it.slot == slot }.forEach { page ->
-        SettingsDivider()
-        SettingsRow(
-            icon = pluginPageIcon(page.icon),
-            title = page.title.resolve(languageTag),
-            subtitle = stringResource(R.string.plugins_ext_entry_subtitle, page.pluginId),
-            onClick = { onOpen(page) }
-        )
+    val t = LocalUIDensityTokens.current
+    Surface(
+        modifier = modifier
+            .clip(t.cardShape)
+            .clickable(onClick = onClick),
+        shape = t.cardShape,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            Color.Transparent
+        },
+        border = if (selected) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+        } else {
+            null
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = t.scale(7)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

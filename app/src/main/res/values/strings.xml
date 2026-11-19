@@ -102,6 +102,12 @@
     <string name="agent_input_budget_exceeded">上下文超过当前模型的可用输入预算，请缩短输入或减少工具定义。</string>
 
     <!-- 设置页菜单标题 -->
+    <string name="settings_tab_general">通用</string>
+    <string name="settings_tab_ai">AI</string>
+    <string name="settings_tab_environment">环境</string>
+    <string name="settings_tab_permissions">权限</string>
+    <string name="settings_tab_data">数据</string>
+    <string name="settings_tab_help">帮助</string>
     <string name="settings_title">设置</string>
     <string name="settings_select_section_hint">从左侧选择一个设置项</string>
     <string name="settings_providers">AI 供应商</string>

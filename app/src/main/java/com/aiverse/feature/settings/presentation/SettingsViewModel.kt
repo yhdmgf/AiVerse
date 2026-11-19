@@ -720,6 +720,9 @@ class SettingsViewModel @Inject constructor(
     private val _autoExpandReasoning = MutableStateFlow(false)
     val autoExpandReasoning: StateFlow<Boolean> = _autoExpandReasoning.asStateFlow()
 
+    private val _settingsMenuTab = MutableStateFlow(0)
+    val settingsMenuTab: StateFlow<Int> = _settingsMenuTab.asStateFlow()
+
     private val _compactionThresholdPercent = MutableStateFlow(85)
     val compactionThresholdPercent: StateFlow<Int> = _compactionThresholdPercent.asStateFlow()
 
@@ -1259,6 +1262,9 @@ class SettingsViewModel @Inject constructor(
             launch {
                 generalSettingsRepository.autoExpandReasoningFlow.collectLatest {
                     _autoExpandReasoning.value = it
+                }
+                generalSettingsRepository.settingsMenuTabFlow.collectLatest {
+                    _settingsMenuTab.value = it
                 }
             }
 
@@ -2688,6 +2694,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             generalSettingsRepository.setEnterToSend(enabled)
         }
+    }
+
+    /** 设置首页分类页签：记录了就落盘，下次打开设置直接回到这一组。 */
+    fun setSettingsMenuTab(index: Int) {
+        viewModelScope.launch { generalSettingsRepository.setSettingsMenuTab(index) }
     }
 
     /** 思考卡片是否默认展开正文。 */
