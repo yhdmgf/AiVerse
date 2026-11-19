@@ -80,11 +80,12 @@ internal fun CollapsibleGroupHeader(
     text: String,
     expanded: Boolean,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
     /** 标题右侧、折叠箭头左侧的可选内容（如余额）。 */
     trailing: (@Composable () -> Unit)? = null
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle)
             .padding(start = Spacing.md, end = Spacing.sm, top = Spacing.sm, bottom = Spacing.xs),
