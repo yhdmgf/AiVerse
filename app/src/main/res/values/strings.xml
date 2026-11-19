@@ -102,6 +102,8 @@
     <string name="agent_input_budget_exceeded">上下文超过当前模型的可用输入预算，请缩短输入或减少工具定义。</string>
 
     <!-- 设置页菜单标题 -->
+    <string name="settings_menu_layout_grid">切换为宫格布局</string>
+    <string name="settings_menu_layout_list">切换为列表布局</string>
     <string name="settings_title">设置</string>
     <string name="settings_select_section_hint">从左侧选择一个设置项</string>
     <string name="settings_providers">AI 供应商</string>
