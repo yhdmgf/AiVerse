@@ -373,30 +373,39 @@ class PluginsViewModel @Inject constructor(
         }
     }
 
-    /** 把已安装插件打包为可再导入的 zip（`plugin.json` 在包根），拷到 cacheDir/share 供系统分享。 */
-    fun exportPlugin(pluginId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching {
-                val installed = plugins.value.firstOrNull { it.id == pluginId }
-                    ?: error("插件未安装: $pluginId")
-                val dir = manager.pluginDir(pluginId)
-                if (!dir.isDirectory) error("插件目录缺失: $pluginId")
-                val shareDir = File(context.cacheDir, "share").apply { mkdirs() }
-                val version = installed.manifest?.version?.toString() ?: "unknown"
-                val out = File(shareDir, "${pluginId}_${version}.zip")
-                val root = dir.canonicalFile
-                ZipOutputStream(out.outputStream().buffered()).use { zos ->
-                    root.walkTopDown().filter { it.isFile }.forEach { file ->
-                        // 条目名取相对插件目录的路径，保证 plugin.json 落在 zip 根，能被 import 重新识别
-                        val entryName = file.canonicalFile.relativeTo(root).invariantSeparatorsPath
-                        zos.putNextEntry(ZipEntry(entryName))
-                        file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
-                    }
+    /**
+     * 把已安装插件打包为可再导入的 zip（`plugin.json` 在包根）。
+     *
+     * 抽成 suspend 纯函数是为了让批量导出自己排队：exportResult 是单槽位 SharedFlow，
+     * 一次 emit 多个文件会互相覆盖，批量场景必须直接拿文件而不是走事件流。
+     */
+    suspend fun buildPluginZip(pluginId: String): Result<File> = withContext(Dispatchers.IO) {
+        runCatching {
+            val installed = plugins.value.firstOrNull { it.id == pluginId }
+                ?: error("插件未安装: $pluginId")
+            val dir = manager.pluginDir(pluginId)
+            if (!dir.isDirectory) error("插件目录缺失: $pluginId")
+            val shareDir = File(context.cacheDir, "share").apply { mkdirs() }
+            val version = installed.manifest?.version?.toString() ?: "unknown"
+            val out = File(shareDir, "${pluginId}_${version}.zip")
+            val root = dir.canonicalFile
+            ZipOutputStream(out.outputStream().buffered()).use { zos ->
+                root.walkTopDown().filter { it.isFile }.forEach { file ->
+                    // 条目名取相对插件目录的路径，保证 plugin.json 落在 zip 根，能被 import 重新识别
+                    val entryName = file.canonicalFile.relativeTo(root).invariantSeparatorsPath
+                    zos.putNextEntry(ZipEntry(entryName))
+                    file.inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
                 }
-                out
             }
-            _exportResult.tryEmit(result)
+            out
+        }
+    }
+
+    /** 单插件分享/导出：打包后经 [exportResult] 事件流交给 UI 决定走分享还是 SAF 落盘。 */
+    fun exportPlugin(pluginId: String) {
+        viewModelScope.launch {
+            _exportResult.tryEmit(buildPluginZip(pluginId))
         }
     }
 

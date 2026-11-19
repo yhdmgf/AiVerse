@@ -194,8 +194,9 @@ jobs:
           SHA=$(git rev-parse --short HEAD)
 
           # 枚举所有 tags 取最大版本号（比 gh release view 取 latest 更稳，避免首次/空 latest 误判），按 1.0.x 递增（patch 满 99 进位到 2.0.0）
+          # tag 统一带 beta- 前缀（beta-1.0.1），与正式仓库的 1.0.1 区分；解析旧 tag 时一并剥掉前缀。
           PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
-                  | sed 's/^v//' | sort -V | tail -n1)
+                  | sed -e 's/^v//' -e 's/^beta-//' | sort -V | tail -n1)
           echo "上一个版本: ${PREV:-无（首次发布）}"
 
           # 提取「上一个测试版」release body 里的主仓库 commit SHA（格式「测试版构建（commit xxx）」），
@@ -227,12 +228,14 @@ jobs:
           if [ "$PATCH" -ge 10 ]; then PATCH=0; MINOR=$((MINOR + 1)); fi
           if [ "$MINOR" -ge 10 ]; then MINOR=0; MAJOR=$((MAJOR + 1)); fi
           VER="${MAJOR}.${MINOR}.${PATCH}"
-          echo "本次发布版本: $VER"
+          # 测试版 tag 加 beta- 前缀：避免与主仓库/正式版的同名 tag 混淆，版本号本体仍给 versionName 使用。
+          TAG="beta-$VER"
+          echo "本次发布版本: $VER（tag: $TAG）"
 
           # 兕底：若同 tag 的 release/tag 已存在（如上次构建残留），先删干净再建新，避免撞车失败
-          if gh release view "$VER" --repo "$TARGET_REPO" >/dev/null 2>&1; then
-            echo "检测到已存在 release $VER，先删除（release + tag）后重建"
-            gh release delete "$VER" --repo "$TARGET_REPO" --yes --cleanup-tag
+          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "检测到已存在 release $TAG，先删除（release + tag）后重建"
+            gh release delete "$TAG" --repo "$TARGET_REPO" --yes --cleanup-tag
           fi
 
           # 生成 Release notes：固定提示段（保留原句）+ 自上个测试版以来的变更列表（主仓库 git log），拼成多行变量 NOTES 供 --notes 使用（不落临时文件）。
@@ -279,7 +282,7 @@ jobs:
           printf '%s\n' "$NOTES"
 
           # 三个 APK 各自独立上传为 release 资产（文件名固定，不带版本号），附使用说明 txt
-          gh release create "$VER" \
+          gh release create "$TAG" \
             --repo "$TARGET_REPO" \
             --title "AiVerse 测试版 $VER" \
             --notes "$NOTES" \
@@ -293,4 +296,4 @@ jobs:
           echo "- 版本: \`$VER\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- commit: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- 发布: [yhdmgf/aiverse-beta Releases](https://github.com/yhdmgf/aiverse-beta/releases)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 变更: ${CHANGE_SUMMARY}（详见 [Release notes](https://github.com/$TARGET_REPO/releases/tag/$VER)）" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 变更: ${CHANGE_SUMMARY}（详见 [Release notes](https://github.com/$TARGET_REPO/releases/tag/$TAG)）" >> "$GITHUB_STEP_SUMMARY"

@@ -102,10 +102,20 @@ fun gitCommitCount(): Int = try {
 /**
  * 从 versionName 派生单调递增的 versionCode。
  *
- * 不用 git 提交数：仓库提交数极少时（如新仓库仅几个提交），versionCode 无法随版本递增，
- * 导致「versionName 更高但 versionCode 相同」——应用内更新误判为「版本不高于本地」。
- * 按 versionName 编码保证与版本号严格单调：预发布（dev/rc/pre/beta/alpha）低于同版本正式。
- * 例：1.7.0-dev → 1070000，1.7.0 → 1070050，1.8.0 → 1080050。
+ * 编码：`major*1_000_000 + minor*10_000 + patch*100 + 通道位`，通道位固定在 0..99 内分档，
+ * 各通道占互不重叠的区段，同版本内的预发布永远低于正式版：
+ *
+ * | 通道 | 区段 | 取值 |
+ * | --- | --- | --- |
+ * | dev（-dev.N / pre / alpha / snapshot / dirty） | 0..29 | N 上限 29，缺省 0 |
+ * | beta（-beta.N） | 30..42 | N 上限 12，缺省 30 |
+ * | rc（-rcN） | 43..49 | N 上限 6，缺省 43 |
+ * | 正式版 | 50 | 固定 |
+ *
+ * 正式版仍固定在 base+50（与历史版本号完全一致），保证已安装旧版本的设备能正常升级；
+ * 预发布各档各自单调，不再出现「dev 的 N 涨到几百、通道语义被 N 撑坏」的问题。
+ *
+ * 例：1.7.0-dev.2 → 1700002，1.7.0-beta.1 → 1700031，1.7.0-rc1 → 1700044，1.7.0 → 1700050。
  */
 fun versionCodeFromVersionName(name: String): Int {
     val m = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(name) ?: return 1
@@ -113,20 +123,22 @@ fun versionCodeFromVersionName(name: String): Int {
     val minor = m.groupValues[2].toInt()
     val patch = m.groupValues[3].toInt()
     val base = major * 1_000_000 + minor * 10_000 + patch * 100
-    // 预发布 rcN：base + rc 数字（rc1 < rc2 < rc3 ...），上限 49，保证仍低于正式版（base+50）。
-    val rcMatch = Regex("""-rc(\d+)$""", RegexOption.IGNORE_CASE).find(name)
-    if (rcMatch != null) {
-        return base + rcMatch.groupValues[1].toInt().coerceAtMost(49)
-    }
-    // dev/beta 测试构建（-dev.N 或 -dev.N+hash）：versionCode 高于同版本正式版（base+50），
-    // 且随 N（距最近 tag 的提交数）递增，保证测试包能覆盖已安装的正式版/旧测试包，不被 Android 判降级。
-    // N 不参与正式版计算，正式版仍为 base+50（低于 dev 测试构建）。
+
+    // beta 必须先于 dev 匹配：beta 名字里也可能带 dev 字样（1.0.0-beta.1-dev.3）。
+    val betaMatch = Regex("""-beta[.\-_]?(\d+)?""", RegexOption.IGNORE_CASE).find(name)
+    val rcMatch = Regex("""-rc(\d+)""", RegexOption.IGNORE_CASE).find(name)
     val devMatch = Regex("""-dev\.(\d+)""", RegexOption.IGNORE_CASE).find(name)
-    if (devMatch != null) {
-        return base + 100 + devMatch.groupValues[1].toInt().coerceAtMost(999)
+
+    return when {
+        rcMatch != null -> base + 43 + rcMatch.groupValues[1].toInt().coerceAtMost(6)
+        betaMatch != null -> {
+            val n = betaMatch.groupValues[1].toIntOrNull() ?: 0
+            base + 30 + n.coerceAtMost(12)
+        }
+        devMatch != null -> base + devMatch.groupValues[1].toInt().coerceAtMost(29)
+        Regex("""[-.]?(dev|pre|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name) -> base
+        else -> base + 50
     }
-    val isPre = Regex("""[-.]?(dev|pre|beta|alpha|snapshot|dirty)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
-    return if (isPre) base else base + 50
 }
 
 // 版本号覆盖（CI 手动构建）：-PversionNameOverride=2.0.0 用输入版本号覆盖内置 git 派生，

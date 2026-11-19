@@ -179,6 +179,26 @@ internal fun PluginSettingsSection(
         }
     }
 
+    // 批量导出：逐个排队走 SAF，用户选完一个保存位置再弹下一个。
+    // exportZip 是单槽位（pendingExportBytes 只存一份），并发或连发会互相覆盖，必须串起来。
+    val exportScope = rememberCoroutineScope()
+    val exportQueue = remember { mutableListOf<File>() }
+    fun exportNextInQueue() {
+        val file = exportQueue.removeFirstOrNull() ?: return
+        exportScope.launch {
+            val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
+            if (bytes == null) {
+                FileLogger.w("PluginSettingsSection", "读取导出包失败: ${file.name}")
+                exportNextInQueue()
+                return@launch
+            }
+            fileShareExport.exportZip(bytes, file.name) { ok ->
+                if (!ok) FileLogger.w("PluginSettingsSection", "导出插件包落盘失败: ${file.name}")
+                exportNextInQueue()
+            }
+        }
+    }
+
     // 详情/商店详情/开发详情显示时，系统返回应先回插件列表（清选中状态），
     // 而不是冒泡到 SettingsScreen 直接退出插件分区（之前返回会跳设置主菜单，且状态不清导致再点插件卡详情、需重启）。
     val inDetail = selectedPlugin != null || selectedStoreItem != null || selectedDevProject != null
@@ -320,9 +340,21 @@ internal fun PluginSettingsSection(
                 onBatchSetEnabled = { selected, enabled ->
                     selected.forEach { viewModel.setEnabled(it.id, enabled) }
                 },
-                // 批量只保留「分享」：多选导出要逐个弹 SAF 选位置，且 exportResult 是单次待落盘状态，
-                // 批量串行会很别扭；批量分享走系统分享面板，用户可在面板里选「保存到文件」。
+                // 批量分享：逐个打包后走系统分享面板（exportResult 事件流）。
                 onBatchShare = { selected -> selected.forEach { viewModel.exportPlugin(it.id) } },
+                // 批量导出：绕开事件流直接打包，再按队列逐个弹 SAF 选保存位置。
+                onBatchExport = { selected ->
+                    exportScope.launch {
+                        val files = selected.mapNotNull { viewModel.buildPluginZip(it.id).getOrNull() }
+                        if (files.isEmpty()) {
+                            Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        exportQueue.clear()
+                        exportQueue.addAll(files)
+                        exportNextInQueue()
+                    }
+                },
                 initialTabPage = pluginsTab,
                 onTabPageChange = { pluginsTab = it },
                 onShowStorePreview = viewModel::showPreview,
