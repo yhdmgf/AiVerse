@@ -439,11 +439,14 @@ private fun InstalledPluginsPage(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                start = Spacing.lg,
-                end = Spacing.lg,
+                // 与角色/子代理等列表页一致：左右 md、顶部 xs，分组标题与卡片左边缘对齐。
+                start = Spacing.md,
+                end = Spacing.md,
+                top = t.xs,
                 bottom = if (selection.isActive) selectionListBottomContentPadding(true) else t.pluginTabBarReserve
-            ),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            )
+            // 不设 spacedBy：LazyGroupItem 只在首尾行做圆角，行间必须无缝拼成一张卡；
+            // 组与组之间、卡片之外的间距由下面各项自己 padding 控制。
         ) {
             // 一键更新全部：仅当存在可升级插件时显示；更新中禁用防重复点击。
             if (updates.isNotEmpty()) {
@@ -453,7 +456,9 @@ private fun InstalledPluginsPage(
                     Button(
                         onClick = onUpdateAll,
                         enabled = !updating,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = Spacing.sm)
                     ) {
                         Text(
                             text = if (updating) {

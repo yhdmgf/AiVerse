@@ -196,8 +196,11 @@ fun SelectionActionBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg)
-            .height(selectionActionBarHeight())
-            .padding(bottom = 6.dp),
+            // 底部间距必须放在 height 之前：写在 height 之后只是把内容往内缩，
+            // 玻璃栏自身尺寸仍等于 selectionActionBarHeight()，底边照样贴着内容区底部。
+            // 备份页 FloatingTabBar 自带 6dp 底距，这里对齐同一间距。
+            .padding(bottom = t.scale(6))
+            .height(selectionActionBarHeight()),
         shape = RoundedCornerShape(t.rLg),
         color = glassOr(MaterialTheme.semanticColors.surfaceGlass, MaterialTheme.semanticColors.cardSurface),
         border = BorderStroke(1.dp, glassBorderOr(MaterialTheme.semanticColors.surfaceGlassBorder)),

@@ -48,6 +48,7 @@ import com.aiverse.R
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.AdaptiveModalBottomSheet
+import com.aiverse.core.ui.rememberFileShareExport
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.settings.presentation.component.SkillMenuRow
 import compose.icons.FeatherIcons
@@ -55,7 +56,9 @@ import compose.icons.feathericons.ArrowLeft
 import compose.icons.feathericons.Download
 import compose.icons.feathericons.MoreHorizontal
 import compose.icons.feathericons.Share2
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -147,11 +150,30 @@ internal fun PluginSettingsSection(
             }
         }
     }
-    // 已安装插件导出：打包成 zip 后复用同一 FileProvider 分享流程；失败复用商店下载失败文案。
+    // 分享 / 导出共用同一条打包管线（viewModel.exportPlugin），靠 exportToSaf 区分落地方式：
+    // - 分享：打包后走系统分享面板（FileProvider + ACTION_SEND）。
+    // - 导出：打包后走 SAF CreateDocument，让用户自己选保存位置（与技能导出行为一致）。
+    val fileShareExport = rememberFileShareExport()
+    var exportToSaf by remember { mutableStateOf(false) }
     LaunchedEffect(viewModel) {
         viewModel.exportResult.collect { result ->
-            result.onSuccess(::sharePluginPackage).onFailure { e ->
-                FileLogger.w("PluginSettingsSection", "导出插件包失败", e)
+            result.onSuccess { file ->
+                if (exportToSaf) {
+                    exportToSaf = false
+                    val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
+                    if (bytes == null) {
+                        Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
+                    } else {
+                        fileShareExport.exportZip(bytes, file.name) { ok ->
+                            if (!ok) FileLogger.w("PluginSettingsSection", "导出插件包落盘失败: ${file.name}")
+                        }
+                    }
+                } else {
+                    sharePluginPackage(file)
+                }
+            }.onFailure { e ->
+                exportToSaf = false
+                FileLogger.w("PluginSettingsSection", "打包插件包失败", e)
                 Toast.makeText(context, shareFailedMessage, Toast.LENGTH_LONG).show()
             }
         }
@@ -201,6 +223,7 @@ internal fun PluginSettingsSection(
                                 text = { SkillMenuRow(FeatherIcons.Download, stringResource(R.string.plugins_export)) },
                                 onClick = {
                                     detailMoreExpanded = false
+                                    exportToSaf = true
                                     viewModel.exportPlugin(selectedPlugin.id)
                                 }
                             )
@@ -211,7 +234,10 @@ internal fun PluginSettingsSection(
             PluginDetailSection(
                 plugin = selectedPlugin,
                 onToggleEnabled = { viewModel.setEnabled(selectedPlugin.id, it) },
-                onExport = { viewModel.exportPlugin(selectedPlugin.id) },
+                onExport = {
+                    exportToSaf = true
+                    viewModel.exportPlugin(selectedPlugin.id)
+                },
                 bridgeFactory = { page, post, onClose ->
                     viewModel.createWebBridge(
                         page = page,
@@ -294,8 +320,8 @@ internal fun PluginSettingsSection(
                 onBatchSetEnabled = { selected, enabled ->
                     selected.forEach { viewModel.setEnabled(it.id, enabled) }
                 },
-                // 分享与导出都复用 exportPlugin：导出结果经 exportResult 流拉起系统分享。
-                onBatchExport = { selected -> selected.forEach { viewModel.exportPlugin(it.id) } },
+                // 批量只保留「分享」：多选导出要逐个弹 SAF 选位置，且 exportResult 是单次待落盘状态，
+                // 批量串行会很别扭；批量分享走系统分享面板，用户可在面板里选「保存到文件」。
                 onBatchShare = { selected -> selected.forEach { viewModel.exportPlugin(it.id) } },
                 initialTabPage = pluginsTab,
                 onTabPageChange = { pluginsTab = it },
