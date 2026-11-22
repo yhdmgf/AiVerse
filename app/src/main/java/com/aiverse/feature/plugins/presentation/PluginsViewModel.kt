@@ -19,6 +19,7 @@ import com.aiverse.feature.plugins.data.PluginDevPackageBuilder
 import com.aiverse.feature.plugins.data.PluginDevSettingsRepository
 import com.aiverse.feature.plugins.data.PluginOverlayPermissionRepository
 import com.aiverse.feature.plugins.data.PluginShizukuPermissionRepository
+import com.aiverse.feature.plugins.data.PluginSshPermissionRepository
 import com.aiverse.feature.plugins.data.PluginStoreSettingsRepository
 // TODO(P3a): PluginIndexSourceRepository 由 AiCode 的 data.index 提供；
 // AiVerse 已由 P3a 落地（data.index 目录已就绪），import 可直接解析。
@@ -51,6 +52,7 @@ import com.aiverse.feature.plugins.runtime.PluginHookDispatcher
 import com.aiverse.feature.plugins.runtime.PluginProviderRegistrar
 import com.aiverse.feature.plugins.runtime.PluginRuntimeManager
 import com.aiverse.feature.plugins.runtime.PluginShizukuRunner
+import com.aiverse.feature.plugins.runtime.PluginSshRunner
 import com.aiverse.feature.plugins.runtime.PluginTerminalRunner
 import com.aiverse.feature.plugins.runtime.PluginTipManager
 import com.aiverse.feature.plugins.runtime.PluginToolService
@@ -189,11 +191,13 @@ class PluginsViewModel @Inject constructor(
     private val pluginTerminalRunner: PluginTerminalRunner,
     private val pluginProviderRegistrar: PluginProviderRegistrar,
     private val shizukuPermissionRepository: PluginShizukuPermissionRepository,
+    private val sshPermissionRepository: PluginSshPermissionRepository,
     private val overlayPermissionRepository: PluginOverlayPermissionRepository,
     private val backupPermissionRepository: PluginBackupPermissionRepository,
     private val overlayManager: PluginOverlayManager,
     private val shizukuManager: ShizukuManager,
     private val shizukuRunner: PluginShizukuRunner,
+    private val sshRunner: PluginSshRunner,
     private val tipManager: PluginTipManager,
     private val devSettingsRepository: PluginDevSettingsRepository,
     private val indexSourceRepository: PluginIndexSourceRepository,
@@ -246,6 +250,14 @@ class PluginsViewModel @Inject constructor(
         combine(manager.plugins, shizukuPermissionRepository.grants) { plugins, grants ->
             plugins.filter { plugin ->
                 plugin.isActive && plugin.content?.shizuku != null && grants.containsKey(plugin.id)
+            }.map { it.id }.toSet()
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** 已授权使用 SSH 桥的插件；停用、卸载或撤销后自动从集合中消失。 */
+    val sshGrantedPluginIds: StateFlow<Set<String>> =
+        combine(manager.plugins, sshPermissionRepository.grants) { plugins, grants ->
+            plugins.filter { plugin ->
+                plugin.isActive && plugin.content?.ssh != null && grants.containsKey(plugin.id)
             }.map { it.id }.toSet()
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -607,6 +619,18 @@ class PluginsViewModel @Inject constructor(
         }
     }
 
+    /** 插件级 SSH 桥授权；关闭后该插件无法再通过 SSH 桥列出服务器或执行命令。 */
+    fun setSshGranted(plugin: InstalledPlugin, granted: Boolean) {
+        if (plugin.content?.ssh == null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            if (granted) {
+                sshPermissionRepository.grant(plugin.id)
+            } else {
+                sshPermissionRepository.revoke(plugin.id)
+            }
+        }
+    }
+
     /** 插件级悬浮窗授权；撤销时立即关闭该插件已经打开的窗口。 */
     fun setOverlayGranted(plugin: InstalledPlugin, granted: Boolean) {
         if (plugin.content?.overlay == null) return
@@ -859,6 +883,7 @@ class PluginsViewModel @Inject constructor(
             pluginRuntimeManager = pluginRuntimeManager,
             terminalRunner = pluginTerminalRunner,
             shizukuRunner = shizukuRunner,
+            sshRunner = sshRunner,
             tipManager = tipManager,
             foregroundMonitor = foregroundMonitor,
             overlayManager = overlayManager,

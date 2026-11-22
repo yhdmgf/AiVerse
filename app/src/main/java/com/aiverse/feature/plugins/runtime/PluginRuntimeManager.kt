@@ -66,6 +66,7 @@ class PluginRuntimeManager @Inject constructor(
     private val notifier: PluginNotifier,
     private val terminalRunner: PluginTerminalRunner,
     private val shizukuRunner: PluginShizukuRunner,
+    private val sshRunner: PluginSshRunner,
     private val tipManager: PluginTipManager,
     private val chatService: PluginChatService,
     private val modelService: PluginModelService,
@@ -296,6 +297,8 @@ class PluginRuntimeManager @Inject constructor(
             "host.bash" -> bash(params)
             "host.notify" -> notifier.notify(pluginId, params)
             "host.shizuku.exec" -> shizukuExec(pluginId, params)
+            "host.ssh.list" -> sshList(pluginId)
+            "host.ssh.exec" -> sshExec(pluginId, params)
             "host.overlay.create" -> overlayCreate(pluginId, params)
             "host.overlay.close" -> overlayClose(pluginId, params)
             "host.overlay.postMessage" -> overlayPostMessage(pluginId, params)
@@ -467,6 +470,22 @@ class PluginRuntimeManager @Inject constructor(
         }
     }
 
+    private suspend fun sshList(pluginId: String): JsonElement = try {
+        sshRunner.listServers(pluginId)
+    } catch (e: PluginHostException) {
+        throw PluginProcessException(e.code, e.message)
+    } catch (e: PluginSshException) {
+        throw PluginProcessException(e.code, e.message.orEmpty())
+    }
+
+    private suspend fun sshExec(pluginId: String, params: JsonObject): JsonElement = try {
+        sshRunner.exec(pluginId, params)
+    } catch (e: PluginHostException) {
+        throw PluginProcessException(e.code, e.message)
+    } catch (e: PluginSshException) {
+        throw PluginProcessException(e.code, e.message.orEmpty())
+    }
+
     private suspend fun bash(params: JsonObject): JsonElement {
         val command = PluginHostPaths.requireString(params, "command")
         if (command.isBlank()) throw PluginProcessException("PARAM_INVALID", "empty command")
@@ -635,6 +654,7 @@ class PluginRuntimeManager @Inject constructor(
         const val IDLE_CHECK_MS = 60_000L
         const val MAX_TERMINAL_TITLE_CHARS = 120
         const val DEFAULT_SHIZUKU_TIMEOUT_SECONDS = 120L
+        const val DEFAULT_SSH_TIMEOUT_SECONDS = 120L
         const val OVERLAY_MESSAGE_TIMEOUT_MS = 30_000L
         const val PROCESS_ORIGIN = "process"
     }

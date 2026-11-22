@@ -101,6 +101,7 @@ internal fun PluginSettingsSection(
     val devRefreshing by viewModel.devRefreshing.collectAsStateWithLifecycle()
     val shizukuState by viewModel.shizukuState.collectAsStateWithLifecycle()
     val shizukuGranted by viewModel.shizukuGrantedPluginIds.collectAsStateWithLifecycle()
+    val sshGranted by viewModel.sshGrantedPluginIds.collectAsStateWithLifecycle()
     val overlayGranted by viewModel.overlayGrantedPluginIds.collectAsStateWithLifecycle()
     val backupGranted by viewModel.backupGrantedPluginIds.collectAsStateWithLifecycle()
     val dependencyStates by viewModel.dependencyStates.collectAsStateWithLifecycle()
@@ -299,6 +300,8 @@ internal fun PluginSettingsSection(
                 shizukuGranted = selectedPlugin.id in shizukuGranted,
                 shizukuState = shizukuState,
                 onSetShizukuGranted = { viewModel.setShizukuGranted(selectedPlugin, it) },
+                sshGranted = selectedPlugin.id in sshGranted,
+                onSetSshGranted = { viewModel.setSshGranted(selectedPlugin, it) },
                 overlayGranted = selectedPlugin.id in overlayGranted,
                 onSetOverlayGranted = { viewModel.setOverlayGranted(selectedPlugin, it) },
                 backupGranted = selectedPlugin.id in backupGranted,

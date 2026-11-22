@@ -270,6 +270,11 @@ data class PluginSessionSourceRef(
 data class PluginShizukuRef(val purpose: String)
 
 /**
+ * `contributes.ssh` 声明插件使用 SSH 桥。声明只保留用途说明，展示在使用者授权界面。
+ */
+data class PluginSshRef(val purpose: String)
+
+/**
  * `contributes.backup` 声明插件接收备份与还原事件。事件会带出完整备份文件，
  * 可能包含 API Key、会话记录等敏感数据，因此必须由使用者单独授权。
  */
@@ -334,6 +339,7 @@ data class PluginManifest(
     val providers: List<PluginProviderRef> = emptyList(),
     val sessionSources: List<PluginSessionSourceRef> = emptyList(),
     val shizuku: PluginShizukuRef? = null,
+    val ssh: PluginSshRef? = null,
     val overlay: PluginOverlayRef? = null,
     val backup: PluginBackupRef? = null,
     val modelAccess: PluginModelAccessRef? = null,
@@ -344,7 +350,7 @@ data class PluginManifest(
     /** 清单声明的贡献总数。 */
     val contributionCount: Int
         get() = skills.size + agents.size + workspaceTools.size + uiEntries.size +
-            tools.size + hooks.size + mcp.size + providers.size + sessionSources.size + (if (shizuku != null) 1 else 0) +
+            tools.size + hooks.size + mcp.size + providers.size + sessionSources.size + (if (shizuku != null) 1 else 0) + (if (ssh != null) 1 else 0) +
             (if (overlay != null) 1 + overlay.surfaces.size else 0) + (if (backup != null) 1 else 0) +
             (if (modelAccess != null) 1 else 0) + (if (configPage != null) 1 else 0)
 }

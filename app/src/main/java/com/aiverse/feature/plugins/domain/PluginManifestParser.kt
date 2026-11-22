@@ -60,6 +60,7 @@ object PluginManifestParser {
     private val SESSION_SOURCE_HANDLER_KEYS =
         setOf("listSessions", "readSession", "sendMessage", "interruptSession", "createSession", "refresh")
     private val SHIZUKU_KEYS = setOf("purpose")
+    private val SSH_KEYS = setOf("purpose")
     private val BACKUP_KEYS = setOf("purpose")
     private val MODEL_ACCESS_KEYS = setOf("purpose")
     private val OVERLAY_KEYS = setOf("purpose", "surfaces")
@@ -82,6 +83,7 @@ object PluginManifestParser {
     private const val MAX_IDS_PER_TYPE = 64
     private const val MAX_PROVIDER_URL = 2048
     private const val MAX_SHIZUKU_PURPOSE = 200
+    private const val MAX_SSH_PURPOSE = 200
     private const val MAX_BACKUP_PURPOSE = 200
     private const val MAX_MODEL_ACCESS_PURPOSE = 200
     private const val MAX_OVERLAY_PURPOSE = 200
@@ -165,6 +167,7 @@ object PluginManifestParser {
                     providers = contributes.providers,
                     sessionSources = contributes.sessionSources,
                     shizuku = contributes.shizuku,
+                    ssh = contributes.ssh,
                     overlay = contributes.overlay,
                     backup = contributes.backup,
                     modelAccess = contributes.modelAccess,
@@ -405,6 +408,7 @@ object PluginManifestParser {
             val providers: List<PluginProviderRef>,
             val sessionSources: List<PluginSessionSourceRef>,
             val shizuku: PluginShizukuRef?,
+            val ssh: PluginSshRef?,
             val overlay: PluginOverlayRef?,
             val backup: PluginBackupRef?,
             val modelAccess: PluginModelAccessRef?,
@@ -418,8 +422,8 @@ object PluginManifestParser {
             contributes.keys.filter {
                 it != "skills" && it != "agents" && it != "workspaceTools" && it != "uiEntries" &&
                     it != "tools" && it != "hooks" && it != "mcp" && it != "providers" &&
-                    it != "sessionSources" && it != "shizuku" && it != "overlay" && it != "backup" && it != "modelAccess" &&
-                    it != "configPage"
+                    it != "sessionSources" && it != "shizuku" && it != "ssh" && it != "overlay" && it != "backup" &&
+                    it != "modelAccess" && it != "configPage"
             }.forEach {
                 err(PluginErrorCode.UNSUPPORTED_CONTRIBUTION, it)
                 ok = false
@@ -441,6 +445,11 @@ object PluginManifestParser {
             val shizuku = readShizuku(contributes["shizuku"], "contributes.shizuku")
                 ?: run {
                     if (contributes["shizuku"] != null) ok = false
+                    null
+                }
+            val ssh = readSsh(contributes["ssh"], "contributes.ssh")
+                ?: run {
+                    if (contributes["ssh"] != null) ok = false
                     null
                 }
             val overlay = readOverlay(contributes["overlay"], "contributes.overlay")
@@ -475,14 +484,15 @@ object PluginManifestParser {
             val configPage = readConfigPage(contributes["configPage"], "contributes.configPage")
             if (ok && skills.isEmpty() && agents.isEmpty() && workspaceTools.isEmpty() && uiEntries.isEmpty() &&
                 tools.isEmpty() && hooks.isEmpty() && mcp.isEmpty() && providers.isEmpty() && sessionSources.isEmpty() &&
-                shizuku == null && overlay == null && backup == null && modelAccess == null && configPage == null
+                shizuku == null && ssh == null && overlay == null && backup == null && modelAccess == null &&
+                configPage == null
             ) {
                 invalid("contributes")
                 ok = false
             }
             return if (ok) Contributes(
                 skills, agents, workspaceTools, uiEntries, tools, hooks, mcp, providers, sessionSources,
-                shizuku, overlay, backup, modelAccess, configPage
+                shizuku, ssh, overlay, backup, modelAccess, configPage
             ) else null
         }
 
@@ -755,6 +765,21 @@ object PluginManifestParser {
                 return null
             }
             return PluginShizukuRef(purpose)
+        }
+
+        /** 缺省表示不使用 SSH 桥；声明只需给出用途，展示在使用者授权界面。 */
+        private fun readSsh(raw: JsonElement?, path: String): PluginSshRef? {
+            if (raw == null) return null
+            val obj = raw as? JsonObject ?: return null.also { invalid(path) }
+            obj.keys.filter { it !in SSH_KEYS }.forEach {
+                err(PluginErrorCode.UNSUPPORTED_FIELD, "$path.$it")
+            }
+            val purpose = obj["purpose"]?.stringOrNull()?.trim()
+            if (purpose.isNullOrEmpty() || purpose.length > MAX_SSH_PURPOSE) {
+                invalid("$path.purpose")
+                return null
+            }
+            return PluginSshRef(purpose)
         }
 
         /** 缺省表示不接收备份事件；声明只需给出用途，展示在使用者授权界面。 */

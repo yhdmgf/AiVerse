@@ -826,6 +826,14 @@ export interface HostMethodMap {
     params: { command: string; timeout?: number };
     result: BashResult;
   };
+  'host.ssh.list': {
+    params: NoParams;
+    result: { servers: Array<{ id: string; name: string }> };
+  };
+  'host.ssh.exec': {
+    params: { serverId: string; command: string; timeout?: number };
+    result: BashResult;
+  };
   'host.notify': { params: NotifyOptions; result: OkResult };
   'host.tip': { params: TipOptions; result: TipResult };
 

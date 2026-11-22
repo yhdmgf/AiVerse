@@ -872,6 +872,8 @@ internal fun PluginDetailSection(
     shizukuGranted: Boolean = false,
     shizukuState: ShizukuState = ShizukuState.NOT_INSTALLED,
     onSetShizukuGranted: (Boolean) -> Unit = {},
+    sshGranted: Boolean = false,
+    onSetSshGranted: (Boolean) -> Unit = {},
     overlayGranted: Boolean = false,
     onSetOverlayGranted: (Boolean) -> Unit = {},
     backupGranted: Boolean = false,
@@ -917,6 +919,8 @@ internal fun PluginDetailSection(
                     shizukuGranted = shizukuGranted,
                     shizukuState = shizukuState,
                     onSetShizukuGranted = onSetShizukuGranted,
+                    sshGranted = sshGranted,
+                    onSetSshGranted = onSetSshGranted,
                     overlayGranted = overlayGranted,
                     onSetOverlayGranted = onSetOverlayGranted,
                     backupGranted = backupGranted,
@@ -950,6 +954,8 @@ private fun PluginNativeConfigContent(
     shizukuGranted: Boolean = false,
     shizukuState: ShizukuState = ShizukuState.NOT_INSTALLED,
     onSetShizukuGranted: (Boolean) -> Unit = {},
+    sshGranted: Boolean = false,
+    onSetSshGranted: (Boolean) -> Unit = {},
     overlayGranted: Boolean = false,
     onSetOverlayGranted: (Boolean) -> Unit = {},
     backupGranted: Boolean = false,
@@ -1010,7 +1016,7 @@ private fun PluginNativeConfigContent(
             }
         }
 
-        if (plugin.content?.shizuku != null || plugin.content?.overlay != null || plugin.content?.backup != null) {
+        if (plugin.content?.shizuku != null || plugin.content?.ssh != null || plugin.content?.overlay != null || plugin.content?.backup != null) {
             SettingsGroupHeader(text = stringResource(R.string.plugins_permissions_section))
             SettingsGroup {
                 plugin.content?.shizuku?.let { declaration ->
@@ -1050,7 +1056,38 @@ private fun PluginNativeConfigContent(
                     }
                 }
 
-                if (plugin.content?.shizuku != null && (plugin.content?.overlay != null || plugin.content?.backup != null)) {
+                if (plugin.content?.shizuku != null && (plugin.content?.ssh != null || plugin.content?.overlay != null || plugin.content?.backup != null)) {
+                    SettingsDivider()
+                }
+
+                plugin.content?.ssh?.let { declaration ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.lg, vertical = t.listCellPaddingVertical),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.plugins_ssh_section),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = declaration.purpose,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        AppSwitch(
+                            checked = sshGranted,
+                            onCheckedChange = onSetSshGranted,
+                            enabled = plugin.isActive
+                        )
+                    }
+                }
+
+                if (plugin.content?.ssh != null && (plugin.content?.overlay != null || plugin.content?.backup != null)) {
                     SettingsDivider()
                 }
 

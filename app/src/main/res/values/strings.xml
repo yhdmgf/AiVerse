@@ -448,6 +448,7 @@
     <string name="plugins_store_mirror_invalid">请填写 http:// 或 https:// 开头的地址</string>
     <string name="plugins_permissions_section">权限</string>
     <string name="plugins_shizuku_section">Shizuku</string>
+    <string name="plugins_ssh_section">SSH</string>
     <string name="plugins_backup_section">备份与还原事件</string>
     <string name="plugins_shizuku_system_state">系统状态：%1$s</string>
     <string name="plugins_overlay_section">悬浮窗</string>

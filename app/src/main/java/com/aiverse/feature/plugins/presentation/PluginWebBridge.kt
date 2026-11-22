@@ -26,6 +26,8 @@ import com.aiverse.feature.plugins.runtime.PluginRuntimeManager
 import com.aiverse.feature.plugins.runtime.PluginSecretStore
 import com.aiverse.feature.plugins.runtime.PluginShizukuException
 import com.aiverse.feature.plugins.runtime.PluginShizukuRunner
+import com.aiverse.feature.plugins.runtime.PluginSshException
+import com.aiverse.feature.plugins.runtime.PluginSshRunner
 import com.aiverse.feature.plugins.runtime.PluginSystemService
 import com.aiverse.feature.plugins.runtime.PluginTerminalException
 import com.aiverse.feature.plugins.runtime.PluginTerminalRunner
@@ -86,6 +88,7 @@ class PluginWebBridge(
     private val pluginRuntimeManager: PluginRuntimeManager,
     private val terminalRunner: PluginTerminalRunner,
     private val shizukuRunner: PluginShizukuRunner,
+    private val sshRunner: PluginSshRunner,
     private val tipManager: PluginTipManager,
     private val foregroundMonitor: AppForegroundMonitor,
     private val overlayManager: PluginOverlayManager,
@@ -433,6 +436,8 @@ class PluginWebBridge(
         }
         "bash" -> bash(params)
         "shizuku.exec" -> shizukuExec(params)
+        "ssh.list" -> sshList()
+        "ssh.exec" -> sshExec(params)
         "overlay.create" -> overlayCreate(params)
         "overlay.update" -> overlayUpdate(params)
         "overlay.close" -> overlayClose(params)
@@ -632,6 +637,20 @@ class PluginWebBridge(
         } catch (e: PluginShizukuException) {
             throw PluginHostException(e.code, e.message.orEmpty())
         }
+    }
+
+    /** 列出插件清单声明范围内的 SSH 服务器；授权与声明校验由 [PluginSshRunner] 负责。 */
+    private suspend fun sshList(): JsonElement = try {
+        sshRunner.listServers(page.pluginId)
+    } catch (e: PluginSshException) {
+        throw PluginHostException(e.code, e.message.orEmpty())
+    }
+
+    /** 通过 SSH 桥在声明范围内的服务器上执行操作；范围由插件的清单声明限制。 */
+    private suspend fun sshExec(params: JsonObject): JsonElement = try {
+        sshRunner.exec(page.pluginId, params)
+    } catch (e: PluginSshException) {
+        throw PluginHostException(e.code, e.message.orEmpty())
     }
 
     /** 新建共享终端标签；后续通过 terminal.poll 读取输出。 */

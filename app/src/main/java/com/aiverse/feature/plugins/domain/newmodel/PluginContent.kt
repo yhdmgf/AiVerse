@@ -176,6 +176,12 @@ data class PluginShizukuDefinition(
     val purpose: String
 )
 
+/** 已解析的 SSH 桥声明：仅用途说明，授权后可在已配置服务器执行命令。 */
+data class PluginSshDefinition(
+    val pluginId: String,
+    val purpose: String
+)
+
 /** 已解析的备份事件声明：仅用途说明，授权后才能收到备份与还原文件。 */
 data class PluginBackupDefinition(
     val pluginId: String,
@@ -229,6 +235,7 @@ data class PluginContent(
     val providers: List<PluginProviderDefinition> = emptyList(),
     val sessionSources: List<PluginSessionSourceDefinition> = emptyList(),
     val shizuku: PluginShizukuDefinition? = null,
+    val ssh: PluginSshDefinition? = null,
     val overlay: PluginOverlayDefinition? = null,
     val backup: PluginBackupDefinition? = null,
     val modelAccess: PluginModelAccessDefinition? = null,
@@ -300,6 +307,12 @@ object PluginContentLoader {
                 purpose = it.purpose
             )
         }
+        val ssh = manifest.ssh?.let {
+            PluginSshDefinition(
+                pluginId = manifest.id,
+                purpose = it.purpose
+            )
+        }
         val backup = manifest.backup?.let {
             PluginBackupDefinition(
                 pluginId = manifest.id,
@@ -341,6 +354,7 @@ object PluginContentLoader {
                     providers = providers,
                     sessionSources = sessionSources,
                     shizuku = shizuku,
+                    ssh = ssh,
                     overlay = overlay,
                     backup = backup,
                     modelAccess = modelAccess,

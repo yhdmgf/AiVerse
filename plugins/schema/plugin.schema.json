@@ -227,6 +227,7 @@
           }
         },
         "shizuku": { "$ref": "#/$defs/purposeRef" },
+        "ssh": { "$ref": "#/$defs/purposeRef" },
         "backup": { "$ref": "#/$defs/purposeRef" },
         "modelAccess": { "$ref": "#/$defs/purposeRef" },
         "overlay": {
