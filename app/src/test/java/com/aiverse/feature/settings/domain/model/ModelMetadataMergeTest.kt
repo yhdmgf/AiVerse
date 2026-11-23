@@ -188,4 +188,74 @@ class ModelMetadataMergeTest {
         // 能力/窗口合并不受影响
         assertEquals(128_000, merged.contextTokens)
     }
+
+    // ---- layerModelMetadata：目录(低) → 接口(中) → 自定义(高) 三层叠加 ----
+
+    private fun capaMeta(
+        contextTokens: Int,
+        supportsTools: Boolean,
+        supportsVision: Boolean
+    ) = ModelMetadata(
+        id = "m",
+        displayName = "m",
+        contextTokens = contextTokens,
+        supportsTools = supportsTools,
+        supportsVision = supportsVision
+    )
+
+    @Test
+    fun layer_fetchedContext_overridesCatalog() {
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(1_000_000, layered!!.contextTokens)
+    }
+
+    @Test
+    fun layer_fetchedAbsentCapability_doesNotClearCatalogTrue() {
+        // 接口没声明工具能力（false），不应清零目录里的 true
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = true)
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(true, layered!!.supportsTools)
+        assertEquals(true, layered.supportsVision)
+    }
+
+    @Test
+    fun layer_fetchedAffirmativeCapability_keptWhenCatalogFalse() {
+        // 接口明确支持工具、目录没有，叠加后应为 true
+        val catalog = capaMeta(128_000, supportsTools = false, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(true, layered!!.supportsTools)
+    }
+
+    @Test
+    fun layer_customCapability_overridesBoth() {
+        // 自定义层最高优先：用户显式关掉工具，目录/接口都是 true 也应关掉
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+        val custom = capaMeta(2_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched, custom = custom)
+
+        assertEquals(false, layered!!.supportsTools)
+        assertEquals(2_000_000, layered.contextTokens)
+    }
+
+    @Test
+    fun layer_nullCatalog_returnsFetchedThenCustom() {
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+
+        val onlyFetched = layerModelMetadata("m", catalog = null, fetched = fetched)
+        assertEquals(fetched, onlyFetched)
+
+        assertNull(layerModelMetadata("m", catalog = null, fetched = null))
+    }
 }

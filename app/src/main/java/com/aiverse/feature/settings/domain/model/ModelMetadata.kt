@@ -61,6 +61,35 @@ data class ModelMetadata(
 fun modelMetadataKey(providerId: String, model: String): String = "$providerId:$model"
 
 /**
+ * 按优先级从低到高叠加三层元数据：内置目录（最低）→ 模型列表接口自带 → 用户自定义（最高）。
+ *
+ * 合并语义（字段差异化，避免「接口没说」被当成「接口说不支持」）：
+ * - 上下文/输入/输出窗口：>0 才覆盖，接口未提供（0）时保留目录值；
+ * - 能力字段（工具/视觉/图像输出/推理）：目录→接口这层取 OR，接口未置 true 不清零目录的 true；
+ * - 自定义层最高优先，能力字段直接覆盖（用户显式关闭仍生效）。
+ *
+ * 全层为 null 时返回 null（调用方回退默认值）。
+ */
+fun layerModelMetadata(
+    model: String,
+    catalog: ModelMetadata?,
+    fetched: ModelMetadata? = null,
+    custom: ModelMetadata? = null
+): ModelMetadata? {
+    val base = when {
+        catalog == null -> fetched
+        fetched == null -> catalog
+        else -> mergeModelMetadata(model, catalog, fetched).copy(
+            supportsTools = fetched.supportsTools || catalog.supportsTools,
+            supportsVision = fetched.supportsVision || catalog.supportsVision,
+            supportsImageOutput = fetched.supportsImageOutput || catalog.supportsImageOutput,
+            supportsReasoning = fetched.supportsReasoning || catalog.supportsReasoning
+        )
+    } ?: return null
+    return if (custom == null) base else mergeModelMetadata(model, base, custom)
+}
+
+/**
  * 合并自定义元数据与自动解析（拉取/内置）元数据，自定义优先；窗口未填时保留自动值。
  * [base] 为空时构造兜底元数据（窗口 0，能力全 false）。
  */
