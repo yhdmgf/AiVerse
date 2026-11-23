@@ -1,0 +1,36 @@
+{
+  "generated": "2026-11-23",
+  "contributors": [
+    {
+      "name": "yhdmgf",
+      "login": "yhdmgf",
+      "avatarUrl": "https://github.com/yhdmgf.png?size=256",
+      "commits": 76,
+      "areas": [
+        "DOCS",
+        "APP",
+        "AGENT"
+      ]
+    },
+    {
+      "name": "qldwj",
+      "login": "qldwj",
+      "avatarUrl": "https://github.com/qldwj.png?size=256",
+      "commits": 19,
+      "areas": [
+        "AGENT",
+        "APP",
+        "CORE"
+      ]
+    },
+    {
+      "name": "aiverse-app",
+      "login": "aiverse-app",
+      "avatarUrl": "https://github.com/aiverse-app.png?size=256",
+      "commits": 1,
+      "areas": [
+        "AGENT"
+      ]
+    }
+  ]
+}

@@ -3340,4 +3340,24 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="launch_star_point_3">模型与密钥都留在本地，不经过第三方服务器</string>
     <string name="launch_star_action">去 GitHub 点 Star</string>
     <string name="launch_star_optional_hint">点不点都不影响使用，直接点右下角「开始使用」即可。</string>
+
+    <!-- 贡献者墙 -->
+    <string name="about_contributors_title">贡献者墙</string>
+    <string name="about_contributors_hint">拖动查看 · 双指缩放 · 点击头像看详情</string>
+    <string name="about_contributors_commits">%1$d 次提交</string>
+    <string name="about_contributors_view_github">在 GitHub 查看</string>
+    <string name="about_contributors_area_app">应用</string>
+    <string name="about_contributors_area_server">服务端</string>
+    <string name="about_contributors_area_adb">设备控制</string>
+    <string name="about_contributors_area_build">构建</string>
+    <string name="about_contributors_area_i18n">本地化</string>
+    <string name="about_contributors_area_docs">文档</string>
+    <string name="about_contributors_desc">感谢每一位让 AiVerse 变得更好的人</string>
+    <string name="about_contributors_area_agent">智能体</string>
+    <string name="about_contributors_area_terminal">终端</string>
+    <string name="about_contributors_area_plugin">插件</string>
+    <string name="about_contributors_area_git">版本控制</string>
+    <string name="about_contributors_area_editor">编辑器</string>
+    <string name="about_contributors_area_ui">界面</string>
+    <string name="about_contributors_area_core">核心</string>
 </resources>

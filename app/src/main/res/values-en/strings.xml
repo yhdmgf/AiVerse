@@ -2944,7 +2944,7 @@
     <string name="browser_clear_cache_confirm_message">Clears HTTP cache, cookies and site data (including logins). This cannot be undone.</string>
     <string name="browser_clear_cache_confirm">Clear</string>
     <string name="browser_clear_cache_done">Cache cleared and page refreshed</string>
-    <string name="browser_clear_cache_failed">Cache wasn't fully cleared, please retry</string>
+    <string name="browser_clear_cache_failed">Cache wasn\'t fully cleared, please retry</string>
     <string name="sig_invalid_title">Signature Verification Failed</string>
     <string name="sig_invalid_message">Signature mismatch. Please download from the official source.</string>
     <string name="sig_invalid_button">Go to official site</string>
@@ -3341,4 +3341,24 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="launch_star_point_3">Models and keys stay on-device, never through a third party</string>
     <string name="launch_star_action">Star on GitHub</string>
     <string name="launch_star_optional_hint">Totally optional — just tap "Get started" to continue.</string>
+
+    <!-- Contributor wall -->
+    <string name="about_contributors_title">Contributors</string>
+    <string name="about_contributors_hint">Drag to explore · Pinch to zoom · Tap an avatar for details</string>
+    <string name="about_contributors_commits">%1$d commits</string>
+    <string name="about_contributors_view_github">View on GitHub</string>
+    <string name="about_contributors_area_app">App</string>
+    <string name="about_contributors_area_server">Server</string>
+    <string name="about_contributors_area_adb">Device control</string>
+    <string name="about_contributors_area_build">Build</string>
+    <string name="about_contributors_area_i18n">Localization</string>
+    <string name="about_contributors_area_docs">Docs</string>
+    <string name="about_contributors_desc">Thanks to everyone who made AiVerse better</string>
+    <string name="about_contributors_area_agent">Agent</string>
+    <string name="about_contributors_area_terminal">Terminal</string>
+    <string name="about_contributors_area_plugin">Plugins</string>
+    <string name="about_contributors_area_git">Git</string>
+    <string name="about_contributors_area_editor">Editor</string>
+    <string name="about_contributors_area_ui">UI</string>
+    <string name="about_contributors_area_core">Core</string>
 </resources>
