@@ -213,14 +213,17 @@ fun ImageViewerHost(
         value = ProbePhase.Done(peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } })
     }
     // 是否已探查完：由阶段派生，不再用会提前置位的独立 flag（否则静态图会在解码完成前被误判成 Failed）。
-    val peeked = probePhase !is ProbePhase.Loading
+    // probePhase 是 produceState 委托属性，Kotlin 无法跨委托属性访问做 smart cast；先读到局部变量再
+    // 判别，既消除委托 smart cast 的编译隐患，也让同一组合内多次访问拿到一致的快照。
+    val phase = probePhase
+    val peeked = phase !is ProbePhase.Loading
     // 动图（Done + Animated）走 Coil Painter 逐帧推进，其余统一走原有静态解码链；
     // 必须先算出完整 loadState 再进入唯一的 Dialog，不要在 Dialog 之前提前 return（会跳过整个查看器）。
-    val loadState = if (probePhase is ProbePhase.Done && probePhase.peek is ViewerPeek.Animated) {
+    val loadState = if (phase is ProbePhase.Done && phase.peek is ViewerPeek.Animated) {
         // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
-        ViewerLoad.ReadyAnimated(rememberAsyncImagePainter(model = (probePhase.peek as ViewerPeek.Animated).model))
+        ViewerLoad.ReadyAnimated(rememberAsyncImagePainter(model = (phase.peek as ViewerPeek.Animated).model))
     } else {
-        val isMotionPhoto = probePhase is ProbePhase.Done && probePhase.peek is ViewerPeek.StaticMotionPhoto
+        val isMotionPhoto = phase is ProbePhase.Done && phase.peek is ViewerPeek.StaticMotionPhoto
         val bitmap by produceState<ImageBitmap?>(
             null,
             request,
