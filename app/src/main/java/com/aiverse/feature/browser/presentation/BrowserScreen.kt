@@ -554,10 +554,13 @@ fun BrowserScreen(
                 TextButton(onClick = {
                     showClearCacheConfirm = false
                     scope.launchBrowserOp {
-                        browserManager.clearBrowserCache()
+                        val ok = browserManager.clearBrowserCache()
                         Toast.makeText(
                             context,
-                            context.getString(R.string.browser_clear_cache_done),
+                            context.getString(
+                                if (ok) R.string.browser_clear_cache_done
+                                else R.string.browser_clear_cache_failed
+                            ),
                             Toast.LENGTH_SHORT
                         ).show()
                     }

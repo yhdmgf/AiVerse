@@ -2944,6 +2944,7 @@
     <string name="browser_clear_cache_confirm_message">Clears HTTP cache, cookies and site data (including logins). This cannot be undone.</string>
     <string name="browser_clear_cache_confirm">Clear</string>
     <string name="browser_clear_cache_done">Cache cleared and page refreshed</string>
+    <string name="browser_clear_cache_failed">Cache wasn't fully cleared, please retry</string>
     <string name="sig_invalid_title">Signature Verification Failed</string>
     <string name="sig_invalid_message">Signature mismatch. Please download from the official source.</string>
     <string name="sig_invalid_button">Go to official site</string>

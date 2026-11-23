@@ -153,15 +153,19 @@ class PluginLoginActivity : ComponentActivity() {
         val raw = runCatching { cookieManager.getCookie(url) }.getOrNull()
         if (raw.isNullOrBlank()) return
         if (cookieName != null && parseCookies(raw).none { it.first == cookieName }) return
-        val cookies = filterCookiesByDomain(raw)
+        val cookies = parseFilteredCookies(raw)
         resolve(PluginLoginActivity.Result.Success(url, cookies))
     }
 
     /**
-     * 按调用方声明的 domain 二次过滤 Cookie：只保留属主 host 命中 targetDomain 的键值对，
-     * 绝不返回第三方域 Cookie（getCookie 虽按 URL 取，仍做一道保险）。
+     * 把 `CookieManager.getCookie(url)` 返回的 `name=value; ...` 串解析成 JSON 对象。
+     *
+     * 域约束说明：`getCookie(url)` 按 URL 作用域取值，属主域命中 targetDomain 的 cookie 才会
+     * 出现在结果里（真正的域约束由 [onNavigation] 的 host 判定保证）。本方法**不再**逐条校验
+     * cookie 属主域，只做格式转换并排除可能混入的属性名（Secure / HttpOnly / SameSite），
+     * 请勿据本方法名误以为存在一道独立的按域过滤。
      */
-    private fun filterCookiesByDomain(raw: String) = buildJsonObject {
+    private fun parseFilteredCookies(raw: String) = buildJsonObject {
         parseCookies(raw).forEach { (key, value) ->
             if (!key.equals("Secure", true) && !key.equals("HttpOnly", true) && !key.equals("SameSite", true)) {
                 put(key, value)
@@ -228,7 +232,6 @@ class PluginLoginActivity : ComponentActivity() {
         AdaptiveModalBottomSheet(
             onDismissRequest = onCancel
         ) {
-            val t = LocalUIDensityTokens.current
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

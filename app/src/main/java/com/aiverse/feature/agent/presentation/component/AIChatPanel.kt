@@ -1748,13 +1748,15 @@ fun AIChatPanel(
             )
             viewModel.clearInputDraft()
             viewModel.clearPendingAttachments()
-            // 消息已发出，被优化前的旧草稿不再有恢复意义，清除撤销快照以免撤销按钮常驻。
-            viewModel.clearUndoOptimize()
             followBottom = true
             scope.launch {
                 kotlinx.coroutines.delay(0)
                 snapToBottom()
             }
+            // 走到这说明请求已成功提交到发送流程（enqueue 未抛异常）。此时被优化前的旧草稿
+            // 已无恢复意义，清除撤销快照以免撤销按钮常驻。放在 enqueue 之后：若 enqueue 抛异常，
+            // 则保留快照，用户仍可撤回优化前草稿（失败路径由 ViewModel 的发送失败事件处理，不走到这里）。
+            viewModel.clearUndoOptimize()
         }
     }
 

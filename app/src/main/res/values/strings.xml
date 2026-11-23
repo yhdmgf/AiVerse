@@ -2943,6 +2943,7 @@
     <string name="browser_clear_cache_confirm_message">将清除 HTTP 缓存、Cookie 与网站数据（含登录态），此操作无法撤销。</string>
     <string name="browser_clear_cache_confirm">清除</string>
     <string name="browser_clear_cache_done">已清除缓存并刷新页面</string>
+    <string name="browser_clear_cache_failed">缓存清除未全部完成，请重试</string>
     <string name="sig_invalid_title">签名校验失败</string>
     <string name="sig_invalid_message">签名不对，请在正规平台下载</string>
     <string name="sig_invalid_button">前往官网</string>
