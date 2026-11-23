@@ -185,6 +185,16 @@ fun GitScreen(
 
     // PR 详情：独立全屏页，覆盖整个面板，返回按钮回列表。
     if (state.pullDetailNumber != null) {
+        var commitDiffData by remember { mutableStateOf<DiffData?>(null) }
+        if (commitDiffData != null) {
+            DiffViewerScreen(
+                diffData = commitDiffData,
+                filePath = commitDiffData?.filePath,
+                onBack = { commitDiffData = null },
+                onOpenInEditor = onOpenFile
+            )
+            return
+        }
         GitPullRequestDetailPage(
             pr = state.pullDetail,
             loading = state.pullDetailLoading,
@@ -208,6 +218,14 @@ fun GitScreen(
             onFileDiff = { path ->
                 state.pullDetail?.let { viewModel.loadPullRequestFileDiff(it.head.sha, it.base.sha, path) }
             },
+            onCommitClick = viewModel::openPrCommitDetail,
+            onCommitDetailDismiss = viewModel::closePrCommitDetail,
+            onCommitFileDiff = { sha, path ->
+                val patch = state.prCommitFiles[sha]?.firstOrNull { it.filename == path }?.patch
+                commitDiffData = viewModel.computeDiffFromPatch(path, patch)
+            },
+            commitFiles = state.prCommitFiles,
+            commitFilesLoading = state.prCommitFilesLoading,
             toastMessage = state.toast,
             onToastConsumed = viewModel::consumeToast
         )
