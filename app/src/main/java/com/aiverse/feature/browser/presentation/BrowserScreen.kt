@@ -209,6 +209,7 @@ fun BrowserScreen(
     var history by remember { mutableStateOf(browserManager.getHistory()) }
     var homepage by remember { mutableStateOf(browserManager.homepage) }
     var showClearHistoryConfirm by rememberSaveable { mutableStateOf(false) }
+    var showClearCacheConfirm by rememberSaveable { mutableStateOf(false) }
 
     var showCustomUaDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -512,6 +513,10 @@ fun BrowserScreen(
                 browserManager.clearHomepage()
                 homepage = browserManager.homepage
                 Toast.makeText(context, context.getString(R.string.browser_homepage_cleared_toast), Toast.LENGTH_SHORT).show()
+            },
+            onClearCache = {
+                // 危险操作：先弹确认弹窗（见主函数 showClearCacheConfirm）
+                showClearCacheConfirm = true
             }
         )
     }
@@ -533,6 +538,35 @@ fun BrowserScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearHistoryConfirm = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+
+    // 清除缓存确认弹窗
+    if (showClearCacheConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirm = false },
+            title = { Text(text = stringResource(R.string.browser_clear_cache_confirm_title)) },
+            text = { Text(text = stringResource(R.string.browser_clear_cache_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearCacheConfirm = false
+                    scope.launchBrowserOp {
+                        browserManager.clearBrowserCache()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.browser_clear_cache_done),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }) {
+                    Text(stringResource(R.string.browser_clear_cache_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheConfirm = false }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             }
@@ -922,7 +956,8 @@ private fun BrowserMenuSheet(
     onOpenHistory: (BrowserHistoryEntry) -> Unit,
     onClearHistory: () -> Unit,
     onSetHomepageCurrent: () -> Unit,
-    onClearHomepage: () -> Unit
+    onClearHomepage: () -> Unit,
+    onClearCache: () -> Unit
 ) {
     // 菜单层级：0 = 一级主菜单，1 = 二级 UA 场景，2 = 二级书签，3 = 二级历史，4 = 二级主页设置
     var menuLevel by rememberSaveable { mutableStateOf(0) }
@@ -981,7 +1016,7 @@ private fun BrowserMenuSheet(
 
             when (menuLevel) {
                 0 -> {
-                    // 一级菜单：单行按钮列表（夜间模式、开发者工具、浏览器标识、截图、书签、历史、主页）
+                    // 一级菜单：单行按钮列表（夜间模式、开发者工具、浏览器标识、截图、书签、历史、主页、清除缓存）
                     val uaIcon: ImageVector = when (userAgentPreset) {
                         BrowserUserAgentPreset.DEFAULT -> FeatherIcons.Globe
                         BrowserUserAgentPreset.ANDROID_PHONE -> FeatherIcons.Smartphone
@@ -1092,6 +1127,15 @@ private fun BrowserMenuSheet(
                                 )
                             },
                             onClick = { menuLevel = 4 }
+                        )
+
+                        SettingsDivider()
+
+                        // 8. 清除缓存（清 HTTP 缓存 + Cookie + 网站数据，危险操作二次确认）
+                        SettingsRow(
+                            icon = FeatherIcons.Trash2,
+                            title = stringResource(R.string.browser_clear_cache),
+                            onClick = { onClearCache() }
                         )
                     }
                 }

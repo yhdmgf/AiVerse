@@ -45,13 +45,13 @@ class BrowserTool @Inject constructor(
         "navigate", "evaluate", "click", "fill", "select", "hover", "press",
         "getText", "getHtml", "getBackbone", "screenshot", "console",
         "wait", "scroll", "dialog", "back", "forward", "reload",
-        "newTab", "closeTab", "selectTab", "listTabs"
+        "newTab", "closeTab", "selectTab", "listTabs", "clearCache"
     )
 
     private val actionSchema: Map<String, Any> = mapOf(
         "type" to "string",
         "enum" to actionEnum,
-        "description" to "操作类型。navigate=导航 URL; evaluate=执行 JS; click/fill/hover/press=交互(兼容 React); select=下拉选择; getText/getHtml=提取内容; getBackbone=无障碍树(role/name/ref); screenshot=截图; console=控制台日志; wait=等待条件; scroll=滚动; dialog=处理网页 confirm/prompt（仅面板不可见时使用，面板可见时由用户处理）; back/forward/reload=导航控制; newTab/closeTab/selectTab/listTabs=标签页管理"
+        "description" to "操作类型。navigate=导航 URL; evaluate=执行 JS; click/fill/hover/press=交互(兼容 React); select=下拉选择; getText/getHtml=提取内容; getBackbone=无障碍树(role/name/ref); screenshot=截图; console=控制台日志; wait=等待条件; scroll=滚动; dialog=处理网页 confirm/prompt（仅面板不可见时使用，面板可见时由用户处理）; back/forward/reload=导航控制; newTab/closeTab/selectTab/listTabs=标签页管理; clearCache=清除缓存(Cookie/WebStorage)"
     )
 
     override val parameters = mapOf(
@@ -365,6 +365,16 @@ class BrowserTool @Inject constructor(
                     "url" to JsonPrimitive(url),
                     "title" to JsonPrimitive(browserManager.getTitle(targetTabId))
                 ), tabId = targetTabId)
+            }
+
+            "clearCache" -> {
+                FileLogger.i(TAG, "clearCache: 清除 HTTP 缓存 + Cookie + WebStorage")
+                val cleared = listOf("httpCache", "cookies", "webStorage")
+                val success = browserManager.clearBrowserCache()
+                buildOk(action, mapOf(
+                    "success" to JsonPrimitive(success),
+                    "cleared" to JsonArray(cleared.map { JsonPrimitive(it) })
+                ), tabId = tabId)
             }
 
             else -> ToolResult.Error("未知的 action：$action", "UNKNOWN_ACTION")

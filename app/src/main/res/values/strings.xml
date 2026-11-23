@@ -2938,6 +2938,11 @@
     <string name="browser_homepage_unset">未设置</string>
     <string name="browser_homepage_set_toast">已设置主页</string>
     <string name="browser_homepage_cleared_toast">已清除主页</string>
+    <string name="browser_clear_cache">清除缓存</string>
+    <string name="browser_clear_cache_confirm_title">清除浏览缓存？</string>
+    <string name="browser_clear_cache_confirm_message">将清除 HTTP 缓存、Cookie 与网站数据（含登录态），此操作无法撤销。</string>
+    <string name="browser_clear_cache_confirm">清除</string>
+    <string name="browser_clear_cache_done">已清除缓存并刷新页面</string>
     <string name="sig_invalid_title">签名校验失败</string>
     <string name="sig_invalid_message">签名不对，请在正规平台下载</string>
     <string name="sig_invalid_button">前往官网</string>
