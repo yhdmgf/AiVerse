@@ -165,6 +165,21 @@ sealed interface ViewerPeek {
 }
 
 /**
+ * 探查阶段：把「还没跑完」与「跑完了、结果是 X」显式分开。
+ *
+ * 探查是异步的，若只拿结果本身（[ViewerPeek]?）当状态，初始 null 与「跑完但既非动图也非动态照片」
+ * 无法区分，容易在解码完成前把静态图误判成 Failed。用阶段枚举后，「是否已探查完」直接由
+ * 「阶段 != [ProbePhase.Loading]」派生，不再需要一个会提前置位的独立 flag。
+ */
+private sealed interface ProbePhase {
+    /** 探查尚未返回（或本轮没有 peek，无从判断）。 */
+    data object Loading : ProbePhase
+
+    /** 探查已跑完，[peek] 是结果（null = 既非动图也非动态照片，走静态解码）。 */
+    data class Done(val peek: ViewerPeek?) : ProbePhase
+}
+
+/**
  * 全屏图片查看器宿主。挂在组合树里任意位置即可 —— [Dialog] 是独立 window，不占父布局尺寸。
  *
  * 用 Dialog 而不是组合内的 overlay Box，三条硬理由：
@@ -193,38 +208,30 @@ fun ImageViewerHost(
     // 先探查（切 IO，见 peek 实现方）：命中动图就交 Coil 逐帧播放（静态解码链会把动图压成首帧），
     // 动态照片则记下标记好打角标；都不是再退回原有静态解码。rememberAsyncImagePainter 必须在组合里调，
     // 所以把探查结果（稳定值类型）先算出来，再据此分支创建 painter。
-    val probed by produceState<ViewerPeek?>(null, request, peek) {
-        value = peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } }
+    // 探查结果与「是否已跑完」收在同一个 ProbePhase 里，避免初始 null 与「跑完但无发现」混淆。
+    val probePhase by produceState<ProbePhase>(ProbePhase.Loading, request, peek) {
+        value = ProbePhase.Done(peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } })
     }
-    // 探查是否已跑完：probed 初始为 null，与“探查完但既非动图也非动态照片”无法区分，
-    // 用这个标记避免静态图在解码完成前被误判成 Failed。
-    var peeked by remember(request, peek) { mutableStateOf(false) }
-    SideEffect { if (probed != null || peek != null) peeked = true }
-    val loadState = when (val peekResult = probed) {
-        is ViewerPeek.Animated -> {
-            // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
-            val animatedPainter = rememberAsyncImagePainter(model = peekResult.model)
-            ViewerLoad.ReadyAnimated(animatedPainter)
+    // 是否已探查完：由阶段派生，不再用会提前置位的独立 flag（否则静态图会在解码完成前被误判成 Failed）。
+    val peeked = probePhase !is ProbePhase.Loading
+    // 动图（Done + Animated）走 Coil Painter 逐帧推进，其余统一走原有静态解码链；
+    // 必须先算出完整 loadState 再进入唯一的 Dialog，不要在 Dialog 之前提前 return（会跳过整个查看器）。
+    val loadState = if (probePhase is ProbePhase.Done && probePhase.peek is ViewerPeek.Animated) {
+        // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
+        ViewerLoad.ReadyAnimated(rememberAsyncImagePainter(model = (probePhase.peek as ViewerPeek.Animated).model))
+    } else {
+        val isMotionPhoto = probePhase is ProbePhase.Done && probePhase.peek is ViewerPeek.StaticMotionPhoto
+        val bitmap by produceState<ImageBitmap?>(
+            null,
+            request,
+            load,
+            isMotionPhoto
+        ) {
+            value = request.sources.firstNotNullOfOrNull { load(it) }
         }
-
-        else -> {
-            val bitmap by produceState<ImageBitmap?>(
-                null,
-                request,
-                load,
-                peekResult is ViewerPeek.StaticMotionPhoto
-            ) {
-                value = request.sources.firstNotNullOfOrNull { load(it) }
-            }
-            val decoded = bitmap
-            when {
-                decoded != null -> ViewerLoad.Ready(
-                    decoded,
-                    isMotionPhoto = peekResult is ViewerPeek.StaticMotionPhoto
-                )
-                !peeked -> ViewerLoad.Loading
-                else -> ViewerLoad.Failed
-            }
+        when (val decoded = bitmap) {
+            null -> if (peeked) ViewerLoad.Failed else ViewerLoad.Loading
+            else -> ViewerLoad.Ready(decoded, isMotionPhoto = isMotionPhoto)
         }
     }
 
