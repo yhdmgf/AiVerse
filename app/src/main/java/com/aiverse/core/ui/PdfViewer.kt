@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +29,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -45,7 +46,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -57,7 +57,6 @@ import com.aiverse.core.theme.Spacing
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.FileText
-import compose.icons.feathericons.X
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -84,7 +83,9 @@ sealed interface PdfSource {
 data class PdfViewerRequest(
     val sources: List<PdfSource>,
     /** 文件名，兼作无障碍描述与顶部标题；留空则不显示标题。 */
-    val title: String = ""
+    val title: String = "",
+    /** 打开来源：文件树打开时顶部栏换成返回箭头 + 三点菜单入口；默认 null = 聊天 / Markdown 旧行为。 */
+    val origin: ViewerOrigin? = null
 )
 
 /** 打开应用内 PDF 查看器的句柄：调用方只管 show，不关心加载、渲染与翻页。 */
@@ -161,11 +162,15 @@ fun pdfViewerRequest(fileName: String, containerPath: String, localPath: String)
  * 按渲染上限宽算目标尺寸而不是按原始 dpi，防超大页 OOM。翻页离开的页由 LRU 逐出时 recycle。
  *
  * @param resolve 把 [PdfSource] 解成宿主 [File]；实现方自行切 IO 线程，返回 null 表示这个来源拿不到。
+ * @param actions 文件操作菜单 slot（可选，仅 feature 层注入）。仅当请求 [PdfViewerRequest.origin]
+ *   为 [ViewerOrigin.FILE_TREE] 且本参数非 null 时，右上三点才弹出它；core 不感知 feature，
+ *   不传或 origin 非 FILE_TREE 时点三点为 no-op，行为与旧版一致。
  */
 @Composable
 fun PdfViewerHost(
     state: PdfViewerState,
-    resolve: suspend (PdfSource) -> File?
+    resolve: suspend (PdfSource) -> File?,
+    actions: (@Composable (request: PdfViewerRequest, onDismissViewer: () -> Unit) -> Unit)? = null
 ) {
     val request = state.request ?: return
     // 取源 + 打开渲染器 + 渲染首页全在一条 IO 协程里，只给一次 Loading；
@@ -237,34 +242,22 @@ fun PdfViewerHost(
                 )
             }
 
-            // 顶部标题（让开安全区与右上关闭钮），与媒体查看器同款排版。
-            if (fileState is PdfFileLoad.Ready && request.title.isNotBlank()) {
-                Text(
-                    text = request.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .systemBarsPadding()
-                        .padding(start = Spacing.lg, top = Spacing.sm, end = 56.dp, bottom = Spacing.xs)
-                )
-            }
-
-            IconButton(
-                onClick = state::dismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
-                    .systemBarsPadding()
-                    .padding(Spacing.sm)
-            ) {
-                Icon(
-                    imageVector = FeatherIcons.X,
-                    contentDescription = stringResource(R.string.common_close),
-                    tint = Color.White
-                )
+            // 顶部栏 + 标题：文件树来源换成返回箭头（左）+ 三点（右），标题居中；聊天 / Markdown
+            // 保持旧的左对齐标题 + 右上 × 关闭。历史硬编码 56.dp 让位宽度已收敛为 touchTarget token。
+            val isFileTree = request.origin == ViewerOrigin.FILE_TREE
+            var actionsNonce by remember { mutableIntStateOf(0) }
+            ViewerHeader(
+                isFileTree = isFileTree,
+                title = if (fileState is PdfFileLoad.Ready) request.title else "",
+                onDismiss = state::dismiss,
+                onMore = { actionsNonce++ }
+            )
+            // 每次点三点换一个 key，强制下方 slot 重新组合，重置其内部 sheet 可见态以便再次打开；
+            // actions == null 或 origin != FILE_TREE 时不组合任何东西 —— 点三点 no-op。
+            if (isFileTree && actions != null && actionsNonce > 0) {
+                key(actionsNonce) {
+                    actions(request, state::dismiss)
+                }
             }
         }
     }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,7 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -65,7 +66,6 @@ import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Image
-import compose.icons.feathericons.X
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -105,7 +105,9 @@ sealed interface ImageSource {
 data class ImageViewerRequest(
     val sources: List<ImageSource>,
     /** 无障碍描述与失败提示用，通常是文件名；留空则回退到「图片预览」。 */
-    val title: String = ""
+    val title: String = "",
+    /** 打开来源：文件树打开时顶部栏换成返回箭头 + 三点菜单入口；默认 null = 聊天 / Markdown 旧行为。 */
+    val origin: ViewerOrigin? = null
 )
 
 /** 打开全屏查看器的句柄：调用方只管 show，不关心加载与手势。 */
@@ -175,12 +177,17 @@ sealed interface ViewerPeek {
  * @param peek 加载前的快速探查（可选）。实现方自行切 IO，命中动图返回 [ViewerPeek.Animated]
  *   交 Coil 逐帧播放，命中动态照片返回 [ViewerPeek.StaticMotionPhoto] 好打角标，其余返回 null
  *   走原有静态解码。不传则完全保持旧行为。
+ * @param actions 文件操作菜单 slot（可选，仅 feature 层注入）。仅当请求 [ImageViewerRequest.origin]
+ *   为 [ViewerOrigin.FILE_TREE] 且本参数非 null 时，右上三点才弹出它；参数形如
+ *   `(request, onDismissViewer) -> Unit`，宿主内部自行弹 [AdaptiveModalBottomSheet] 并复用自身的
+ *   文件操作回调。core 不感知 feature，不传或 origin 非 FILE_TREE 时点三点为 no-op，行为与旧版一致。
  */
 @Composable
 fun ImageViewerHost(
     state: ImageViewerState,
     load: suspend (ImageSource) -> ImageBitmap?,
-    peek: (suspend (ImageSource) -> ViewerPeek?)? = null
+    peek: (suspend (ImageSource) -> ViewerPeek?)? = null,
+    actions: (@Composable (request: ImageViewerRequest, onDismissViewer: () -> Unit) -> Unit)? = null
 ) {
     val request = state.request ?: return
     // 先探查（切 IO，见 peek 实现方）：命中动图就交 Coil 逐帧播放（静态解码链会把动图压成首帧），
@@ -291,19 +298,22 @@ fun ImageViewerHost(
                 )
             }
 
-            IconButton(
-                onClick = state::dismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
-                    .systemBarsPadding()
-                    .padding(Spacing.sm)
-            ) {
-                Icon(
-                    imageVector = FeatherIcons.X,
-                    contentDescription = stringResource(R.string.common_close),
-                    tint = Color.White
-                )
+            // 文件树来源：顶部栏换成返回箭头（左）+ 三点（右），点三点弹出宿主注入的文件操作菜单。
+            // 聊天 / Markdown（origin != FILE_TREE）保持旧行为：仅右上 × 关闭、无菜单。图片无顶部标题。
+            val isFileTree = request.origin == ViewerOrigin.FILE_TREE
+            var actionsNonce by remember { mutableIntStateOf(0) }
+            ViewerHeader(
+                isFileTree = isFileTree,
+                title = "",
+                onDismiss = state::dismiss,
+                onMore = { actionsNonce++ }
+            )
+            // 每次点三点换一个 key，强制下方 slot 重新组合，重置其内部 sheet 的可见态以便再次打开。
+            // actions == null（core 内兜底）或 origin != FILE_TREE 时不组合任何东西 —— 点三点 no-op。
+            if (isFileTree && actions != null && actionsNonce > 0) {
+                key(actionsNonce) {
+                    actions(request, state::dismiss)
+                }
             }
         }
     }
