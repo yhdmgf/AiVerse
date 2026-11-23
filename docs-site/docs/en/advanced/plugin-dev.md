@@ -1361,6 +1361,10 @@ App info / foreground-background state
 
 Close the page, open a link, show a full-screen in-page overlay, register a back handler
 
+`aicode.webview.login(options)`
+
+Open the target site's sign-in page in-app and retrieve that domain's cookies (including HttpOnly); returns `{ url, cookies }`. Requires user confirmation and a domain allow-list; cookies are cleared after use and never stored
+
 `aicode.fs.read/write/list/delete/stat/mkdir/rename/copy/append/readBinary/writeBinary/watch`
 
 File operations. Paths are real absolute paths in the execution environment; `~` expands to home; plugin-private data uses the `data://` virtual root. `fs.read` accepts optional `offset` / `limit` (bytes) to read a large file in windows, and returns two extra fields: `returned` (bytes returned this call) and `nextOffset` (start of the next window, equal to `size` at EOF). `size` is always the total file size in bytes, unaffected by `offset` / `limit`

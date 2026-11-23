@@ -5,8 +5,10 @@ import android.content.Context
 import android.net.Uri
 import android.view.ContextThemeWrapper
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -87,6 +89,67 @@ object PluginWebViewFactory {
         isHorizontalScrollBarEnabled = false
         overScrollMode = android.view.View.OVER_SCROLL_NEVER
         setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+    }
+
+    /**
+     * 应用内登录页 WebView（`webview.login`）：与 [`create()`] 完全独立。
+     *
+     * 与插件页的关键差异：不经过 [WebViewAssetLoader] 虚拟域、不加 CSP、不阻断外链——
+     * 这里要加载远程 https 登录页并跟随 OAuth 跳转。Cookie 落在 `cookieManager`
+     * （调用方传入的独立 profile jar，用后由 Activity 清除），与插件页默认 profile 隔离。
+     * 每次导航（`onPageFinished` / `doUpdateVisitedHistory`）交回宿主判完成条件。
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    fun createLoginWebView(
+        context: Context,
+        cookieManager: CookieManager,
+        onNavigation: (String?) -> Unit,
+        onMainFrameError: () -> Unit,
+        onLoadingChanged: (Boolean) -> Unit
+    ): WebView {
+        cookieManager.setAcceptCookie(true)
+        return WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+            setBackgroundColor(android.graphics.Color.WHITE)
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                    onLoadingChanged(newProgress < 100)
+                }
+            }
+            webViewClient = object : WebViewClient() {
+                // 放行导航：登录页要能跳转、能走 OAuth，不阻断外链。
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): Boolean = false
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    onLoadingChanged(false)
+                    onNavigation(url ?: view.url)
+                }
+
+                override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                    // SPA 登录常靠 history.pushState 换地址，onPageFinished 不触发，这里补判。
+                    onNavigation(url ?: view.url)
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError
+                ) {
+                    if (request.isForMainFrame) onMainFrameError()
+                }
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")

@@ -125,6 +125,13 @@
             </intent-filter>
         </activity>
 
+        <!-- 插件应用内登录（webview.login）：由 PluginWebBridge 用 NEW_TASK 启动，不对外暴露。
+             先弹用户确认，允许后用独立 profile 的 WebView 加载登录页，完成后取该域 Cookie 回传并清 jar。 -->
+        <activity
+            android:name=".feature.plugins.presentation.PluginLoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AICode" />
+
         <provider
             android:name=".feature.workspace.data.provider.WorkspaceDocumentsProvider"
             android:authorities="${applicationId}.documents"

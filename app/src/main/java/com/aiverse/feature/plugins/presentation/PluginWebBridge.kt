@@ -1,6 +1,7 @@
 package com.aiverse.feature.plugins.presentation
 
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
@@ -39,12 +40,15 @@ import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.PathHomeResolver
 import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -231,6 +235,9 @@ class PluginWebBridge(
         fileSubscriptions.close()
         updateOverlay(false, null)
         eventSubscription()
+        // 页面关闭时联动登录流程：取消挂起的 deferred（触发 await 抛 CancellationException）、
+        // 结束登录 Activity、并清掉独立 profile 的 Cookie，避免 Activity 残留与 Cookie 滞留。
+        PluginLoginActivity.cancelForBridge()
         scope.cancel()
     }
 
@@ -505,6 +512,7 @@ class PluginWebBridge(
             page.pluginId,
             PluginHostPaths.requireString(params, "url")
         )
+        "webview.login" -> webviewLogin(params)
         "app.info" -> systemService.appInfo(page.pluginId)
         "log.write" -> systemService.log(
             page.pluginId,
@@ -613,6 +621,81 @@ class PluginWebBridge(
         overlayManager.postMessage(page.pluginId, overlayId, payload)
     } catch (e: PluginOverlayException) {
         throw PluginHostException(e.code, e.message.orEmpty())
+    }
+
+    /**
+     * `webview.login`：在应用内打开目标站点的登录页（独立 WebView + 独立 cookie jar），
+     * 登录完成后把该站点的 Cookie（含 HttpOnly）一次性返回给插件，用后即清。
+     *
+     * 安全边界：
+     * - 调用方必须显式传 `targetDomain`；宿主校验 `loginUrl` host 与之匹配，否则 PARAM_INVALID。
+     * - 完成条件只在当前 URL host 命中 `targetDomain`（或其子域）时判成功；返回前再按
+     *   declared domain 二次过滤，绝不返回第三方域 Cookie。
+     * - 用户先在 [PluginLoginActivity] 确认弹窗允许后才加载登录页。
+     * - Cookie 仅内存传递：不落盘、不写日志、绝不进入任何异常 message（通用错误路径会打 message）。
+     *
+     * Promise：成功 `return {url, cookies}`，失败 `throw PluginHostException(code, message)`
+     * 自动 reject，与其它方法一致；message 只含错误语义，不含 Cookie 值。
+     */
+    private suspend fun webviewLogin(params: JsonObject): JsonElement {
+        val loginUrl = PluginHostPaths.requireString(params, "loginUrl").trim()
+        val targetDomain = PluginHostPaths.requireString(params, "targetDomain").trim().lowercase()
+        if (!LOGIN_DOMAIN.matches(targetDomain)) {
+            throw PluginHostException("PARAM_INVALID", "invalid targetDomain")
+        }
+        val loginHost = runCatching { java.net.URI(loginUrl).host?.lowercase() }.getOrNull()
+        if (loginUrl.isBlank() || loginHost == null ||
+            !(loginHost == targetDomain || loginHost.endsWith(".$targetDomain"))
+        ) {
+            throw PluginHostException("PARAM_INVALID", "loginUrl host does not match targetDomain")
+        }
+        val cookieName = (params["cookieName"] as? JsonPrimitive)?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        val timeoutMs = params["timeoutMs"]?.let {
+            (it as? JsonPrimitive)?.longOrNull
+                ?: throw PluginHostException("PARAM_INVALID", "timeoutMs must be a number")
+        }?.coerceIn(MIN_LOGIN_TIMEOUT_MS, MAX_LOGIN_TIMEOUT_MS) ?: DEFAULT_LOGIN_TIMEOUT_MS
+
+        // 同一时间只允许一个登录（仿 PluginPermissionService 的 pending.putIfAbsent）。
+        // requestId 由宿主生成并显式登记，Activity 回填结果与 bridge 收尾注销都靠它对齐。
+        val loginRequestId = java.util.UUID.randomUUID().toString()
+        val deferred = CompletableDeferred<PluginLoginActivity.Result>()
+        if (PluginLoginActivity.register(loginRequestId, deferred) != null) {
+            throw PluginHostException("REQUEST_EXISTS", "a webview login is already in progress")
+        }
+        try {
+            withContext(Dispatchers.Main) {
+                val intent = Intent(context, PluginLoginActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(PluginLoginActivity.EXTRA_REQUEST_ID, loginRequestId)
+                    .putExtra(PluginLoginActivity.EXTRA_LOGIN_URL, loginUrl)
+                    .putExtra(PluginLoginActivity.EXTRA_TARGET_DOMAIN, targetDomain)
+                    .putExtra(PluginLoginActivity.EXTRA_PLUGIN_NAME, resolvePluginName())
+                cookieName?.let { intent.putExtra(PluginLoginActivity.EXTRA_COOKIE_NAME, it) }
+                context.startActivity(intent)
+            }
+            val outcome = withTimeoutOrNull(timeoutMs) { deferred.await() }
+                ?: throw PluginHostException("TIMEOUT", "webview login timed out")
+            return when (outcome) {
+                is PluginLoginActivity.Result.Success -> buildJsonObject {
+                    put("url", outcome.url)
+                    put("cookies", outcome.cookies)
+                }
+                // CANCELLED / TIMEOUT 由 Activity 主动完成；这里转成宿主错误码。
+                is PluginLoginActivity.Result.Failure ->
+                    throw PluginHostException(outcome.code, outcome.reason)
+            }
+        } finally {
+            PluginLoginActivity.unregister(loginRequestId)
+        }
+    }
+
+    /** 登录确认弹窗展示用插件名：取清单本地化名，取不到回退 pluginId。 */
+    private fun resolvePluginName(): String {
+        val plugin = pluginManager.plugins.value.firstOrNull { it.id == page.pluginId }
+        return plugin?.manifest?.name?.resolve(languageTag)
+            ?.takeIf { it.isNotBlank() } ?: page.pluginId
     }
 
     /** 页面请求一条对话内提示；动作按钮会回调页面所属插件的 handler。 */
@@ -797,6 +880,12 @@ class PluginWebBridge(
 
     private companion object {
         const val TAG = "PluginWebBridge"
+        /** `webview.login` 的 targetDomain 合法形态：一个或多个点分隔的域名标签。 */
+        val LOGIN_DOMAIN = Regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$")
+        /** `webview.login` 超时默认 5 分钟；允许调用方在 10s~10min 内自定义。 */
+        const val DEFAULT_LOGIN_TIMEOUT_MS = 5L * 60 * 1000
+        const val MIN_LOGIN_TIMEOUT_MS = 10_000L
+        const val MAX_LOGIN_TIMEOUT_MS = 10L * 60 * 1000
         /** 事件合帧窗口：16ms ≈ 一帧，窗口内的高频事件合并成一次 evaluateJavascript。 */
         const val EVENT_BATCH_WINDOW_MS = 16L
         /** 单帧最多推送的事件条数；超出部分留到下一帧，避免单次脚本过长卡主线程。 */

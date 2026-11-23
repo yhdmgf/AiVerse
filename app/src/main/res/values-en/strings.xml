@@ -3160,6 +3160,13 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="plugin_web_page_failed">Failed to load the plugin page</string>
     <string name="plugin_web_page_retry">Retry</string>
     <string name="plugin_page_unsupported">This plugin page contribution is not supported yet</string>
+    <string name="plugin_webview_login_confirm_title">Allow plugin sign-in?</string>
+    <string name="plugin_webview_login_confirm_body">&quot;%1$s&quot; will open the %2$s sign-in page in-app. Cookies are returned to this plugin once and cleared after use; they are not stored.</string>
+    <string name="plugin_webview_login_confirm_allow">Allow sign-in</string>
+    <string name="plugin_webview_login_confirm_cancel">Cancel</string>
+    <string name="plugin_webview_login_title">Sign in</string>
+    <string name="plugin_webview_login_timeout">Sign-in timed out. Please try again.</string>
+    <string name="plugin_webview_login_failed">Sign-in page failed to load</string>
     <string name="apk_download_failed">Download failed</string>
     <string name="apk_chunk_incomplete">Chunk %1$d is incomplete (%2$d/%3$d)</string>
     <string name="apk_size_mismatch">Installer size mismatch (%1$d/%2$d)</string>

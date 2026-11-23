@@ -3159,6 +3159,13 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="plugin_web_page_failed">插件页面加载失败</string>
     <string name="plugin_web_page_retry">重试</string>
     <string name="plugin_page_unsupported">该插件页面贡献暂不支持</string>
+    <string name="plugin_webview_login_confirm_title">允许插件登录？</string>
+    <string name="plugin_webview_login_confirm_body">「%1$s」将在应用内打开 %2$s 的登录页。登录 Cookie 仅本次返回给该插件，用后即清除，不会保存。</string>
+    <string name="plugin_webview_login_confirm_allow">允许登录</string>
+    <string name="plugin_webview_login_confirm_cancel">取消</string>
+    <string name="plugin_webview_login_title">登录</string>
+    <string name="plugin_webview_login_timeout">登录超时，请重试</string>
+    <string name="plugin_webview_login_failed">登录页加载失败</string>
     <string name="apk_download_failed">下载失败</string>
     <string name="apk_chunk_incomplete">分片 %1$d 不完整（%2$d/%3$d）</string>
     <string name="apk_size_mismatch">安装包大小不符（%1$d/%2$d）</string>

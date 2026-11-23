@@ -616,6 +616,7 @@ await window.aicode.ui.openUrl('https://example.com');
 | `aicode.tip(options)` | 在对话内显示可关闭提示条（可带点击回调） |
 | `aicode.app.info()` / `aicode.app.isForeground()` | 应用信息 / 前后台状态 |
 | `aicode.ui.close()` / `openUrl(url)` / `setOverlay(visible, rect)` / `onBack(handler)` | 关闭页面、打开链接、页面内全屏弹层、注册返回处理 |
+| `aicode.webview.login(options)` | 应用内打开目标站点登录页并取该域 Cookie（含 HttpOnly），返回 `{ url, cookies }`；需用户确认且校验域名白名单，Cookie 用后即清、不落盘 |
 | `aicode.fs.read/write/list/delete/stat/mkdir/rename/copy/append/readBinary/writeBinary/watch` | 文件操作。路径为执行环境的真实绝对路径；`~` 展开到 home；插件私有数据用 `data://` 虚拟根。`fs.read` 支持可选 `offset` / `limit`（字节）分段读取大文件，返回额外字段 `returned`（本次返回字节数）与 `nextOffset`（下一窗口起点，读到尾等于 `size`）；`size` 始终是文件总字节数，不受 `offset` / `limit` 影响 |
 | `aicode.chat.listSessions/createSession/listMessages/sendMessage/setDraft/stop/openSession/getSession/renameSession/pinSession/deleteSession/getRunState/waitForRun/listApprovals/resolveToolApproval/resolveQuestion/resolvePlanApproval` | 会话与消息；读取范围限定当前工作区 |
 | `aicode.model.listProviders/listModels/create/close/start/read/cancel/stream` | 模型句柄（需 `modelAccess`） |
