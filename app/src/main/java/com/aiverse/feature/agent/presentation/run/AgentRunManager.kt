@@ -750,8 +750,7 @@ class AgentRunManager @Inject constructor(
     }
 
     fun stopAgentSession(sessionId: String) {
-        val job = sessionJobs[sessionId] ?: return
-        if (!job.isActive) return
+        val job = sessionJobs[sessionId]
         if (subAgentEventBus.release(sessionId)) {
             scope.launch {
                 val sub = sessionUseCase.getSessionById(sessionId)
@@ -787,7 +786,9 @@ class AgentRunManager @Inject constructor(
                 _reasoningDurationEvents.tryEmit(ReasoningDurationEvent(stoppedAssistant.messageId, duration))
             }
         }
-        job.cancel()
+        if (job?.isActive == true) {
+            job.cancel()
+        }
         if (sessionJobs[sessionId]?.isActive != true) {
             setAgentState(sessionId, AgentUIState.Idle)
         }
