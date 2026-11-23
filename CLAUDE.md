@@ -248,8 +248,8 @@ sh gradlew :app:assembleUniversalDebug \
 - `type` ∈ `feat | fix | refactor | docs | style | chore | ci | build | perf | test`。
 - `scope` 可选：`agent | settings | terminal | workspace | git | ui | mcp | db | core | docs | build | deps`。
 - `subject` 一行简述，中英文均可，句末不加句号。
-- 项目由 `yhdmgf` 与 `qldwj` 两位维护者共同维护；提交按受理人分别署名：bug → `qldwj`，功能/UI → `yhdmgf`；非 issue 的汇总提交默认 `yhdmgf`。
-- 两位维护者使用各自的 GitHub 邮箱署名：`yhdmgf` 用 `225713231+yhdmgf@users.noreply.github.com`，`qldwj` 用 `qldwj@users.noreply.github.com`；保持独立署名，不交叉使用邮箱。
+- 项目由 `yhdmgf` 与 `aiverse-app` 两位维护者共同维护；提交按受理人分别署名：bug → `aiverse-app`，功能/UI → `yhdmgf`；非 issue 的汇总提交默认 `yhdmgf`。
+- 两位维护者使用各自的 GitHub 邮箱署名：`yhdmgf` 用 `225713231+yhdmgf@users.noreply.github.com`，`aiverse-app` 用 `aiverse-app@users.noreply.github.com`；保持独立署名，不交叉使用邮箱。
 - 修多个 issue 时，**每个 issue 单独一行** `Closes #N`，**禁止写成一行**：
 
 ```text

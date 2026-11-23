@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,7 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -65,7 +66,6 @@ import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Image
-import compose.icons.feathericons.X
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -105,7 +105,9 @@ sealed interface ImageSource {
 data class ImageViewerRequest(
     val sources: List<ImageSource>,
     /** 无障碍描述与失败提示用，通常是文件名；留空则回退到「图片预览」。 */
-    val title: String = ""
+    val title: String = "",
+    /** 打开来源：文件树打开时顶部栏换成返回箭头 + 三点菜单入口；默认 null = 聊天 / Markdown 旧行为。 */
+    val origin: ViewerOrigin? = null
 )
 
 /** 打开全屏查看器的句柄：调用方只管 show，不关心加载与手势。 */
@@ -163,6 +165,21 @@ sealed interface ViewerPeek {
 }
 
 /**
+ * 探查阶段：把「还没跑完」与「跑完了、结果是 X」显式分开。
+ *
+ * 探查是异步的，若只拿结果本身（[ViewerPeek]?）当状态，初始 null 与「跑完但既非动图也非动态照片」
+ * 无法区分，容易在解码完成前把静态图误判成 Failed。用阶段枚举后，「是否已探查完」直接由
+ * 「阶段 != [ProbePhase.Loading]」派生，不再需要一个会提前置位的独立 flag。
+ */
+private sealed interface ProbePhase {
+    /** 探查尚未返回（或本轮没有 peek，无从判断）。 */
+    data object Loading : ProbePhase
+
+    /** 探查已跑完，[peek] 是结果（null = 既非动图也非动态照片，走静态解码）。 */
+    data class Done(val peek: ViewerPeek?) : ProbePhase
+}
+
+/**
  * 全屏图片查看器宿主。挂在组合树里任意位置即可 —— [Dialog] 是独立 window，不占父布局尺寸。
  *
  * 用 Dialog 而不是组合内的 overlay Box，三条硬理由：
@@ -175,49 +192,49 @@ sealed interface ViewerPeek {
  * @param peek 加载前的快速探查（可选）。实现方自行切 IO，命中动图返回 [ViewerPeek.Animated]
  *   交 Coil 逐帧播放，命中动态照片返回 [ViewerPeek.StaticMotionPhoto] 好打角标，其余返回 null
  *   走原有静态解码。不传则完全保持旧行为。
+ * @param actions 文件操作菜单 slot（可选，仅 feature 层注入）。仅当请求 [ImageViewerRequest.origin]
+ *   为 [ViewerOrigin.FILE_TREE] 且本参数非 null 时，右上三点才弹出它；参数形如
+ *   `(request, onDismissViewer) -> Unit`，宿主内部自行弹 [AdaptiveModalBottomSheet] 并复用自身的
+ *   文件操作回调。core 不感知 feature，不传或 origin 非 FILE_TREE 时点三点为 no-op，行为与旧版一致。
  */
 @Composable
 fun ImageViewerHost(
     state: ImageViewerState,
     load: suspend (ImageSource) -> ImageBitmap?,
-    peek: (suspend (ImageSource) -> ViewerPeek?)? = null
+    peek: (suspend (ImageSource) -> ViewerPeek?)? = null,
+    actions: (@Composable (request: ImageViewerRequest, onDismissViewer: () -> Unit) -> Unit)? = null
 ) {
     val request = state.request ?: return
     // 先探查（切 IO，见 peek 实现方）：命中动图就交 Coil 逐帧播放（静态解码链会把动图压成首帧），
     // 动态照片则记下标记好打角标；都不是再退回原有静态解码。rememberAsyncImagePainter 必须在组合里调，
     // 所以把探查结果（稳定值类型）先算出来，再据此分支创建 painter。
-    val probed by produceState<ViewerPeek?>(null, request, peek) {
-        value = peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } }
+    // 探查结果与「是否已跑完」收在同一个 ProbePhase 里，避免初始 null 与「跑完但无发现」混淆。
+    val probePhase by produceState<ProbePhase>(ProbePhase.Loading, request, peek) {
+        value = ProbePhase.Done(peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } })
     }
-    // 探查是否已跑完：probed 初始为 null，与“探查完但既非动图也非动态照片”无法区分，
-    // 用这个标记避免静态图在解码完成前被误判成 Failed。
-    var peeked by remember(request, peek) { mutableStateOf(false) }
-    SideEffect { if (probed != null || peek != null) peeked = true }
-    val loadState = when (val peekResult = probed) {
-        is ViewerPeek.Animated -> {
-            // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
-            val animatedPainter = rememberAsyncImagePainter(model = peekResult.model)
-            ViewerLoad.ReadyAnimated(animatedPainter)
+    // 是否已探查完：由阶段派生，不再用会提前置位的独立 flag（否则静态图会在解码完成前被误判成 Failed）。
+    // probePhase 是 produceState 委托属性，Kotlin 无法跨委托属性访问做 smart cast；先读到局部变量再
+    // 判别，既消除委托 smart cast 的编译隐患，也让同一组合内多次访问拿到一致的快照。
+    val phase = probePhase
+    val peeked = phase !is ProbePhase.Loading
+    // 动图（Done + Animated）走 Coil Painter 逐帧推进，其余统一走原有静态解码链；
+    // 必须先算出完整 loadState 再进入唯一的 Dialog，不要在 Dialog 之前提前 return（会跳过整个查看器）。
+    val loadState = if (phase is ProbePhase.Done && phase.peek is ViewerPeek.Animated) {
+        // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
+        ViewerLoad.ReadyAnimated(rememberAsyncImagePainter(model = (phase.peek as ViewerPeek.Animated).model))
+    } else {
+        val isMotionPhoto = phase is ProbePhase.Done && phase.peek is ViewerPeek.StaticMotionPhoto
+        val bitmap by produceState<ImageBitmap?>(
+            null,
+            request,
+            load,
+            isMotionPhoto
+        ) {
+            value = request.sources.firstNotNullOfOrNull { load(it) }
         }
-
-        else -> {
-            val bitmap by produceState<ImageBitmap?>(
-                null,
-                request,
-                load,
-                peekResult is ViewerPeek.StaticMotionPhoto
-            ) {
-                value = request.sources.firstNotNullOfOrNull { load(it) }
-            }
-            val decoded = bitmap
-            when {
-                decoded != null -> ViewerLoad.Ready(
-                    decoded,
-                    isMotionPhoto = peekResult is ViewerPeek.StaticMotionPhoto
-                )
-                !peeked -> ViewerLoad.Loading
-                else -> ViewerLoad.Failed
-            }
+        when (val decoded = bitmap) {
+            null -> if (peeked) ViewerLoad.Failed else ViewerLoad.Loading
+            else -> ViewerLoad.Ready(decoded, isMotionPhoto = isMotionPhoto)
         }
     }
 
@@ -291,19 +308,22 @@ fun ImageViewerHost(
                 )
             }
 
-            IconButton(
-                onClick = state::dismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
-                    .systemBarsPadding()
-                    .padding(Spacing.sm)
-            ) {
-                Icon(
-                    imageVector = FeatherIcons.X,
-                    contentDescription = stringResource(R.string.common_close),
-                    tint = Color.White
-                )
+            // 文件树来源：顶部栏换成返回箭头（左）+ 三点（右），点三点弹出宿主注入的文件操作菜单。
+            // 聊天 / Markdown（origin != FILE_TREE）保持旧行为：仅右上 × 关闭、无菜单。图片无顶部标题。
+            val isFileTree = request.origin == ViewerOrigin.FILE_TREE
+            var actionsNonce by remember { mutableIntStateOf(0) }
+            ViewerHeader(
+                isFileTree = isFileTree,
+                title = "",
+                onDismiss = state::dismiss,
+                onMore = { actionsNonce++ }
+            )
+            // 每次点三点换一个 key，强制下方 slot 重新组合，重置其内部 sheet 的可见态以便再次打开。
+            // actions == null（core 内兜底）或 origin != FILE_TREE 时不组合任何东西 —— 点三点 no-op。
+            if (isFileTree && actions != null && actionsNonce > 0) {
+                key(actionsNonce) {
+                    actions(request, state::dismiss)
+                }
             }
         }
     }

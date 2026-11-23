@@ -3,6 +3,7 @@ package com.aiverse.feature.git.domain
 import com.aiverse.feature.credentials.domain.repository.CredentialRepository
 import com.aiverse.feature.git.domain.model.GitHubCheckRun
 import com.aiverse.feature.git.domain.model.GitHubCheckSummary
+import com.aiverse.feature.git.domain.model.GitHubCommitDetail
 import com.aiverse.feature.git.domain.model.GitHubMergeResult
 import com.aiverse.feature.git.domain.model.GitHubPullRequest
 import com.aiverse.feature.git.domain.model.GitHubPullRequestCommit
@@ -271,6 +272,26 @@ class GitHubPullRequestsRepository @Inject constructor(
                 val body = execute(url, target.token)
                 val type = object : TypeToken<List<GitHubPullRequestFile>>() {}.type
                 Result.success(gson.fromJson<List<GitHubPullRequestFile>>(body, type) ?: emptyList())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * 单个提交的完整详情（含每个文件的 patch 正文），供 PR 提交区点开提交后看改动文件与逐行 diff。
+     * [sha] 取 PR 提交列表里的提交 sha。
+     */
+    suspend fun getCommit(sha: String): Result<GitHubCommitDetail> =
+        withContext(Dispatchers.IO) {
+            try {
+                if (sha.isBlank()) throw GitHubPullRequestsException("invalid commit sha")
+                val target = resolveTarget() ?: return@withContext errorResult()
+                val url = "$API_BASE/${target.owner}/${target.repo}/commits/$sha"
+                val detail = gson.fromJson(execute(url, target.token), GitHubCommitDetail::class.java)
+                    ?: throw GitHubPullRequestsException("Empty commit response")
+                Result.success(detail)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

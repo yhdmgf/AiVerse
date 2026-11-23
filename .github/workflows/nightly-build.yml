@@ -26,9 +26,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 测试版版本号：固定基数 + commit 短哈希（如 1.0.0-dev.a1b2c3d）。
+      # 与用户手动构建的 -PversionNameOverride 对接（见 android-release.yml），但测试版不靠顺序递增、
+      # 也不靠主仓库 git tag，避免「release 序列在 beta 仓库递增、APK versionName 却跟主仓库 tag」脱节。
+      # 每次构建号唯一可溯源（哈希即 commit），测试包不做应用内更新检查（SettingsViewModel.isTestPackage），
+      # versionCode 恒定不影响使用。build 与 release 两 job 共用本步骤算出的 VER。
+      - name: 计算版本号（固定基数 + commit 哈希）
+        id: ver
+        run: |
+          set -e
+          SHA=$(git rev-parse --short HEAD)
+          VER="1.0.0-dev.${SHA}"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "本次测试版版本号: $VER"
+
       # 早退检测：放在所有步骤之前，上次测试版构建的 commit 与本次 HEAD 相同则跳过整个 job
       # （不只跳过 build，连 JDK / 迁移对账 / 插件对账 / 还原签名一并跳过），避免对同一提交重复跑。
       # 判定来源：测试版仓库 yhdmgf/aiverse-beta 最新 release body 里的「commit xxx」，与 git rev-parse HEAD 比对。
+      # tag 现为固定基数+哈希（beta-1.0.0-dev.xxx），无法再 sort -V 取「上一个」，改按最新 release 取。
       - name: 早退检测（与上次构建同 commit 则跳过）
         id: earlycheck
         env:
@@ -37,15 +53,14 @@ jobs:
         run: |
           set -e
           SHA=$(git rev-parse HEAD)
-          PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
-                  | sed 's/^v//' | sort -V | tail -n1 || true)
+          # 取最新 release（不分页，第一页首条即最新）的 body，从里面抓「commit xxx」作基线。
           PREV_SHA=""
-          if [ -n "$PREV" ]; then
-            PREV_BODY=$(gh release view "$PREV" --repo "$TARGET_REPO" --json body -q .body 2>/dev/null || true)
-            if [ -n "$PREV_BODY" ]; then
-              PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
-            fi
+          PREV_BODY=$(gh api "repos/$TARGET_REPO/releases?per_page=1" --jq '.[0].body' 2>/dev/null || true)
+          if [ -n "$PREV_BODY" ] && [ "$PREV_BODY" != "null" ]; then
+            PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
           fi
+          # 供发布段复用作 git log 基线（同一 commit 的早退已跳过，能到这里说明 SHA 变了，可安全用）。
+          echo "prev_sha=${PREV_SHA}" >> "$GITHUB_OUTPUT"
           if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$SHA" ]; then
             echo "上次构建 commit $SHA 与本次 HEAD 相同，跳过整个构建"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -98,10 +113,13 @@ jobs:
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > app/keystore.properties
 
       # 三架构 beta 包：universal（通用，含 arm+x86 两套镜像）/ armsolo（arm64 真机）/ x86solo（x86_64 模拟器）
+      # 版本号用 -PversionNameOverride 传固定基数+哈希（ver 步骤算出的 $VER），与手动构建同一覆盖开关对接，
+      # 使 APK 的 versionName 与本次发布的 release tag（beta-$VER）一致，不再随主仓库 git tag 变。
       - name: 构建 beta 测试包（三架构，正式签名）
         if: steps.earlycheck.outputs.skip != 'true'
         run: |
-          ./gradlew :app:assembleUniversalBeta :app:assembleArmsoloBeta :app:assembleX86soloBeta
+          ./gradlew :app:assembleUniversalBeta :app:assembleArmsoloBeta :app:assembleX86soloBeta \
+            -PversionNameOverride=${{ steps.ver.outputs.ver }}
 
       # beta/测试包同样是 R8 混淆产物，mapping 必须跟构建一起留存，否则线上崩溃无法还原。
       - name: 上传 R8 mapping（retrace 用）
@@ -191,55 +209,23 @@ jobs:
           TARGET_REPO: yhdmgf/aiverse-beta
         run: |
           set -e
-          SHA=$(git rev-parse --short HEAD)
+          SHA=${{ steps.ver.outputs.sha }}
+          VER=${{ steps.ver.outputs.ver }}
+          # 测试版 tag = 固定基数 + commit 哈希（beta-1.0.0-dev.xxx）。每 commit 唯一，
+          # 不再靠 beta 仓库递增，也不再与主仓库 git tag 脱节（APK versionName 同为本 VER）。
+          TAG="beta-$VER"
+          echo "本次发布版本: $VER（tag: $TAG）"
 
-          # 枚举所有 tags 取最大版本号（比 gh release view 取 latest 更稳，避免首次/空 latest 误判），按 1.0.x 递增（patch 满 99 进位到 2.0.0）
-          # tag 统一带 beta- 前缀（beta-1.0.1），与正式仓库的 1.0.1 区分；解析旧 tag 时一并剥掉前缀。
-          PREV=$(gh api "repos/$TARGET_REPO/tags" --paginate --jq '.[].name' 2>/dev/null \
-                  | sed -e 's/^v//' -e 's/^beta-//' | sort -V | tail -n1)
-          echo "上一个版本: ${PREV:-无（首次发布）}"
-
-          # 提取「上一个测试版」release body 里的主仓库 commit SHA（格式「测试版构建（commit xxx）」），
-          # 用作 git log 生成自上个测试版以来变更列表的基线；拿不到或不在主仓库历史则回退为最近提交。
-          PREV_SHA=""
-          if [ -n "$PREV" ]; then
-            PREV_BODY=$(gh release view "$PREV" --repo "$TARGET_REPO" --json body -q .body 2>/dev/null || true)
-            if [ -n "$PREV_BODY" ]; then
-              PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
-            fi
-          fi
+          # 自上个测试版以来的变更基线：复用早退检测已解析的 PREV_SHA（读最新 release body 里的 commit）。
+          PREV_SHA="${{ steps.earlycheck.outputs.prev_sha }}"
+          CHANGE_SUMMARY="无法确定上次构建基线"
           if [ -n "$PREV_SHA" ]; then
-            # 需同时满足：对象存在 且 是 HEAD 祖先（防止上个测试版从分叉分支构建，导致 PREV_SHA..HEAD 列表不准）
+            # 需同时满足：对象存在 且 是 HEAD 祖先（防止上次从分叉分支构建，导致 PREV_SHA..HEAD 列表不准）
             if ! git cat-file -e "${PREV_SHA}^{commit}" 2>/dev/null || ! git merge-base --is-ancestor "$PREV_SHA" HEAD 2>/dev/null; then
               echo "警告：上次测试版 commit $PREV_SHA 不在主仓库 HEAD 历史（不存在或非祖先），回退为最近提交"
               PREV_SHA=""
             fi
           fi
-          echo "上次测试版 commit: ${PREV_SHA:-未知（无法作为 git log 基线）}"
-          if [ -z "$PREV" ]; then
-            MAJOR=1; MINOR=0; PATCH=0
-          else
-            BASE=${PREV%%-*}
-            IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
-            MAJOR=${MAJOR:-1}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
-          fi
-          PATCH=$((PATCH + 1))
-          # 每位数字只保留一位（0-9）：patch 满 10 进 minor，minor 满 10 进 major（如 1.0.9 -> 1.1.0 -> 1.1.1）
-          if [ "$PATCH" -ge 10 ]; then PATCH=0; MINOR=$((MINOR + 1)); fi
-          if [ "$MINOR" -ge 10 ]; then MINOR=0; MAJOR=$((MAJOR + 1)); fi
-          VER="${MAJOR}.${MINOR}.${PATCH}"
-          # 测试版 tag 加 beta- 前缀：避免与主仓库/正式版的同名 tag 混淆，版本号本体仍给 versionName 使用。
-          TAG="beta-$VER"
-          echo "本次发布版本: $VER（tag: $TAG）"
-
-          # 兕底：若同 tag 的 release/tag 已存在（如上次构建残留），先删干净再建新，避免撞车失败
-          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
-            echo "检测到已存在 release $TAG，先删除（release + tag）后重建"
-            gh release delete "$TAG" --repo "$TARGET_REPO" --yes --cleanup-tag
-          fi
-
-          # 生成 Release notes：固定提示段（保留原句）+ 自上个测试版以来的变更列表（主仓库 git log），拼成多行变量 NOTES 供 --notes 使用（不落临时文件）。
-          CHANGE_SUMMARY="无法确定上次构建基线"
           if [ -n "$PREV_SHA" ]; then
             CHANGELOG=$(git log --oneline --no-decorate "${PREV_SHA}..HEAD")
             if [ -z "$(echo "$CHANGELOG" | tr -d '[:space:]')" ]; then
