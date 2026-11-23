@@ -2397,18 +2397,39 @@ private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
         )
         return
     }
-    val vector = if (node.entry.isDirectory) {
-        FeatherIcons.Folder
-    } else {
-        fileTypeIconFor(node.entry.name)
+    if (node.entry.isDirectory) {
+        FileTreeIconVector(
+            vector = FeatherIcons.Folder,
+            decorationColor = decorationColor,
+            tintFallback = MaterialTheme.colorScheme.primary
+        )
+        return
     }
+    // 本地图片节点用小缩略图占用同一个 20dp 图标位；远程工作区 / 非图片 / 超大图 / 解码失败
+    // 一律在 FileTreeThumbnail 内部回退类型图标，不发起网络、不拖慢列表。
+    // 被弱化着色的条目（.gitignore 命中 / dotfile）不启用缩略图，保留弱化色语义。
+    if (decorationColor == null && shouldThumbnail(node.entry)) {
+        FileTreeThumbnail(
+            entry = node.entry,
+            modifier = Modifier.size(20.dp)
+        )
+        return
+    }
+    FileTreeIconVector(
+        vector = fileTypeIconFor(node.entry.name),
+        decorationColor = decorationColor,
+        tintFallback = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/** 文件树类型图标的统一着色出口：优先弱化色，否则按目录 / 文件语义取色。保持图标位 20dp。 */
+@Composable
+private fun FileTreeIconVector(vector: ImageVector, decorationColor: Color?, tintFallback: Color) {
     Icon(
         imageVector = vector,
         contentDescription = null,
         modifier = Modifier.size(20.dp),
-        tint = decorationColor
-            ?: if (node.entry.isDirectory) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant
+        tint = decorationColor ?: tintFallback
     )
 }
 

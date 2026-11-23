@@ -73,8 +73,8 @@ private val SPECIAL_TEXT_FILES = setOf(
     "license", "notice", "authors", "contributors", "changelog"
 )
 
-/** 图片格式。 */
-private val IMAGE_EXTS = setOf(
+/** 图片格式。internal 供文件树缩略图判定复用（FileTreeThumbnail）。 */
+internal val IMAGE_EXTS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico",
     "heic", "heif", "avif", "tif", "tiff"
 )
