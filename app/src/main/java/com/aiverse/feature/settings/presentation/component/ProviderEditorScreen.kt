@@ -1708,7 +1708,7 @@ private fun FetchModelsDialog(
                                             val isFirstTarget = brandKey == grouped.firstKey() && index == 0
                                             FetchModelRow(
                                                 model = m,
-                                                metadata = modelMetadata[m],
+                                                metadata = modelMetadata[modelMetadataKey(providerId, m)],
                                                 onAdd = {
                                                     onAddModel(m)
                                                     onDismiss()
