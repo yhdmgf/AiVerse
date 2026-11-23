@@ -911,6 +911,14 @@ class SettingsViewModel @Inject constructor(
     private val _modelMetadata = MutableStateFlow<Map<String, ModelMetadata>>(emptyMap())
     val modelMetadata: StateFlow<Map<String, ModelMetadata>> = _modelMetadata.asStateFlow()
 
+    /**
+     * 模型列表接口响应里自带的元数据（上下文长度、能力等），键为 [modelMetadataKey]。
+     * 作为优先于内置目录、低于用户自定义的中间层。单独持有并跨 re-resolve 存活：
+     * 否则 [resolveModelMetadata] / [loadAllModelMetadata] 重算时会用目录结果覆盖掉接口层。
+     * 仅内存缓存，不落盘——重新拉取即刷新，与目录每日同步的定位一致。
+     */
+    private val _fetchedMetadata = MutableStateFlow<Map<String, ModelMetadata>>(emptyMap())
+
     private val _testing = MutableStateFlow<Set<String>>(emptySet())
     val testing: StateFlow<Set<String>> = _testing.asStateFlow()
 
@@ -3596,6 +3604,11 @@ class SettingsViewModel @Inject constructor(
             _fetchState.value = FetchState.Loading
             modelApiService.fetchModels(provider.baseUrl, provider.firstUsableApiKey, provider.type, provider.useFullUrl, provider.customHeaders)
                 .onSuccess { result ->
+                    // 先把接口自带的元数据写入 fetched 中间层（键 渠道:模型），再 resolve；
+                    // resolve 内部会以「目录 < 接口 < 自定义」叠加，避免目录/默认盖掉接口声明的上下文与能力。
+                    _fetchedMetadata.update { current ->
+                        current + result.modelMetadata.mapKeys { (model, _) -> modelMetadataKey(provider.id, model) }
+                    }
                     _fetchState.value = FetchState.Success(result.models, result.debugInfo)
                     resolveModelMetadata(provider.id, provider.type, result.models)
                 }
@@ -3613,7 +3626,12 @@ class SettingsViewModel @Inject constructor(
         val normalizedIds = modelIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (normalizedIds.isEmpty()) return
         viewModelScope.launch {
-            val metadata = modelMetadataService.resolveAll(providerId, type, normalizedIds)
+            // 取出该渠道已缓存的接口层元数据（仍以模型 id 为键）传给 resolveAll 叠加。
+            val prefix = "$providerId:"
+            val fetched = _fetchedMetadata.value
+                .filterKeys { it.startsWith(prefix) }
+                .mapKeys { (key, _) -> key.removePrefix(prefix) }
+            val metadata = modelMetadataService.resolveAll(providerId, type, normalizedIds, fetched)
             _modelMetadata.update { current ->
                 current + metadata.mapKeys { (model, _) -> modelMetadataKey(providerId, model) }
             }
@@ -3639,7 +3657,12 @@ class SettingsViewModel @Inject constructor(
             for (provider in enabled) {
                 val ids = provider.models.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
                 if (ids.isEmpty()) continue
-                modelMetadataService.resolveAll(provider.id, provider.type, ids)
+                // 同样叠加接口层：否则重进设置页时 loadAll 会用目录结果覆盖掉拉取时拿到的接口元数据。
+                val prefix = "${provider.id}:"
+                val fetched = _fetchedMetadata.value
+                    .filterKeys { it.startsWith(prefix) }
+                    .mapKeys { (key, _) -> key.removePrefix(prefix) }
+                modelMetadataService.resolveAll(provider.id, provider.type, ids, fetched)
                     .forEach { (model, meta) -> resolved[modelMetadataKey(provider.id, model)] = meta }
             }
             if (resolved.isNotEmpty()) {

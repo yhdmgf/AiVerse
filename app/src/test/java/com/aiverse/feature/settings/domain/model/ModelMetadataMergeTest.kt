@@ -188,4 +188,101 @@ class ModelMetadataMergeTest {
         // 能力/窗口合并不受影响
         assertEquals(128_000, merged.contextTokens)
     }
+
+    // ---- layerModelMetadata：目录(低) → 接口(中) → 自定义(高) 三层叠加 ----
+
+    private fun capaMeta(
+        contextTokens: Int,
+        supportsTools: Boolean,
+        supportsVision: Boolean
+    ) = ModelMetadata(
+        id = "m",
+        displayName = "m",
+        contextTokens = contextTokens,
+        supportsTools = supportsTools,
+        supportsVision = supportsVision
+    )
+
+    @Test
+    fun layer_fetchedContext_overridesCatalog() {
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(1_000_000, layered!!.contextTokens)
+    }
+
+    @Test
+    fun layer_fetchedAbsentCapability_doesNotClearCatalogTrue() {
+        // 接口没声明工具能力（false），不应清零目录里的 true
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = true)
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(true, layered!!.supportsTools)
+        assertEquals(true, layered.supportsVision)
+    }
+
+    @Test
+    fun layer_fetchedAffirmativeCapability_keptWhenCatalogFalse() {
+        // 接口明确支持工具、目录没有，叠加后应为 true
+        val catalog = capaMeta(128_000, supportsTools = false, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)
+
+        assertEquals(true, layered!!.supportsTools)
+    }
+
+    @Test
+    fun layer_customCapability_overridesBoth() {
+        // 自定义层最高优先：用户显式关掉工具，目录/接口都是 true 也应关掉
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false)
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+        val custom = capaMeta(2_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched, custom = custom)
+
+        assertEquals(false, layered!!.supportsTools)
+        assertEquals(2_000_000, layered.contextTokens)
+    }
+
+    @Test
+    fun layer_nullCatalog_returnsFetchedThenCustom() {
+        val fetched = capaMeta(1_000_000, supportsTools = true, supportsVision = false)
+
+        val onlyFetched = layerModelMetadata("m", catalog = null, fetched = fetched)
+        assertEquals(fetched, onlyFetched)
+
+        assertNull(layerModelMetadata("m", catalog = null, fetched = null))
+    }
+
+    @Test
+    fun layer_fetchedDefaults_doNotWipeCatalogReasoningAndTemperature() {
+        // 接口层不解析思考/采样字段（恒为默认值），叠加后应保留目录已知的这些信息，
+        // 否则目录收录的模型会被接口默认值抹掉（如 temperature 固定、思考档位丢失）。
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false).copy(
+            supportsCustomTemperature = false,
+            reasoningLevels = listOf("low", "high"),
+            reasoningCanDisable = true,
+            reasoningBudgetMin = 1024,
+            reasoningBudgetMax = 8192,
+            reasoningDefaultLevel = "high"
+        )
+        // 接口返回的元数据：这些字段全是默认值
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)!!
+
+        assertEquals(false, layered.supportsCustomTemperature)
+        assertEquals(listOf("low", "high"), layered.reasoningLevels)
+        assertEquals(true, layered.reasoningCanDisable)
+        assertEquals(1024, layered.reasoningBudgetMin)
+        assertEquals(8192, layered.reasoningBudgetMax)
+        assertEquals("high", layered.reasoningDefaultLevel)
+        // 窗口仍按接口覆盖
+        assertEquals(1_000_000, layered.contextTokens)
+    }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.aiverse.R
 import com.aiverse.core.util.toUserMessage
 import com.aiverse.feature.agent.domain.provider.joinUrl
+import com.aiverse.feature.settings.domain.model.ModelMetadata
 import com.aiverse.feature.settings.domain.model.ProviderType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -11,10 +12,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -25,10 +29,12 @@ import javax.inject.Singleton
 /** 网络类失败重试前的退避时长：跨过 libcore 解析失败缓存的有效期，否则重试必然复现同一失败。 */
 private const val NETWORK_RETRY_BACKOFF_MS = 3_000L
 
-/** 拉取模型列表的结果，包含解析出的模型列表及完整的调试信息。 */
+/** 拉取模型列表的结果，包含解析出的模型列表、接口自带的模型元数据及完整的调试信息。 */
 data class FetchModelsResult(
     val models: List<String>,
-    val debugInfo: ModelTestResult
+    val debugInfo: ModelTestResult,
+    /** 接口响应里自带的每个模型元数据（上下文长度、工具/视觉能力等），键为模型 id；响应未提供的字段为 null。 */
+    val modelMetadata: Map<String, ModelMetadata> = emptyMap()
 )
 
 /** 拉取模型异常，附带调试信息。 */
@@ -156,7 +162,7 @@ class ModelApiService @Inject constructor(
                     responseHeaders = respHeadersMap,
                     responseBody = body
                 )
-                FetchModelsResult(modelList, debug)
+                FetchModelsResult(modelList, debug, parseFetchedMetadata(data, type))
             }
         }.recoverCatching { e ->
             if (e is FetchModelsException) {
@@ -338,4 +344,86 @@ class ModelApiService @Inject constructor(
 
     /** 转成安全的 JSON 字符串字面量（含引号、正确转义）。 */
     private fun String.jsonStr(): String = JsonPrimitive(this).toString()
+
+    companion object {
+        /**
+         * 解析模型列表响应里每个模型自带的元数据（上下文长度、工具/视觉能力、输出上限等），
+         * 供 [ModelMetadataService] 作为优先于内置目录、低于用户自定义的中间层来源。
+         * 响应未提供的字段一律留空（上下文 0、能力 false），交由 [layerModelMetadata] 回退到内置目录/默认值，
+         * 避免把「接口没说」当成「接口说不支持」。
+         *
+         * 兼容三种响应形态：OpenAI 兼容 / 聚合网关（`data[].id` + `context_length`/`capabilities`）、
+         * Anthropic（`data[].id` + `max_tokens`）、Gemini（`models[].name` + `inputTokenLimit`/`supportedGenerationMethods`）。
+         */
+        internal fun parseFetchedMetadata(data: kotlinx.serialization.json.JsonArray, type: ProviderType): Map<String, ModelMetadata> {
+        val idField = if (type == ProviderType.GEMINI) "name" else "id"
+        val result = LinkedHashMap<String, ModelMetadata>()
+        for (element in data) {
+            val obj = runCatching { element.jsonObject }.getOrNull() ?: continue
+            val rawId = obj[idField]?.jsonPrimitive?.contentOrNull ?: continue
+            val id = if (type == ProviderType.GEMINI) rawId.removePrefix("models/") else rawId
+            if (id.isBlank()) continue
+
+            // 上下文窗口候选：不含 max_tokens——Anthropic 的 max_tokens 是输出上限，不是上下文窗口。
+            val contextTokens = longField(obj, "context_length", "context_window", "max_context_length", "max_model_len", "max_input_tokens", "inputTokenLimit")
+                ?.takeIf { it > 0 }?.toInt()
+            // 输出上限候选：Anthropic 的 max_tokens 归到这里（如 8192），避免被误当上下文显示成 8K。
+            val outputTokens = longField(obj, "max_output_tokens", "max_output", "max_tokens", "outputTokenLimit")
+                ?.takeIf { it > 0 }?.toInt()
+            val supportsTools = boolField(obj, "tool_call", "supports_tools", "function_calling", "tools")
+                ?: capabilityFlag(obj, "tool_call", "tools", "function_calling")
+                ?: (if (type == ProviderType.GEMINI) geminiSupportsTools(obj) else null)
+            val supportsVision = boolField(obj, "supports_vision", "vision")
+                ?: capabilityFlag(obj, "vision", "image_input", "image", "multimodal")
+
+            result[id] = ModelMetadata(
+                id = id,
+                // display 字段按 provider 选：Gemini 用驼峰 displayName（其 name 是 models/ 前缀的 id），
+                // 其余用 snake_case display_name；顶层 name 作为非 Gemini 的回退，仍不带 models/ 前缀。
+                displayName = obj[if (type == ProviderType.GEMINI) "displayName" else "display_name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                    ?: obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { type != ProviderType.GEMINI && it.isNotBlank() }
+                    ?: id,
+                contextTokens = contextTokens ?: 0,
+                inputTokens = contextTokens,
+                outputTokens = outputTokens,
+                supportsTools = supportsTools ?: false,
+                supportsVision = supportsVision ?: false,
+                source = ModelMetadata.Source.INFERRED
+            )
+        }
+        return result
+    }
+
+        /** 取第一个存在的长整型字段（兼容 double 形式的整数，如 1000000.0）；均缺失返回 null。 */
+        private fun longField(obj: kotlinx.serialization.json.JsonObject, vararg keys: String): Long? {
+            for (key in keys) {
+                val primitive = obj[key]?.jsonPrimitive ?: continue
+                val value = primitive.longOrNull ?: primitive.doubleOrNull?.toLong() ?: continue
+                if (value > 0) return value
+            }
+            return null
+        }
+
+        /** 取第一个存在的布尔字段；均缺失（含 null 字面量）返回 null。 */
+        private fun boolField(obj: kotlinx.serialization.json.JsonObject, vararg keys: String): Boolean? {
+            for (key in keys) {
+                val primitive = obj[key]?.jsonPrimitive ?: continue
+                val value = primitive.booleanOrNull ?: continue
+                return value
+            }
+            return null
+        }
+
+        /** 从嵌套 `capabilities` 对象里取能力标志；无该对象或字段缺失返回 null。 */
+        private fun capabilityFlag(obj: kotlinx.serialization.json.JsonObject, vararg keys: String): Boolean? {
+            val capabilities = obj["capabilities"]?.jsonObject ?: return null
+            return boolField(capabilities, *keys)
+        }
+
+        /** Gemini 用 `supportedGenerationMethods` 数组声明能力，含 `tools` 即支持工具调用。 */
+        private fun geminiSupportsTools(obj: kotlinx.serialization.json.JsonObject): Boolean? {
+            val methods = obj["supportedGenerationMethods"]?.jsonArray ?: return null
+            return methods.any { it.jsonPrimitive.contentOrNull.equals("tools", ignoreCase = true) }
+        }
+    }
 }
