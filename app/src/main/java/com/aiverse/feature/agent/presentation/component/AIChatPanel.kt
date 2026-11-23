@@ -1748,6 +1748,8 @@ fun AIChatPanel(
             )
             viewModel.clearInputDraft()
             viewModel.clearPendingAttachments()
+            // 消息已发出，被优化前的旧草稿不再有恢复意义，清除撤销快照以免撤销按钮常驻。
+            viewModel.clearUndoOptimize()
             followBottom = true
             scope.launch {
                 kotlinx.coroutines.delay(0)
