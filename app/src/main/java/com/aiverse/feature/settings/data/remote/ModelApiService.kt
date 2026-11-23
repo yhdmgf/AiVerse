@@ -378,7 +378,9 @@ class ModelApiService @Inject constructor(
 
             result[id] = ModelMetadata(
                 id = id,
-                displayName = obj["display_name"]?.jsonPrimitive?.contentOrNull
+                // display 字段按 provider 选：Gemini 用驼峰 displayName（其 name 是 models/ 前缀的 id），
+                // 其余用 snake_case display_name；顶层 name 作为非 Gemini 的回退，仍不带 models/ 前缀。
+                displayName = obj[if (type == ProviderType.GEMINI) "displayName" else "display_name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
                     ?: obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { type != ProviderType.GEMINI && it.isNotBlank() }
                     ?: id,
                 contextTokens = contextTokens ?: 0,
