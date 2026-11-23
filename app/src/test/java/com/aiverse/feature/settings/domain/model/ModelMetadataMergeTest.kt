@@ -258,4 +258,31 @@ class ModelMetadataMergeTest {
 
         assertNull(layerModelMetadata("m", catalog = null, fetched = null))
     }
+
+    @Test
+    fun layer_fetchedDefaults_doNotWipeCatalogReasoningAndTemperature() {
+        // 接口层不解析思考/采样字段（恒为默认值），叠加后应保留目录已知的这些信息，
+        // 否则目录收录的模型会被接口默认值抹掉（如 temperature 固定、思考档位丢失）。
+        val catalog = capaMeta(128_000, supportsTools = true, supportsVision = false).copy(
+            supportsCustomTemperature = false,
+            reasoningLevels = listOf("low", "high"),
+            reasoningCanDisable = true,
+            reasoningBudgetMin = 1024,
+            reasoningBudgetMax = 8192,
+            reasoningDefaultLevel = "high"
+        )
+        // 接口返回的元数据：这些字段全是默认值
+        val fetched = capaMeta(1_000_000, supportsTools = false, supportsVision = false)
+
+        val layered = layerModelMetadata("m", catalog = catalog, fetched = fetched)!!
+
+        assertEquals(false, layered.supportsCustomTemperature)
+        assertEquals(listOf("low", "high"), layered.reasoningLevels)
+        assertEquals(true, layered.reasoningCanDisable)
+        assertEquals(1024, layered.reasoningBudgetMin)
+        assertEquals(8192, layered.reasoningBudgetMax)
+        assertEquals("high", layered.reasoningDefaultLevel)
+        // 窗口仍按接口覆盖
+        assertEquals(1_000_000, layered.contextTokens)
+    }
 }

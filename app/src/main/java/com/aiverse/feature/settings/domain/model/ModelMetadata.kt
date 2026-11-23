@@ -83,7 +83,15 @@ fun layerModelMetadata(
             supportsTools = fetched.supportsTools || catalog.supportsTools,
             supportsVision = fetched.supportsVision || catalog.supportsVision,
             supportsImageOutput = fetched.supportsImageOutput || catalog.supportsImageOutput,
-            supportsReasoning = fetched.supportsReasoning || catalog.supportsReasoning
+            supportsReasoning = fetched.supportsReasoning || catalog.supportsReasoning,
+            // 思考/采样约束：接口层不解析这些字段（恒为默认值），一律以更完整的内置目录为准，
+            // 避免「接口没说」把目录已知的 temperature 固定、思考档位/预算抹成未知。
+            supportsCustomTemperature = catalog.supportsCustomTemperature || fetched.supportsCustomTemperature,
+            reasoningLevels = catalog.reasoningLevels ?: fetched.reasoningLevels,
+            reasoningCanDisable = catalog.reasoningCanDisable || fetched.reasoningCanDisable,
+            reasoningBudgetMin = catalog.reasoningBudgetMin ?: fetched.reasoningBudgetMin,
+            reasoningBudgetMax = catalog.reasoningBudgetMax ?: fetched.reasoningBudgetMax,
+            reasoningDefaultLevel = catalog.reasoningDefaultLevel ?: fetched.reasoningDefaultLevel
         )
     } ?: return null
     return if (custom == null) base else mergeModelMetadata(model, base, custom)
