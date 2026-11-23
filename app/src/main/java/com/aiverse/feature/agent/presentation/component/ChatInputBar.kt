@@ -1669,18 +1669,19 @@ internal fun PlanApprovalPanel(
                     }
 
                     Spacer(Modifier.height(Spacing.md))
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    // 左对齐胶囊按钮行：去掉 weight(1f) 平分整行，改为按内容自适应宽度，与权限/提问面板一致。
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm, Alignment.Start)) {
                         AgentActionButton(
                             text = stringResource(R.string.chat_continue_feedback),
                             onClick = onRefine,
-                            modifier = Modifier.weight(1f),
-                            tone = AgentActionTone.Neutral
+                            tone = AgentActionTone.Neutral,
+                            pill = true
                         )
                         AgentActionButton(
                             text = stringResource(R.string.chat_approve_and_implement),
                             onClick = onApprove,
-                            modifier = Modifier.weight(1f),
-                            tone = AgentActionTone.Success
+                            tone = AgentActionTone.Success,
+                            pill = true
                         )
                     }
                 }
