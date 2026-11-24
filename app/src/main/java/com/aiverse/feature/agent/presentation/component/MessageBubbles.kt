@@ -222,6 +222,9 @@ internal fun AgentMessageItem(
      *  这一排按钮，随时能复制或回退自己发的话；助手消息只挂最新一条，避免历史回复下面吊满
      *  重复按钮把聊天记录割碎。时间戳与用量、耗时属于信息，不受它控制。 */
     showActions: Boolean = false,
+    /** 本条是否为本轮「结论」（最后一条有可见正文的助手消息）。只有结论消息挂朗读按钮，
+     *  多步工具调用轮的中间助手正文不挂，避免每条中间回复下面都吊一个喇叭。 */
+    speakable: Boolean = false,
     liveOutput: String? = null,
     markdownCache: MarkdownRenderCache? = null,
     onRewindClick: ((String) -> Unit)? = null,
@@ -519,7 +522,8 @@ internal fun AgentMessageItem(
                 // 不再用 turnBusy（整轮级）门控：流式期间它对所有历史消息恒为 true，会把已完成的
                 // 历史回复的朗读按钮一并隐藏。messageInProgress 已是本条消息级门控（生成中才隐藏），
                 // 中间步骤消息生成时同样被它挡住，不会提前挂出喇叭；完成后即可正常显示。
-                val canSpeak = !isUser && ttsController != null && hasContent && isChunkFooter && !messageInProgress
+                val canSpeak = !isUser && ttsController != null && hasContent && isChunkFooter &&
+                    !messageInProgress && speakable
                 if ((hasContent || hasAttachments) && message.role != MessageRole.TOOL && isChunkFooter &&
                     (actionsVisible || hasMeta || canSpeak)
                 ) {
