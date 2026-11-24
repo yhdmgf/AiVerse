@@ -50,7 +50,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.onClickLabel
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -133,7 +132,6 @@ internal fun ContributorWall(
             contributorWallGeometry(contributors.size, avatarSize.toPx(), avatarGap.toPx())
         }
     }
-    val detailsLabel = stringResource(R.string.about_contributors_view_github)
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val canvasHeight = maxWidth.coerceAtMost(canvasMaxHeight)
@@ -350,10 +348,12 @@ internal fun ContributorWall(
                             // that settles. detectTapGestures decides on the face directly, and the
                             // wall only claims the gesture once it is a real drag or a pinch, so a
                             // plain tap never waits on the pan. Semantics keep the face a button
-                            // (role, label, activation) for accessibility and TV focus.
+                            // (role, activation, name) for accessibility and TV focus. The click
+                            // label is left to Role.Button rather than onClickLabel: this Compose
+                            // version has no top-level onClickLabel property, and the button role
+                            // already yields a proper tap-to-activate label for the name below.
                             .semantics {
                                 role = Role.Button
-                                onClickLabel = detailsLabel
                                 contentDescription = contributor.name
                                 onClick { onSelect(contributor); true }
                             }
