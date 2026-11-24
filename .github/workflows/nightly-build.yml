@@ -5,6 +5,11 @@ name: Nightly Build
 # 产物发到独立测试版仓库 yhdmgf/aiverse-beta 的 Releases（版本号自动递增），不再作为 Actions artifact。
 # beta = 继承 release 的正式签名 + R8，包名 com.aiverse.beta（与正式版同机共存、互不覆盖）；
 # 签名校验生效，但测试包不参与检查更新（见 SettingsViewModel.isTestPackage），不会把测试机导向正式包。
+#
+# 多 job 结构，只在「构建」处并行化（三个 APK 三个 job 同时跑，省总时长），与 android-release.yml 对齐：
+#   prepare —— 计算版本号 + 早退检测 + JDK + 迁移/插件对账（只跑一次），产出 ver/tag/sha/skip/prev_sha 供下游复用
+#   build   —— matrix 三个 beta 包（universal / armsolo / x86solo）并行构建，各自 upload-artifact
+#   release —— needs: [prepare, build]，等三个产物全部就绪后 download-artifact 汇总、拼 README、发布到测试版仓库
 on:
   schedule:
     # 北京时间 6:00 / 12:00 / 18:00（= UTC 前一天22:00 / 当天4:00 / 10:00）
@@ -18,8 +23,19 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # ── 阶段 1：准备。版本号自增 / 早退判重 / 迁移对账 / 插件对账只跑一次，结果通过 outputs 传给下游，
+  #    避免 matrix 三个 runner 各自重复解析版本、重复做对账。
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      # 下游消费：ver/tag 供发布段拼 tag 与版本名；sha/full_sha 供 README、摘要、release body 写 commit；
+      # skip 供 build/release 判断是否早退；prev_sha 供发布段生成 changelog 基线。
+      ver: ${{ steps.ver.outputs.ver }}
+      tag: ${{ steps.ver.outputs.tag }}
+      sha: ${{ steps.ver.outputs.sha }}
+      full_sha: ${{ steps.earlycheck.outputs.full_sha }}
+      skip: ${{ steps.earlycheck.outputs.skip }}
+      prev_sha: ${{ steps.earlycheck.outputs.prev_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,8 +75,8 @@ jobs:
           echo "tag=beta-$VER" >> "$GITHUB_OUTPUT"
           echo "本次测试版版本号: $VER（tag: beta-$VER，基线: $BASE）"
 
-      # 早退检测：放在所有步骤之前，上次测试版构建的 commit 与本次 HEAD 相同则跳过整个 job
-      # （不只跳过 build，连 JDK / 迁移对账 / 插件对账 / 还原签名一并跳过），避免对同一提交重复跑。
+      # 早退检测：放在所有构建步骤之前，上次测试版构建的 commit 与本次 HEAD 相同则跳过 build/release
+      # （不只跳过构建，连 JDK / 迁移对账 / 插件对账 / 还原签名 / 发布一并跳过），避免对同一提交重复跑。
       # 判定来源：分页拉全量 beta release，对每条 body 提取 commit 哈希建集合；
       # git rev-parse HEAD（全 40 位哈希）命中集合即 skip=true。发布段 body 写入的也是全 40 位哈希，
       # 保证判重不受截断影响（旧版 grep 出短哈希与全哈希长度不等，恒 false 导致早退从未生效）。
@@ -77,6 +93,7 @@ jobs:
           SEEN="$(printf '%s\n' "$ALL_BODIES" | grep -oE 'commit [0-9a-f]{40}' | awk '{print $2}' | sort -u)"
           # 供发布段复用作 git log 基线（取最新一条 release 的 commit；分页首条即最新）。
           PREV_SHA="$(printf '%s\n' "$ALL_BODIES" | grep -oE 'commit [0-9a-f]{40}' | head -n1 | awk '{print $2}' || true)"
+          echo "full_sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "prev_sha=${PREV_SHA}" >> "$GITHUB_OUTPUT"
           if printf '%s\n' "$SEEN" | grep -qx "$SHA"; then
             echo "上次构建 commit $SHA 与本次 HEAD 相同，跳过整个构建"
@@ -115,9 +132,40 @@ jobs:
         if: steps.earlycheck.outputs.skip != 'true'
         run: node scripts/check-plugin-manifests.mjs
 
-      # beta 继承 release 的签名配置，需先从仓库 Secrets 还原签名密钥（与 android-release.yml 一致，不入库）。
+      # ── 阶段 2：构建。matrix 把三个 beta 包拆到三个 runner 同时并行。
+      #    每个 matrix runner 是独立环境，prepare 还原的 jks 不会自动带过去，需各自从 Secrets 还原签名。
+      #    任一失败 → needs 它的 release 阶段自动不跑，不会发布残缺产物。
+      #    skip=true 时整段跳过（GitHub 把 skipped 依赖视为成功，release 的 needs 仍满足，
+      #    故 release 也需同样判 skip != 'true' 才不会误发布）。
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: universal   # 通用包：含 arm64 + x86_64 两套镜像，兼容所有设备，体积约为单架构两倍
+            gradle_task: assembleUniversalBeta
+          - name: armsolo     # arm64 真机
+            gradle_task: assembleArmsoloBeta
+          - name: x86solo     # x86_64 模拟器
+            gradle_task: assembleX86soloBeta
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # matrix 各 runner 独立环境，需各自还原签名密钥（与 android-release.yml build job 一致，不入库）。
+      # beta 继承 release 的签名配置，从仓库 Secrets 注入。
       - name: 还原 release 签名（从仓库 Secrets 注入）
-        if: steps.earlycheck.outputs.skip != 'true'
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -129,40 +177,76 @@ jobs:
           printf 'storeFile=AiVerse.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > app/keystore.properties
 
-      # 三架构 beta 包：universal（通用，含 arm+x86 两套镜像）/ armsolo（arm64 真机）/ x86solo（x86_64 模拟器）
-      # 版本号用 -PversionNameOverride 传固定基数+哈希（ver 步骤算出的 $VER），与手动构建同一覆盖开关对接，
-      # 使 APK 的 versionName 与本次发布的 release tag（beta-$VER）一致，不再随主仓库 git tag 变。
-      - name: 构建 beta 测试包（三架构，正式签名）
-        if: steps.earlycheck.outputs.skip != 'true'
-        run: |
-          ./gradlew :app:assembleUniversalBeta :app:assembleArmsoloBeta :app:assembleX86soloBeta \
-            -PversionNameOverride=${{ steps.ver.outputs.ver }}
+      # 各自构建对应架构的 beta 包：版本号用 -PversionNameOverride 传 prepare 算出的 $VER（纯 x.y.z），
+      # 与手动构建同一覆盖开关对接，使 APK 的 versionName 与本次发布的 release tag（beta-$VER）一致。
+      - name: 构建 ${{ matrix.name }} beta（正式签名）
+        run: >-
+          ./gradlew :app:${{ matrix.gradle_task }}
+          -PversionNameOverride=${{ needs.prepare.outputs.ver }}
+          --stacktrace
+
+      # 各自构建 + upload-artifact，发布阶段统一 download 汇总（artifact 名 apk-<arch>，供 release 用 pattern: apk-* 匹配）。
+      - name: Upload ${{ matrix.name }} APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.name }}
+          path: app/build/outputs/apk/${{ matrix.name }}/beta/*.apk
+          if-no-files-found: error
+          retention-days: 7
 
       # beta/测试包同样是 R8 混淆产物，mapping 必须跟构建一起留存，否则线上崩溃无法还原。
+      # mapping 随各自 APK 一起上传（artifact 名 mapping-<arch>），线上闪退时直接下载对应版本。
       - name: 上传 R8 mapping（retrace 用）
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mapping-beta-${{ github.sha }}
+          name: mapping-${{ matrix.name }}
           path: |
-            app/build/outputs/mapping/beta/mapping.txt
-            app/build/outputs/mapping/beta/configuration.txt
-            app/build/outputs/mapping/beta/seeds.txt
-            app/build/outputs/mapping/beta/usage.txt
+            app/build/outputs/mapping/${{ matrix.name }}/beta/mapping.txt
+            app/build/outputs/mapping/${{ matrix.name }}/beta/configuration.txt
+            app/build/outputs/mapping/${{ matrix.name }}/beta/seeds.txt
+            app/build/outputs/mapping/${{ matrix.name }}/beta/usage.txt
           if-no-files-found: warn
           retention-days: 90
 
-      - name: 收集产物
-        if: steps.earlycheck.outputs.skip != 'true'
+  # ── 阶段 3：发布。needs: [prepare, build] 保证三个 APK 全部构建完成（且成功）才进入；
+  #    download-artifact 汇总产物、拼 README、输出摘要、发布到测试版仓库 Releases。
+  #    skip=true 时（build 被跳过）这里同样跳过，不会误发布。
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 三个 APK 全部下载到 apk/（pattern: apk-* + merge-multiple），集中重命名后一起发布。
+      - name: 下载全部 APK 产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          merge-multiple: true
+          path: apk
+
+      - name: 收集产物（重命名为发布文件名）
         run: |
           set -e
           mkdir -p dist
-          cp app/build/outputs/apk/universal/beta/app-universal-beta.apk "dist/AiVerse-universal-beta.apk"
-          cp app/build/outputs/apk/armsolo/beta/app-armsolo-beta.apk "dist/AiVerse-arm64-beta.apk"
-          cp app/build/outputs/apk/x86solo/beta/app-x86solo-beta.apk "dist/AiVerse-x86_64-beta.apk"
+          cp apk/app-universal-beta.apk "dist/AiVerse-universal-beta.apk" || true
+          cp apk/app-armsolo-beta.apk   "dist/AiVerse-arm64-beta.apk"    || true
+          cp apk/app-x86solo-beta.apk   "dist/AiVerse-x86_64-beta.apk"   || true
+          ls -la dist/
+          test -n "$(ls dist/*.apk 2>/dev/null)"
 
-          # 说明 txt：测试版声明 + 包含的三个 APK + 本次 commit
-          SHA=$(git rev-parse --short HEAD)
+      # 说明 txt：测试版声明 + 包含的三个 APK + 本次 commit + 构建时间 + 包名。
+      - name: 生成 README.txt
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          set -e
+          mkdir -p dist
           BUILD_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
           cat > "dist/README.txt" <<EOF
           AiVerse 测试版（Beta）安装说明
@@ -204,12 +288,10 @@ jobs:
           sed -i 's/^          //' "dist/README.txt"
           touch -d "1949-10-01 00:00:00" "dist/README.txt"
 
-          ls -la dist/
-
       - name: 输出构建信息到运行摘要
-        if: steps.earlycheck.outputs.skip != 'true'
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          SHA=$(git rev-parse --short HEAD)
           echo "## Nightly 构建（beta 测试包）" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- commit: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
@@ -219,19 +301,19 @@ jobs:
           echo "- 下载: 下方三个 APK 资产（按设备类型选）+ README.txt" >> "$GITHUB_STEP_SUMMARY"
 
       # 三架构 APK 各自独立 + 测试版说明 txt，作为测试版仓库 Release 的资产。
+      # VER/TAG/SHA/PREV_SHA 现从 needs.prepare.outputs.* 取（prepare 阶段已解析好），不再引用 steps.ver/steps.earlycheck。
       - name: 发布到测试版仓库 Releases
-        if: steps.earlycheck.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
           TARGET_REPO: yhdmgf/aiverse-beta
+          VER: ${{ needs.prepare.outputs.ver }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          SHA: ${{ needs.prepare.outputs.full_sha }}
+          PREV_SHA: ${{ needs.prepare.outputs.prev_sha }}
         run: |
           set -e
           # commit 哈希用全 40 位写入 release body，与早退判重集合（同样提取 40 位）长度统一，
           # 不受短哈希截断影响（旧版写短哈希导致早退恒 false、同 commit 重跑撞 tag）。
-          SHA=$(git rev-parse HEAD)
-          VER=${{ steps.ver.outputs.ver }}
-          # 测试版 tag = beta-<x.y.z>（语义化自增，由 ver 步骤读 beta tag 算出），不再自行拼接。
-          TAG=${{ steps.ver.outputs.tag }}
           echo "本次发布版本: $VER（tag: $TAG）"
 
           # 幂等护栏（最后防线）：早退判重万一漏判（如 body 历史格式不规）时，
@@ -241,8 +323,7 @@ jobs:
             exit 0
           fi
 
-          # 自上个测试版以来的变更基线：复用早退检测已解析的 PREV_SHA（读最新 release body 里的 commit）。
-          PREV_SHA="${{ steps.earlycheck.outputs.prev_sha }}"
+          # 自上个测试版以来的变更基线：复用 prepare 阶段早退检测已解析的 PREV_SHA（读最新 release body 里的 commit）。
           CHANGE_SUMMARY="无法确定上次构建基线"
           if [ -n "$PREV_SHA" ]; then
             # 需同时满足：对象存在 且 是 HEAD 祖先（防止上次从分叉分支构建，导致 PREV_SHA..HEAD 列表不准）
