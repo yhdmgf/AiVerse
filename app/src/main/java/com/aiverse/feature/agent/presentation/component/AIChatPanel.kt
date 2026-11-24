@@ -1194,6 +1194,21 @@ fun AIChatPanel(
         }
         ids
     }
+    // 朗读按钮口径同 actionableMessageIds：只挂每轮「结论」（最后一条 isResultCandidate 的助手消息），
+    // 多步工具调用轮的中间助手正文不再各自挂喇叭。isBusy 期间最新一轮暂不挂，避免生成中途按钮乱跳。
+    // leading 段（轮首前散消息，如欢迎语）不挂：保持「只有结论才挂」的一致口径。
+    val speakableMessageIds = remember(messages, isBusy) {
+        val (_, turns) = splitChatTurns(messages)
+        val ids = mutableSetOf<String>()
+        for (i in turns.indices) {
+            val turn = turns[i]
+            val turnFinished = i != turns.lastIndex || !isBusy
+            if (turnFinished) {
+                turn.messages.lastOrNull { it.isResultCandidate() }?.let { ids += it.id }
+            }
+        }
+        ids
+    }
     val activeModel = activeProvider?.effectiveModel.orEmpty()
     val activeModelMetadata = activeProvider?.let { modelMetadata[modelMetadataKey(it.id, activeModel)] }
     // 上下文用量明细：点击快捷栏圆环弹出；分类按当前会话消息快照估算。
@@ -1934,6 +1949,7 @@ fun AIChatPanel(
                 AgentMessageItem(
                     message = message,
                     showActions = message.id in actionableMessageIds,
+                    speakable = message.id in speakableMessageIds,
                     liveOutput = live,
                     markdownCache = markdownCache,
                     contentSlice = item.slice,

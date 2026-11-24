@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -48,6 +49,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
@@ -129,7 +132,6 @@ internal fun ContributorWall(
             contributorWallGeometry(contributors.size, avatarSize.toPx(), avatarGap.toPx())
         }
     }
-    val detailsLabel = stringResource(R.string.about_contributors_view_github)
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val canvasHeight = maxWidth.coerceAtMost(canvasMaxHeight)
@@ -340,12 +342,24 @@ internal fun ContributorWall(
                             }
                             // No clip of its own: the face clips itself to its circle, and a second
                             // clip here is a second graphics layer per face for no visible change.
-                            .clickable(
-                                role = Role.Button,
-                                onClickLabel = detailsLabel,
-                                onClick = { onSelect(contributor) }
-                            )
-                            .semantics { contentDescription = contributor.name }
+                            // The tap is detected on the face itself rather than left to a
+                            // clickable: a clickable shares the wall's tap-vs-drag disambiguation,
+                            // so the first tap right after the wall expands can be swallowed while
+                            // that settles. detectTapGestures decides on the face directly, and the
+                            // wall only claims the gesture once it is a real drag or a pinch, so a
+                            // plain tap never waits on the pan. Semantics keep the face a button
+                            // (role, activation, name) for accessibility and TV focus. The click
+                            // label is left to Role.Button rather than onClickLabel: this Compose
+                            // version has no top-level onClickLabel property, and the button role
+                            // already yields a proper tap-to-activate label for the name below.
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = contributor.name
+                                onClick { onSelect(contributor); true }
+                            }
+                            .pointerInput(contributor) {
+                                detectTapGestures { onSelect(contributor) }
+                            }
                     )
                 }
             }

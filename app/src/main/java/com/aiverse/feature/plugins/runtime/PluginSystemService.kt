@@ -11,19 +11,29 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.plugins.domain.PluginHostException
+import com.aiverse.feature.plugins.domain.PluginHostPaths
 import com.aiverse.feature.plugins.domain.PluginManager
 import com.aiverse.feature.plugins.overlay.AppForegroundMonitor
+import com.aiverse.feature.plugins.presentation.PluginLoginActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.URI
 import java.net.URISyntaxException
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 /**
@@ -171,6 +181,88 @@ class PluginSystemService @Inject constructor(
         return ok()
     }
 
+    /**
+     * 打开受控登录 WebView 完成第三方网页登录，回传 `{ url, finalUrl, cookies }`；用户取消时抛 `LOGIN_CANCELED`。
+     *
+     * 为兼容两类调用方，同时接受两套参数风格：
+     * - Nox / 主进程风格：`url`（登录页）、`cookieUrls`（数组，取首个 host 作为登录完成的目标域）、
+     *   `title`/`finishText`/`accentColor`/`showClose`（后者在本宿主不支持，忽略）。
+     * - AiVerse / 配置页风格：`loginUrl`（登录页）、`targetDomain`（登录完成的目标域）、`cookieName`、`timeoutMs`。
+     *
+     * 登录完成的判定复用 [PluginLoginActivity]：导航到 `targetDomain`（或其子域）后读取已过滤 Cookie 回传。
+     */
+    suspend fun openLoginWebView(pluginId: String, params: JsonObject): JsonElement {
+        ensureActive(pluginId)
+        // 1) 登录页地址：兼容 url / loginUrl
+        val loginUrl = (params["url"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            ?: PluginHostPaths.requireString(params, "loginUrl").trim()
+        requireHttpUrl(loginUrl)
+        // 2) 目标域：优先 cookieUrls 首个 host（Nox 风格），否则 targetDomain（AiVerse 风格），
+        //    都没有则退回 loginUrl 自身 host。
+        val targetDomain = (params["cookieUrls"] as? JsonArray)?.firstOrNull()?.let {
+            runCatching { URI((it as? JsonPrimitive)?.contentOrNull.orEmpty()).host?.lowercase() }.getOrNull()
+        }?.takeIf { it.isNotEmpty() }
+            ?: (params["targetDomain"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+            ?: runCatching { URI(loginUrl).host?.lowercase() }.getOrNull()
+            ?: throw PluginHostException("PARAM_INVALID", "cannot derive targetDomain")
+        if (!LOGIN_DOMAIN.matches(targetDomain)) {
+            throw PluginHostException("PARAM_INVALID", "invalid targetDomain")
+        }
+        val loginHost = runCatching { URI(loginUrl).host?.lowercase() }.getOrNull()
+        if (loginHost == null || !(loginHost == targetDomain || loginHost.endsWith(".$targetDomain"))) {
+            throw PluginHostException("PARAM_INVALID", "loginUrl host does not match targetDomain")
+        }
+        val cookieName = (params["cookieName"] as? JsonPrimitive)?.contentOrNull
+            ?.trim()?.takeIf { it.isNotEmpty() }
+        val timeoutMs = params["timeoutMs"]?.let {
+            (it as? JsonPrimitive)?.longOrNull
+                ?: throw PluginHostException("PARAM_INVALID", "timeoutMs must be a number")
+        }?.coerceIn(MIN_LOGIN_TIMEOUT_MS, MAX_LOGIN_TIMEOUT_MS) ?: DEFAULT_LOGIN_TIMEOUT_MS
+
+        // 同一时间只允许一个登录：requestId 由宿主生成并登记，Activity 回填与收尾注销靠它对齐。
+        val loginRequestId = UUID.randomUUID().toString()
+        val deferred = CompletableDeferred<PluginLoginActivity.Result>()
+        if (PluginLoginActivity.register(loginRequestId, deferred) != null) {
+            throw PluginHostException("REQUEST_EXISTS", "a webview login is already in progress")
+        }
+        try {
+            withContext(Dispatchers.Main) {
+                val intent = Intent(context, PluginLoginActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(PluginLoginActivity.EXTRA_REQUEST_ID, loginRequestId)
+                    .putExtra(PluginLoginActivity.EXTRA_LOGIN_URL, loginUrl)
+                    .putExtra(PluginLoginActivity.EXTRA_TARGET_DOMAIN, targetDomain)
+                    .putExtra(PluginLoginActivity.EXTRA_PLUGIN_NAME, resolvePluginName(pluginId))
+                cookieName?.let { intent.putExtra(PluginLoginActivity.EXTRA_COOKIE_NAME, it) }
+                context.startActivity(intent)
+            }
+            val outcome = withTimeoutOrNull(timeoutMs) { deferred.await() }
+                ?: throw PluginHostException("TIMEOUT", "webview login timed out")
+            return when (outcome) {
+                is PluginLoginActivity.Result.Success -> buildJsonObject {
+                    put("url", outcome.url)
+                    // finalUrl 别名：Nox 风格调用方读 finalUrl，配置页读 url，两者都拿到。
+                    put("finalUrl", outcome.url)
+                    put("cookies", outcome.cookies)
+                }
+                is PluginLoginActivity.Result.Failure ->
+                    throw PluginHostException(outcome.code, outcome.reason)
+            }
+        } finally {
+            PluginLoginActivity.unregister(loginRequestId)
+        }
+    }
+
+    /** 登录确认弹窗展示用插件名：取清单本地化名（按系统 locale 解析），取不到回退 pluginId。 */
+    private fun resolvePluginName(pluginId: String): String {
+        val localeTag = runCatching {
+            context.resources.configuration.locales[0].toLanguageTag()
+        }.getOrNull().orEmpty()
+        val plugin = pluginManager.plugins.value.firstOrNull { it.id == pluginId }
+        return plugin?.manifest?.name?.resolve(localeTag)
+            ?.takeIf { it.isNotBlank() } ?: pluginId
+    }
+
     /** 宿主 App 的包名、版本、系统 API 级别、界面语言与前后台状态。 */
     suspend fun appInfo(pluginId: String): JsonElement {
         ensureActive(pluginId)
@@ -291,5 +383,11 @@ class PluginSystemService @Inject constructor(
         const val MAX_LOG_MESSAGE_CHARS = 2000
         const val MAX_LOG_TAG_CHARS = 64
         const val DEFAULT_TAG_PREFIX = "plugin:"
+
+        /** 登录页目标域合法性：一个或多个点分隔的域名标签。 */
+        val LOGIN_DOMAIN = Regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$")
+        const val DEFAULT_LOGIN_TIMEOUT_MS = 5L * 60 * 1000
+        const val MIN_LOGIN_TIMEOUT_MS = 10_000L
+        const val MAX_LOGIN_TIMEOUT_MS = 10L * 60 * 1000
     }
 }
