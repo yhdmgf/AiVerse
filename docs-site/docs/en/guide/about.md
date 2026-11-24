@@ -37,7 +37,7 @@ Whichever channel you choose, what gets downloaded is the package for the versio
 
 The in-app update package download **always tries three addresses in a fixed order**, falling back automatically (unrelated to the "Download mirror source" setting):
 
-1.  **gitcode mirror**: `https://gitcode.com/qldwi/aiverse` (a GitHub mirror reachable directly from mainland China).
+1.  **gitcode mirror**: `https://gitcode.com/aiverse/aiverse` (a GitHub mirror reachable directly from mainland China).
 2.  **Direct GitHub**: downloads straight from `github.com`.
 3.  **v6.gh-proxy.org mirror**: the `https://v6.gh-proxy.org/` acceleration node.
 

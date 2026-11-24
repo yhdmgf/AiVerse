@@ -339,14 +339,14 @@ class ApkDownloader @Inject constructor(
     private data class HeadInfo(val contentLength: Long, val rangeSupported: Boolean)
 
     /**
-     * 把 GitHub 原始 release 下载地址转成 gitcode 镜像（固定仓库 `qldwi/aiverse`，与设置镜像源无关）。
+     * 把 GitHub 原始 release 下载地址转成 gitcode 镜像（固定仓库 `aiverse/aiverse`，与设置镜像源无关）。
      * 仅当 URL 含 `/releases/download/` 时生效，否则返回 null（跳过该镜像）。
      */
     private fun buildGitcodeUrl(original: String): String? {
         val marker = "/releases/download/"
         val idx = original.indexOf(marker)
         if (idx < 0) return null
-        return "https://gitcode.com/qldwi/aiverse" + original.substring(idx)
+        return "https://gitcode.com/aiverse/aiverse" + original.substring(idx)
     }
 
     private companion object {
