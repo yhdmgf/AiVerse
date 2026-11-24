@@ -375,6 +375,7 @@ class PluginRuntimeManager @Inject constructor(
             "host.ui.openUrl" -> hostCall {
                 systemService.openUrl(pluginId, PluginHostPaths.requireString(params, "url"))
             }
+            "host.webview.login" -> hostCall { systemService.openLoginWebView(pluginId, params) }
             "host.app.info" -> hostCall { systemService.appInfo(pluginId) }
             "host.log" -> hostCall {
                 systemService.log(
