@@ -495,7 +495,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
       <div class="foot">
         <div class="foot-links">
           <a class="link" href="https://github.com/yhdmgf/AiVerse/releases" target="_blank" rel="noreferrer">在 GitHub 查看所有版本<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
-          <a class="link" href="https://gitcode.com/qldwi/aiverse/releases" target="_blank" rel="noreferrer">在 GitCode 镜像查看所有版本<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
+          <a class="link" href="https://gitcode.com/aiverse/aiverse/releases" target="_blank" rel="noreferrer">在 GitCode 镜像查看所有版本<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
         </div>
         <p class="foot-note">下载即表示你已阅读并同意 <a class="link" href="/terms.html">服务条款</a> 与 <a class="link" href="/privacy.html">隐私政策</a>。</p>
       </div>
@@ -537,7 +537,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
   // 双镜像：用户可手动选择镜像一/镜像二
   var MIRRORS=[
-    {name:'镜像一', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/qldwi/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
+    {name:'镜像一', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/aiverse/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
     {name:'镜像二', host:'gh.aivapp.cn（本站加速）', build:function(tag,key){ return 'https://gh.aivapp.cn/https://github.com/'+GH_OWNER+'/'+GH_REPO+'/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }}
   ];
   var state={channel:'stable', source:'github', data:null, test:null, testUnlocked:false};

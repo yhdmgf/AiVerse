@@ -7,7 +7,7 @@
 
 可选环境变量：
   GH_REPO         GitHub 仓库，默认 yhdmgf/AiVerse
-  GITCODE_OWNER   GitCode 用户名，默认 qldwi
+  GITCODE_OWNER   GitCode 用户名，默认 aiverse
   GITCODE_REPO    GitCode 仓库名，默认 aiverse
   GITHUB_TOKEN    GitHub 令牌（可选，提高 API 限额）
   RELEASE_FILTER  Python 正则，覆盖自动推导，仅同步匹配 tag_name 的 Release
@@ -37,7 +37,7 @@ import urllib.request
 UA = "aiverse-gitcode-sync"
 
 GH_REPO = os.environ.get("GH_REPO", "yhdmgf/AiVerse")
-GITCODE_OWNER = os.environ.get("GITCODE_OWNER", "qldwi")
+GITCODE_OWNER = os.environ.get("GITCODE_OWNER", "aiverse")
 GITCODE_REPO = os.environ.get("GITCODE_REPO", "aiverse")
 GITCODE_TOKEN = os.environ.get("GITCODE_TOKEN", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")

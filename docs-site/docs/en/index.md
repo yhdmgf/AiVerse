@@ -27,7 +27,7 @@ hero:
       link: https://github.com/yhdmgf/AiVerse
     - theme: alt
       text: GitCode
-      link: https://gitcode.com/qldwi/aiverse/
+      link: https://gitcode.com/aiverse/aiverse/
 
 features:
   - title: AI Agent

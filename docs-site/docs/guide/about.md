@@ -37,7 +37,7 @@
 
 应用内更新包下载**固定尝试三个地址**，按顺序自动回退（与「下载镜像源」设置无关）：
 
-1. **gitcode 镜像**：`https://gitcode.com/qldwi/aiverse`（国内可直连的 GitHub 镜像）。
+1. **gitcode 镜像**：`https://gitcode.com/aiverse/aiverse`（国内可直连的 GitHub 镜像）。
 2. **直连 GitHub**：直接从 `github.com` 下载。
 3. **v6.gh-proxy.org 镜像**：`https://v6.gh-proxy.org/` 加速节点。
 
