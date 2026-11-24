@@ -3353,13 +3353,10 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="about_contributors_summary_default">Thanks for contributing to AiVerse</string>
     <string name="about_contributors_close">Close</string>
     <string name="about_contributors_area_app">App</string>
-    <string name="about_contributors_area_server">Server</string>
-    <string name="about_contributors_area_adb">Device control</string>
     <string name="about_contributors_area_build">Build</string>
-    <string name="about_contributors_area_i18n">Localization</string>
     <string name="about_contributors_area_docs">Docs</string>
+    <string name="about_contributors_area_issue">Feedback</string>
     <string name="about_contributors_desc">Thanks to everyone who made AiVerse better</string>
-    <string name="about_contributors_area_agent">Agent</string>
     <string name="about_contributors_area_terminal">Terminal</string>
     <string name="about_contributors_area_plugin">Plugins</string>
     <string name="about_contributors_area_git">Git</string>

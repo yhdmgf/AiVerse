@@ -205,12 +205,9 @@ private fun contributorPillShape() =
 
 private fun ContributorArea.icon(): ImageVector = when (this) {
     ContributorArea.APP -> FeatherIcons.Smartphone
-    ContributorArea.SERVER -> FeatherIcons.Server
-    ContributorArea.ADB -> FeatherIcons.Terminal
     ContributorArea.BUILD -> FeatherIcons.Code
-    ContributorArea.I18N -> FeatherIcons.Globe
     ContributorArea.DOCS -> FeatherIcons.Book
-    ContributorArea.AGENT -> FeatherIcons.Zap
+    ContributorArea.ISSUE -> FeatherIcons.MessageSquare
     ContributorArea.TERMINAL -> FeatherIcons.Terminal
     ContributorArea.PLUGIN -> FeatherIcons.Package
     ContributorArea.GIT -> FeatherIcons.GitBranch
@@ -221,12 +218,9 @@ private fun ContributorArea.icon(): ImageVector = when (this) {
 
 private fun ContributorArea.labelRes(): Int = when (this) {
     ContributorArea.APP -> R.string.about_contributors_area_app
-    ContributorArea.SERVER -> R.string.about_contributors_area_server
-    ContributorArea.ADB -> R.string.about_contributors_area_adb
     ContributorArea.BUILD -> R.string.about_contributors_area_build
-    ContributorArea.I18N -> R.string.about_contributors_area_i18n
     ContributorArea.DOCS -> R.string.about_contributors_area_docs
-    ContributorArea.AGENT -> R.string.about_contributors_area_agent
+    ContributorArea.ISSUE -> R.string.about_contributors_area_issue
     ContributorArea.TERMINAL -> R.string.about_contributors_area_terminal
     ContributorArea.PLUGIN -> R.string.about_contributors_area_plugin
     ContributorArea.GIT -> R.string.about_contributors_area_git

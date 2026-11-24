@@ -3352,13 +3352,10 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="about_contributors_summary_default">感谢为 AiVerse 做出贡献</string>
     <string name="about_contributors_close">关闭</string>
     <string name="about_contributors_area_app">应用</string>
-    <string name="about_contributors_area_server">服务端</string>
-    <string name="about_contributors_area_adb">设备控制</string>
     <string name="about_contributors_area_build">构建</string>
-    <string name="about_contributors_area_i18n">本地化</string>
     <string name="about_contributors_area_docs">文档</string>
+    <string name="about_contributors_area_issue">反馈</string>
     <string name="about_contributors_desc">感谢每一位让 AiVerse 变得更好的人</string>
-    <string name="about_contributors_area_agent">智能体</string>
     <string name="about_contributors_area_terminal">终端</string>
     <string name="about_contributors_area_plugin">插件</string>
     <string name="about_contributors_area_git">版本控制</string>
