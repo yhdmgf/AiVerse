@@ -468,62 +468,61 @@ def merge_extra(people: list[dict], extra: list[dict]) -> list[dict]:
     return sorted(people, key=lambda p: (-p["commits"], p["name"]))
 
 
-def fetch_persisted_manual(remote: str) -> list[dict]:
-    """Read the hand-added contributors off the last published snapshot.
+def load_prev_snapshot(path: str) -> list[dict]:
+    """Read the previous published snapshot off disk.
 
-    The wall is recomputed from the commit history every run, and a schedule can only ever credit
-    what a commit records. Someone added by hand - a reviewer, a translator, a reporter whose
-    contribution left no commit - would therefore drop off the next time the workflow fires without
-    an --extra list naming them. Reading them back off the published snapshot and folding them in
-    again makes a hand-added face sticky: once on the wall, it stays there until a maintainer
-    removes it from the snapshot itself.
-
-    Only entries with no commits of their own are carried over, so a real contributor is never
-    duplicated or inflated by their own past snapshot. Network failures degrade to an empty list so
-    an offline or first run still succeeds.
+    The caller passes the last-published contributors.json (the workflow dumps it off the data
+    branch). Any read or parse failure degrades to an empty list, so a first run or a missing
+    file still succeeds - there is simply nothing carried forward yet.
     """
-    url = f"https://raw.githubusercontent.com/{remote}/data/{OUTPUT}"
+    if not path or not os.path.isfile(path):
+        return []
     try:
-        request = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        payload = json.loads(open(path, encoding="utf-8").read())
+    except (OSError, json.JSONDecodeError):
         return []
-    if not isinstance(payload, dict):
-        return []
-    contributors = payload.get("contributors")
+    contributors = payload.get("contributors") if isinstance(payload, dict) else None
     if not isinstance(contributors, list):
         return []
-    manual = []
-    for entry in contributors:
-        if not isinstance(entry, dict):
-            continue
-        commits = entry.get("commits")
-        if isinstance(commits, int) and not isinstance(commits, bool) and commits > 0:
-            continue
-        if not str(entry.get("name") or "").strip():
-            continue
-        manual.append({
-            "name": entry.get("name"),
-            "login": entry.get("login"),
-            "commits": 0,
-            "note": entry.get("note"),
-            "areas": entry.get("areas") if isinstance(entry.get("areas"), list) else [],
-        })
-    return manual
+    return [entry for entry in contributors if isinstance(entry, dict)]
 
 
-def merge_persisted_manual(people: list[dict], persisted: list[dict], remote: str) -> list[dict]:
-    """Fold the hand-added contributors from the last snapshot back into this run's wall.
+def identity_key(person: dict) -> str | None:
+    """The stable handle a contributor is matched on across runs.
 
-    Merged, not appended: a name that also shows up counted this run becomes one face, and a
-    hand-added note or area the operator re-stated in --extra wins because that call runs after
-    this one. Anyone only ever added by hand is carried forward verbatim.
+    The login wins because it is immutable; the display name is the fallback for the
+    hand-added entry that never had an account to begin with. A blank name matches nothing and
+    is dropped rather than colliding every unnamed entry onto one key.
     """
-    if not persisted:
-        return people
-    return merge_extra(people, persisted)
+    login = str(person.get("login") or "").strip()
+    if login:
+        return login
+    name = str(person.get("name") or "").strip()
+    return name or None
 
+
+def carry_forward_all(people: list[dict], prev: list[dict]) -> list[dict]:
+    """Never drop anyone who was on the last published wall.
+
+    The wall is recomputed from the commit history every run, which is right for commits but
+    wrong for a person whose contribution left no commit - drop them once and a scheduled fire
+    erases them for good. So the previous snapshot is folded back in: anyone still counted this
+    run keeps the freshly computed commits and areas, and anyone who fell out of the history is
+    carried over verbatim. The wall only ever grows or refreshes, never shrinks.
+    """
+    if not prev:
+        return people
+    by_key: dict[str, dict] = {}
+    for person in people:
+        key = identity_key(person)
+        if key:
+            by_key[key] = person
+    for old in prev:
+        key = identity_key(old)
+        if not key or key in by_key:
+            continue
+        by_key[key] = old
+    return sorted(by_key.values(), key=lambda p: (-p["commits"], p["name"]))
 
 
 def render(payload: dict) -> str:
@@ -540,6 +539,8 @@ def main() -> int:
     parser.add_argument("--out", default=OUTPUT, help="where to write the snapshot")
     parser.add_argument("--extra", default="",
                         help="a JSON array of hand-entered contributors to merge in")
+    parser.add_argument("--prev", default="",
+                        help="path to the previous published snapshot, JSON; nobody on it is ever dropped")
     args = parser.parse_args()
 
     # A hand-entered list arrives as a JSON string. Parse it natively rather than through a shell,
@@ -557,10 +558,12 @@ def main() -> int:
 
     payload = build(network=not (args.no_network or args.check), remote=remote_slug())
     payload["contributors"] = merge_extra(payload["contributors"], extra)
-    # Carry forward anyone added by hand on an earlier run, so a scheduled fire without an
-    # --extra list cannot silently drop them off the wall.
-    payload["contributors"] = merge_persisted_manual(
-        payload["contributors"], fetch_persisted_manual(remote_slug()), remote_slug()
+    # Never drop anyone: fold the previous published snapshot back in, so a person whose
+    # contribution left no commit (or who simply has not committed lately) stays on the wall.
+    # Read off disk (--prev, dumped from the data branch) rather than over the network, so no
+    # CDN cache can serve a stale copy and silently erase somebody.
+    payload["contributors"] = carry_forward_all(
+        payload["contributors"], load_prev_snapshot(args.prev)
     )
     content = render(payload)
 
