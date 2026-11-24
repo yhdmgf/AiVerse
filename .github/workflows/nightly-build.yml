@@ -26,25 +26,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 测试版版本号：固定基数 + commit 短哈希（如 1.0.0-dev.a1b2c3d）。
-      # 与用户手动构建的 -PversionNameOverride 对接（见 android-release.yml），但测试版不靠顺序递增、
-      # 也不靠主仓库 git tag，避免「release 序列在 beta 仓库递增、APK versionName 却跟主仓库 tag」脱节。
-      # 每次构建号唯一可溯源（哈希即 commit），测试包不做应用内更新检查（SettingsViewModel.isTestPackage），
-      # versionCode 恒定不影响使用。build 与 release 两 job 共用本步骤算出的 VER。
-      - name: 计算版本号（固定基数 + commit 哈希）
+      # 测试版版本号：语义化自增（纯 x.y.z），取 beta 仓库已有 tag 的最大版号 +1。
+      # 与用户手动构建的 -PversionNameOverride 对接（见 android-release.yml），
+      # APK versionName 与本次发布的 release tag（beta-<x.y.z>）保持一致。
+      # 自增 + 进位规则：y、z 只能一位（0-9），x 可多位；z+1，z>9 进位到 y，y>9 进位到 x
+      # （例 1.0.9→1.1.0、1.9.9→2.0.0、9.9.9→10.0.0）。进位用 python3 计算，避免 bash 处理多位 x 出错。
+      # 本步骤只读 tag、不发布，无副作用，故不挂 skip 守卫：即使本次最终早退，也不会真正消耗号
+      # （版本号只在发布段的 gh release create 时才写入 beta 仓库）。
+      - name: 计算版本号（读 beta tag 自增，纯 x.y.z）
         id: ver
+        env:
+          GH_TOKEN: ${{ secrets.BETA_RELEASE_TOKEN }}
+          TARGET_REPO: yhdmgf/aiverse-beta
         run: |
           set -e
           SHA=$(git rev-parse --short HEAD)
-          VER="1.0.0-dev.${SHA}"
+          # 拉全量 beta tag（releases 端点，分页兜底 per_page=100），过滤出纯数字格式 beta-x.y.z。
+          # 现存旧 tag（如 beta-1.0.0-dev.0dd2936）不符合纯数字格式，会被正则过滤掉，不参与基线。
+          TAGS_JSON="$(gh api "repos/$TARGET_REPO/tags?per_page=100" --paginate --jq '.[].name' 2>/dev/null || true)"
+          BASE="$(printf '%s\n' "$TAGS_JSON" | grep -oE '^beta-[0-9]+\.[0-9]\.[0-9]$' | sed 's/^beta-//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1)"
+          if [ -z "$BASE" ]; then
+            # 无有效基线（当前情况）：把旧 1.0.0-dev.x 视为已占用的 1.0.0，首个新格式为 1.0.1。
+            BASE="1.0.0"
+            echo "无有效基线 tag，锁定基线 $BASE（旧 1.0.0-dev.x 视为已占用），产出 1.0.1"
+          else
+            echo "最大基线 tag: $BASE"
+          fi
+          # 进位算法用 python3（runner 自带），避免 bash 处理多位 x 出错。
+          VER="$(BASE="$BASE" python3 -c 'import os; x,y,z=(int(v) for v in os.environ["BASE"].split(".")); z+=1; (z,y)=(z,y) if z<10 else (0,y+1); (x,y)=(x,y) if y<10 else (x+1,0); print(f"{x}.{y}.{z}")')"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
-          echo "本次测试版版本号: $VER"
+          echo "tag=beta-$VER" >> "$GITHUB_OUTPUT"
+          echo "本次测试版版本号: $VER（tag: beta-$VER，基线: $BASE）"
 
       # 早退检测：放在所有步骤之前，上次测试版构建的 commit 与本次 HEAD 相同则跳过整个 job
       # （不只跳过 build，连 JDK / 迁移对账 / 插件对账 / 还原签名一并跳过），避免对同一提交重复跑。
-      # 判定来源：测试版仓库 yhdmgf/aiverse-beta 最新 release body 里的「commit xxx」，与 git rev-parse HEAD 比对。
-      # tag 现为固定基数+哈希（beta-1.0.0-dev.xxx），无法再 sort -V 取「上一个」，改按最新 release 取。
+      # 判定来源：分页拉全量 beta release，对每条 body 提取 commit 哈希建集合；
+      # git rev-parse HEAD（全 40 位哈希）命中集合即 skip=true。发布段 body 写入的也是全 40 位哈希，
+      # 保证判重不受截断影响（旧版 grep 出短哈希与全哈希长度不等，恒 false 导致早退从未生效）。
       - name: 早退检测（与上次构建同 commit 则跳过）
         id: earlycheck
         env:
@@ -53,15 +72,13 @@ jobs:
         run: |
           set -e
           SHA=$(git rev-parse HEAD)
-          # 取最新 release（不分页，第一页首条即最新）的 body，从里面抓「commit xxx」作基线。
-          PREV_SHA=""
-          PREV_BODY=$(gh api "repos/$TARGET_REPO/releases?per_page=1" --jq '.[0].body' 2>/dev/null || true)
-          if [ -n "$PREV_BODY" ] && [ "$PREV_BODY" != "null" ]; then
-            PREV_SHA=$(echo "$PREV_BODY" | grep -oE 'commit [0-9a-f]{7,40}' | head -n1 | awk '{print $2}')
-          fi
-          # 供发布段复用作 git log 基线（同一 commit 的早退已跳过，能到这里说明 SHA 变了，可安全用）。
+          # 分页拉全量 beta release body，提取每条的 commit 哈希建集合（哈希长度统一为全 40 位）。
+          ALL_BODIES="$(gh api "repos/$TARGET_REPO/releases?per_page=100" --paginate --jq '.[].body' 2>/dev/null || true)"
+          SEEN="$(printf '%s\n' "$ALL_BODIES" | grep -oE 'commit [0-9a-f]{40}' | awk '{print $2}' | sort -u)"
+          # 供发布段复用作 git log 基线（取最新一条 release 的 commit；分页首条即最新）。
+          PREV_SHA="$(printf '%s\n' "$ALL_BODIES" | grep -oE 'commit [0-9a-f]{40}' | head -n1 | awk '{print $2}' || true)"
           echo "prev_sha=${PREV_SHA}" >> "$GITHUB_OUTPUT"
-          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$SHA" ]; then
+          if printf '%s\n' "$SEEN" | grep -qx "$SHA"; then
             echo "上次构建 commit $SHA 与本次 HEAD 相同，跳过整个构建"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -209,12 +226,20 @@ jobs:
           TARGET_REPO: yhdmgf/aiverse-beta
         run: |
           set -e
-          SHA=${{ steps.ver.outputs.sha }}
+          # commit 哈希用全 40 位写入 release body，与早退判重集合（同样提取 40 位）长度统一，
+          # 不受短哈希截断影响（旧版写短哈希导致早退恒 false、同 commit 重跑撞 tag）。
+          SHA=$(git rev-parse HEAD)
           VER=${{ steps.ver.outputs.ver }}
-          # 测试版 tag = 固定基数 + commit 哈希（beta-1.0.0-dev.xxx）。每 commit 唯一，
-          # 不再靠 beta 仓库递增，也不再与主仓库 git tag 脱节（APK versionName 同为本 VER）。
-          TAG="beta-$VER"
+          # 测试版 tag = beta-<x.y.z>（语义化自增，由 ver 步骤读 beta tag 算出），不再自行拼接。
+          TAG=${{ steps.ver.outputs.tag }}
           echo "本次发布版本: $VER（tag: $TAG）"
+
+          # 幂等护栏（最后防线）：早退判重万一漏判（如 body 历史格式不规）时，
+          # 若 tag 已存在则直接跳过，避免 gh release create 撞「same tag name already exists」报错。
+          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "tag $TAG 已存在，跳过发布（幂等护栏）"
+            exit 0
+          fi
 
           # 自上个测试版以来的变更基线：复用早退检测已解析的 PREV_SHA（读最新 release body 里的 commit）。
           PREV_SHA="${{ steps.earlycheck.outputs.prev_sha }}"
