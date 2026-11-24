@@ -1753,6 +1753,10 @@ fun AIChatPanel(
                 kotlinx.coroutines.delay(0)
                 snapToBottom()
             }
+            // 走到这说明请求已成功提交到发送流程（enqueue 未抛异常）。此时被优化前的旧草稿
+            // 已无恢复意义，清除撤销快照以免撤销按钮常驻。放在 enqueue 之后：若 enqueue 抛异常，
+            // 则保留快照，用户仍可撤回优化前草稿（失败路径由 ViewModel 的发送失败事件处理，不走到这里）。
+            viewModel.clearUndoOptimize()
         }
     }
 
@@ -2654,7 +2658,7 @@ fun AIChatPanel(
                 onDismiss = { attachmentSheet = null }
             )
         }
-        ImageViewerHost(state = imageViewerState, load = chatImageLoad)
+        ImageViewerHost(state = imageViewerState, load = chatImageLoad, peek = motionAwarePeek(viewModel.fileAccess))
         MediaPlayerHost(state = mediaViewerState, resolve = mediaFileResolve)
         PdfViewerHost(state = pdfViewerState, resolve = pdfFileResolve)
     }

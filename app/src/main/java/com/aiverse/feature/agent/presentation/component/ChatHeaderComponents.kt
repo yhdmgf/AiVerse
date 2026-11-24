@@ -210,6 +210,7 @@ internal fun ChatHeader(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     val hyperOS = LocalHyperOSStyle.current
+                    val glass = LocalSurfaceGlassStyle.current
                     val t = LocalUIDensityTokens.current
                     // 点标题弹出「重命名会话」对话框：按容器圆角裁剪高亮，不再方块溢出。
                     if (sessionId != null && onRenameSession != null) {
@@ -244,7 +245,7 @@ internal fun ChatHeader(
                     ) {
                     // 当前角色入口：点击打开角色切换抽屉。
                     RoleSwitcherPill(currentRole = currentRole, onClick = onOpenRoleSwitcher)
-                    if (hyperOS) {
+                    if (hyperOS || glass) {
                         Surface(
                             shape = RoundedCornerShape(Radius.pill),
                             color = MaterialTheme.colorScheme.surface,
@@ -400,9 +401,10 @@ private fun RoleSwitcherPill(
 ) {
     val t = LocalUIDensityTokens.current
     val hyperOS = LocalHyperOSStyle.current
+    val glass = LocalSurfaceGlassStyle.current
     val roleName = currentRole?.name?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.chat_role_default)
-    if (hyperOS) {
+    if (hyperOS || glass) {
         Surface(
             shape = RoundedCornerShape(Radius.pill),
             color = MaterialTheme.colorScheme.surface,

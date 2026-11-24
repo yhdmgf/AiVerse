@@ -56,7 +56,10 @@ class ChatPanelGlassOrTest {
     @Test
     fun glass_branch_extremely_low_opacity_clamps_to_five_percent_floor() = runTest {
         val result = resolve(surfaceGlassStyle = true, chatPanelOpacity = 0.01f)
-        assertEquals(0x80 / 255f * 0.05f, result.alpha, 0.001f)
+        // Color 把 alpha 量化到 8 位：128 × 0.05 = 6.4 → 实存 6/255，误差约半个量化步长，
+        // 大于常规 0.001 容差（其余用例因 128×1.0 / 128×0.5 为整数、量化无损而不受影响），
+        // 故这里改用「1 个 8 位步长」做容差。
+        assertEquals(0x80 / 255f * 0.05f, result.alpha, 1f / 255f)
     }
 
     @Test

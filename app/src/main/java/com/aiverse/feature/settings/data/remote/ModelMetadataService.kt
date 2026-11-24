@@ -7,6 +7,7 @@ import com.aiverse.feature.settings.data.local.CustomModelMetadataStore
 import com.aiverse.feature.settings.domain.model.ModelMetadata
 import com.aiverse.feature.settings.domain.model.ProviderType
 import com.aiverse.feature.settings.domain.model.mergeModelMetadata
+import com.aiverse.feature.settings.domain.model.layerModelMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -53,12 +54,24 @@ class ModelMetadataService @Inject constructor(
             mergeCustom(providerId, modelId, auto)
         }
 
-    suspend fun resolveAll(providerId: String, type: ProviderType, modelIds: List<String>): Map<String, ModelMetadata> =
+    /**
+     * 批量解析模型元数据。优先级：自定义 > 接口自带（[fetched]，键为模型 id）> 内置目录 > 默认兜底。
+     * [fetched] 是模型列表接口响应里自带的元数据，在目录匹配之后、自定义合并之前叠加，
+     * 让接口声明过的上下文/能力覆盖目录，未声明的字段仍回退目录/默认。
+     */
+    suspend fun resolveAll(
+        providerId: String,
+        type: ProviderType,
+        modelIds: List<String>,
+        fetched: Map<String, ModelMetadata> = emptyMap()
+    ): Map<String, ModelMetadata> =
         withContext(Dispatchers.IO) {
             val catalog = loadCatalog()
             modelIds.associateWith { modelId ->
                 val auto = findMetadata(catalog, type, modelId) ?: default(type, modelId)
-                mergeCustom(providerId, modelId, auto)
+                // catalog=auto 恒非空，layerModelMetadata 必返回非空；?: auto 仅为满足可空签名。
+                val withFetched = layerModelMetadata(modelId, catalog = auto, fetched = fetched[modelId]) ?: auto
+                mergeCustom(providerId, modelId, withFetched)
             }
         }
 

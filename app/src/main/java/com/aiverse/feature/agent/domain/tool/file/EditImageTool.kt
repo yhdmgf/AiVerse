@@ -79,6 +79,13 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
             description = "输出图片尺寸，如 1024x1024（默认）、1024x1536、1536x1024。Gemini 通道忽略该参数。",
             required = false
         ),
+        "quality" to ToolParameter(
+            name = "quality",
+            type = ParameterType.STRING,
+            description = "画质：GPT Image 系列支持 low / medium / high / auto（默认 auto）；dall-e-3 支持 standard / hd（默认 standard）。Gemini 通道忽略该参数。",
+            required = false,
+            enum = listOf("low", "medium", "high", "auto", "standard", "hd")
+        ),
         "output_path" to ToolParameter(
             name = "output_path",
             type = ParameterType.STRING,
@@ -132,6 +139,8 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
         if (n !in 1..MAX_IMAGES) {
             return@withContext ToolResult.Error("n 取值必须在 1 到 $MAX_IMAGES 之间，当前为 $n", "INVALID_PARAMS")
         }
+        // 与 generateImage 一致：quality 仅 OpenAI 官方生图模型支持，Gemini 通道忽略。
+        val quality = args["quality"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()?.ifBlank { null }
         val outputPath = args["output_path"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null }
 
         val references = try {
@@ -161,8 +170,18 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
             if (provider.type == ProviderType.GEMINI) {
                 return@withContext editViaGemini(provider, activeApiKey, model, prompt, references, n, outputPath, context.sessionId)
             }
-            FileLogger.i(logTag, "editImage provider=${provider.id} model=$model refs=${references.size} prompt=$prompt n=$n size=$size")
-            editViaOpenAI(provider, activeApiKey, model, prompt, references, n, size, outputPath, context.sessionId)
+            // OpenAI 兼容通道按模型校验 quality（复用 generateImage 的合法取值集合与报错文案）。
+            val isGptImage = model.startsWith("gpt-image", ignoreCase = true)
+            val isDalle2 = model.equals("dall-e-2", ignoreCase = true)
+            val isDalle3 = model.equals("dall-e-3", ignoreCase = true)
+            GenerateImageTool.validateImageParams(
+                model, isGptImage, isDalle2, isDalle3, n, quality,
+                background = null, moderation = null, style = null, outputFormat = null
+            )?.let {
+                return@withContext ToolResult.Error(it, "INVALID_PARAMS")
+            }
+            FileLogger.i(logTag, "editImage provider=${provider.id} model=$model refs=${references.size} prompt=$prompt n=$n size=$size quality=$quality")
+            editViaOpenAI(provider, activeApiKey, model, prompt, references, n, size, quality, isGptImage, outputPath, context.sessionId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -185,11 +204,12 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
         references: List<ReferenceImage>,
         n: Int,
         size: String,
+        quality: String?,
+        isGptImage: Boolean,
         outputPath: String?,
         sessionId: String?
     ): ToolResult {
         val url = if (provider.useFullUrl) provider.baseUrl else joinUrl(provider.baseUrl, "v1/images/edits")
-        val isGptImage = model.startsWith("gpt-image", ignoreCase = true)
         val formPartName = if (references.size > 1) "image[]" else "image"
         val multipartBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -197,6 +217,7 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
             .addFormDataPart("prompt", prompt)
             .addFormDataPart("n", n.toString())
             .addFormDataPart("size", size)
+        if (quality != null) multipartBuilder.addFormDataPart("quality", quality)
         if (!isGptImage) multipartBuilder.addFormDataPart("response_format", "b64_json")
         references.forEach { ref ->
             multipartBuilder.addFormDataPart(
@@ -214,7 +235,7 @@ class EditImageTool @Inject constructor() : AbstractImageTool() {
 
         val seq = AILogger.logRequest(
             sessionId, provider.id, model, "POST (multipart)", url,
-            mapOf("prompt" to prompt, "n" to n, "size" to size, "images" to references.map { it.path })
+            mapOf("prompt" to prompt, "n" to n, "size" to size, "quality" to quality, "images" to references.map { it.path })
         )
         val response = httpClient.newCall(request).execute()
         val bodyString = response.body?.string().orEmpty()

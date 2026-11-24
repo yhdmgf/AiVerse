@@ -248,8 +248,8 @@ sh gradlew :app:assembleUniversalDebug \
 - `type` ∈ `feat | fix | refactor | docs | style | chore | ci | build | perf | test`。
 - `scope` 可选：`agent | settings | terminal | workspace | git | ui | mcp | db | core | docs | build | deps`。
 - `subject` 一行简述，中英文均可，句末不加句号。
-- 项目由 `yhdmgf` 与 `qldwj` 两位维护者共同维护；提交按受理人分别署名：bug → `qldwj`，功能/UI → `yhdmgf`；非 issue 的汇总提交默认 `yhdmgf`。
-- 两位维护者使用各自的 GitHub 邮箱署名：`yhdmgf` 用 `225713231+yhdmgf@users.noreply.github.com`，`qldwj` 用 `qldwj@users.noreply.github.com`；保持独立署名，不交叉使用邮箱。
+- 项目由 `yhdmgf` 与 `aiverse-app` 两位维护者共同维护；提交按受理人分别署名：bug → `aiverse-app`，功能/UI → `yhdmgf`；非 issue 的汇总提交默认 `yhdmgf`。
+- 两位维护者使用各自的 GitHub 邮箱署名：`yhdmgf` 用 `225713231+yhdmgf@users.noreply.github.com`，`aiverse-app` 用 `aiverse-app@users.noreply.github.com`；保持独立署名，不交叉使用邮箱。
 - 修多个 issue 时，**每个 issue 单独一行** `Closes #N`，**禁止写成一行**：
 
 ```text
@@ -271,11 +271,13 @@ Closes #73
 
 - 文件：`docs-site/release-notes/<版本号>.md`，文件名用纯版本号（如 `1.0.5.md`），不加 `v`。
 - 默认不写标题、不写分类；正文直接从 `-` 列表开始，每个改动/每个已解决的问题单独一行。
+- **一个 issue 只占一行（硬规则）**：同一个 issue 的多个改动点**合并成一行**，绝不拆成两行（如查看器的动图播放与动态照片角标同属 #198，写一行而不是两行）。合并后若超出下面的字数上限，**精简用词压到上限内，而不是另起一行**。
 - 每条 5–13 个汉字，长度自然浮动、不要固定成同一个字数；不写英文、不写括号，括号内也不补充说明。
 - issue 编号放行尾，**必须用井号加数字并套括号 `(#N)`**，例如 `- 修复远端图片 (#173)`；不要把 `#N` 写在行首，不要漏括号。
 - 默认不写 `> [!NOTE]`；只有确实需要升级提醒（迁移、签名、兼容性、必须手动安装）才加，保持一两行。
 - 本轮关闭的 issue 全部写进公告，一个不漏。
 - **时机（硬规则，卡在用户真机确认之后、推送之前）**：① 先冒烟出 APK 交用户真机验证；② **用户确认没问题后**才动笔写公告；③ 写完公告再随代码一起推。顺序不得颠倒：**未拿到用户「没问题」之前不写公告，写了公告也未推**；也不要在开发中途提前写。
+- **推送前闸门（硬规则，不可跳过）**：**任何带用户可见改动（功能 / UI / 交互 / 工具行为）的代码推送之前，本轮关闭的 issue 对应的更新公告必须已经写好并随代码一起提交推送。** 没有 `docs-site/release-notes/<版本号>.md` 就不得 `git push`、不得开 PR。只改文档 / 纯 typo / CI 配置等无用户可见变化的推送，可豁免本闸门。验收时把「公告已存在且覆盖本轮全部 issue」当作与「冒烟通过」同级的必过项；漏写即视为审核不通过，补齐后再推。
 - 覆盖范围：上一个正式版本到现在；发版流程按 `<版本号>.md` 读取。
 
 ### 5.9 代码质量准则

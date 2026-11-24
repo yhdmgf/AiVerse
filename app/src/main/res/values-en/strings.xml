@@ -926,6 +926,7 @@
     <string name="common_name">Name</string>
     <string name="common_image_preview">Image Preview</string>
     <string name="common_image_load_failed">Failed to load image; the file may have been moved or deleted</string>
+    <string name="viewer_motion_photo">Motion Photo</string>
     <string name="common_play">Play</string>
     <string name="common_pause">Pause</string>
     <string name="common_media_load_failed">Failed to play this file; it may have been moved or deleted</string>
@@ -2938,6 +2939,12 @@
     <string name="browser_homepage_unset">Not set</string>
     <string name="browser_homepage_set_toast">Homepage set</string>
     <string name="browser_homepage_cleared_toast">Homepage cleared</string>
+    <string name="browser_clear_cache">Clear cache</string>
+    <string name="browser_clear_cache_confirm_title">Clear browsing cache?</string>
+    <string name="browser_clear_cache_confirm_message">Clears HTTP cache, cookies and site data (including logins). This cannot be undone.</string>
+    <string name="browser_clear_cache_confirm">Clear</string>
+    <string name="browser_clear_cache_done">Cache cleared and page refreshed</string>
+    <string name="browser_clear_cache_failed">Cache wasn\'t fully cleared, please retry</string>
     <string name="sig_invalid_title">Signature Verification Failed</string>
     <string name="sig_invalid_message">Signature mismatch. Please download from the official source.</string>
     <string name="sig_invalid_button">Go to official site</string>
@@ -3154,6 +3161,13 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="plugin_web_page_failed">Failed to load the plugin page</string>
     <string name="plugin_web_page_retry">Retry</string>
     <string name="plugin_page_unsupported">This plugin page contribution is not supported yet</string>
+    <string name="plugin_webview_login_confirm_title">Allow plugin sign-in?</string>
+    <string name="plugin_webview_login_confirm_body">&quot;%1$s&quot; will open the %2$s sign-in page in-app. Cookies are returned to this plugin once and cleared after use; they are not stored.</string>
+    <string name="plugin_webview_login_confirm_allow">Allow sign-in</string>
+    <string name="plugin_webview_login_confirm_cancel">Cancel</string>
+    <string name="plugin_webview_login_title">Sign in</string>
+    <string name="plugin_webview_login_timeout">Sign-in timed out. Please try again.</string>
+    <string name="plugin_webview_login_failed">Sign-in page failed to load</string>
     <string name="apk_download_failed">Download failed</string>
     <string name="apk_chunk_incomplete">Chunk %1$d is incomplete (%2$d/%3$d)</string>
     <string name="apk_size_mismatch">Installer size mismatch (%1$d/%2$d)</string>
@@ -3327,4 +3341,29 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="launch_star_point_3">Models and keys stay on-device, never through a third party</string>
     <string name="launch_star_action">Star on GitHub</string>
     <string name="launch_star_optional_hint">Totally optional — just tap "Get started" to continue.</string>
+
+    <!-- Contributor wall -->
+    <string name="about_contributors_title">Contributors</string>
+    <string name="about_contributors_hint">Drag to explore · Pinch to zoom · Tap an avatar for details</string>
+    <string name="about_contributors_commits">%1$d commits</string>
+    <string name="about_contributors_view_github">View on GitHub</string>
+    <string name="about_contributors_contribute_title">Contribute</string>
+    <string name="about_contributors_contribute_desc">Contribute on GitHub</string>
+    <string name="about_contributors_summary_code">Contributed to %1$s</string>
+    <string name="about_contributors_summary_default">Thanks for contributing to AiVerse</string>
+    <string name="about_contributors_close">Close</string>
+    <string name="about_contributors_area_app">App</string>
+    <string name="about_contributors_area_server">Server</string>
+    <string name="about_contributors_area_adb">Device control</string>
+    <string name="about_contributors_area_build">Build</string>
+    <string name="about_contributors_area_i18n">Localization</string>
+    <string name="about_contributors_area_docs">Docs</string>
+    <string name="about_contributors_desc">Thanks to everyone who made AiVerse better</string>
+    <string name="about_contributors_area_agent">Agent</string>
+    <string name="about_contributors_area_terminal">Terminal</string>
+    <string name="about_contributors_area_plugin">Plugins</string>
+    <string name="about_contributors_area_git">Git</string>
+    <string name="about_contributors_area_editor">Editor</string>
+    <string name="about_contributors_area_ui">UI</string>
+    <string name="about_contributors_area_core">Core</string>
 </resources>

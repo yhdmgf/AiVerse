@@ -17,10 +17,11 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -28,7 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -44,6 +47,8 @@ import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -55,11 +60,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import coil.compose.rememberAsyncImagePainter
 import com.aiverse.R
+import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Image
-import compose.icons.feathericons.X
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -99,7 +105,9 @@ sealed interface ImageSource {
 data class ImageViewerRequest(
     val sources: List<ImageSource>,
     /** 无障碍描述与失败提示用，通常是文件名；留空则回退到「图片预览」。 */
-    val title: String = ""
+    val title: String = "",
+    /** 打开来源：文件树打开时顶部栏换成返回箭头 + 三点菜单入口；默认 null = 聊天 / Markdown 旧行为。 */
+    val origin: ViewerOrigin? = null
 )
 
 /** 打开全屏查看器的句柄：调用方只管 show，不关心加载与手势。 */
@@ -136,7 +144,39 @@ fun rememberImageViewerState(): ImageViewerState = remember { ImageViewerState()
 private sealed interface ViewerLoad {
     object Loading : ViewerLoad
     object Failed : ViewerLoad
-    data class Ready(val bitmap: ImageBitmap) : ViewerLoad
+    data class Ready(val bitmap: ImageBitmap, val isMotionPhoto: Boolean = false) : ViewerLoad
+
+    /** 动图（GIF / 动图 WebP）：交 Coil [androidx.compose.ui.graphics.painter.Painter] 逐帧播放。 */
+    data class ReadyAnimated(val painter: Painter) : ViewerLoad
+}
+
+/**
+ * 加载前的快速探查结果，用于把动图与动态照片从静态位图里分出来。
+ *
+ * 探查只在宿主提供了 [ImageViewerHost.peek] 时发生；默认 null 表示“无从判断”，
+ * 直接走原有静态解码链路，行为与引入本功能前一致。
+ */
+sealed interface ViewerPeek {
+    /** 命中动图，[model] 是已落到宿主的本地文件 / 远程 URL / base64，交 Coil 逐帧播放。 */
+    data class Animated(val model: Any) : ViewerPeek
+
+    /** 静态图，但带动态照片（Motion Photo）标记，查看器会打角标。 */
+    object StaticMotionPhoto : ViewerPeek
+}
+
+/**
+ * 探查阶段：把「还没跑完」与「跑完了、结果是 X」显式分开。
+ *
+ * 探查是异步的，若只拿结果本身（[ViewerPeek]?）当状态，初始 null 与「跑完但既非动图也非动态照片」
+ * 无法区分，容易在解码完成前把静态图误判成 Failed。用阶段枚举后，「是否已探查完」直接由
+ * 「阶段 != [ProbePhase.Loading]」派生，不再需要一个会提前置位的独立 flag。
+ */
+private sealed interface ProbePhase {
+    /** 探查尚未返回（或本轮没有 peek，无从判断）。 */
+    data object Loading : ProbePhase
+
+    /** 探查已跑完，[peek] 是结果（null = 既非动图也非动态照片，走静态解码）。 */
+    data class Done(val peek: ViewerPeek?) : ProbePhase
 }
 
 /**
@@ -149,17 +189,53 @@ private sealed interface ViewerLoad {
  *    不用去推敲它们的相对顺序。
  *
  * @param load 把 [ImageSource] 解成位图；实现方自行切 IO 线程，返回 null 表示这个来源拿不到。
+ * @param peek 加载前的快速探查（可选）。实现方自行切 IO，命中动图返回 [ViewerPeek.Animated]
+ *   交 Coil 逐帧播放，命中动态照片返回 [ViewerPeek.StaticMotionPhoto] 好打角标，其余返回 null
+ *   走原有静态解码。不传则完全保持旧行为。
+ * @param actions 文件操作菜单 slot（可选，仅 feature 层注入）。仅当请求 [ImageViewerRequest.origin]
+ *   为 [ViewerOrigin.FILE_TREE] 且本参数非 null 时，右上三点才弹出它；参数形如
+ *   `(request, onDismissViewer) -> Unit`，宿主内部自行弹 [AdaptiveModalBottomSheet] 并复用自身的
+ *   文件操作回调。core 不感知 feature，不传或 origin 非 FILE_TREE 时点三点为 no-op，行为与旧版一致。
  */
 @Composable
 fun ImageViewerHost(
     state: ImageViewerState,
-    load: suspend (ImageSource) -> ImageBitmap?
+    load: suspend (ImageSource) -> ImageBitmap?,
+    peek: (suspend (ImageSource) -> ViewerPeek?)? = null,
+    actions: (@Composable (request: ImageViewerRequest, onDismissViewer: () -> Unit) -> Unit)? = null
 ) {
     val request = state.request ?: return
-    val loadState by produceState<ViewerLoad>(ViewerLoad.Loading, request, load) {
-        value = request.sources.firstNotNullOfOrNull { load(it) }
-            ?.let { ViewerLoad.Ready(it) }
-            ?: ViewerLoad.Failed
+    // 先探查（切 IO，见 peek 实现方）：命中动图就交 Coil 逐帧播放（静态解码链会把动图压成首帧），
+    // 动态照片则记下标记好打角标；都不是再退回原有静态解码。rememberAsyncImagePainter 必须在组合里调，
+    // 所以把探查结果（稳定值类型）先算出来，再据此分支创建 painter。
+    // 探查结果与「是否已跑完」收在同一个 ProbePhase 里，避免初始 null 与「跑完但无发现」混淆。
+    val probePhase by produceState<ProbePhase>(ProbePhase.Loading, request, peek) {
+        value = ProbePhase.Done(peek?.let { request.sources.firstNotNullOfOrNull { source -> it(source) } })
+    }
+    // 是否已探查完：由阶段派生，不再用会提前置位的独立 flag（否则静态图会在解码完成前被误判成 Failed）。
+    // probePhase 是 produceState 委托属性，Kotlin 无法跨委托属性访问做 smart cast；先读到局部变量再
+    // 判别，既消除委托 smart cast 的编译隐患，也让同一组合内多次访问拿到一致的快照。
+    val phase = probePhase
+    val peeked = phase !is ProbePhase.Loading
+    // 动图（Done + Animated）走 Coil Painter 逐帧推进，其余统一走原有静态解码链；
+    // 必须先算出完整 loadState 再进入唯一的 Dialog，不要在 Dialog 之前提前 return（会跳过整个查看器）。
+    val loadState = if (phase is ProbePhase.Done && phase.peek is ViewerPeek.Animated) {
+        // 动图走 Coil Painter：Image 绘制时 Coil 会自动逐帧推进（同正文动图那套 coil-gif 链路）。
+        ViewerLoad.ReadyAnimated(rememberAsyncImagePainter(model = (phase.peek as ViewerPeek.Animated).model))
+    } else {
+        val isMotionPhoto = phase is ProbePhase.Done && phase.peek is ViewerPeek.StaticMotionPhoto
+        val bitmap by produceState<ImageBitmap?>(
+            null,
+            request,
+            load,
+            isMotionPhoto
+        ) {
+            value = request.sources.firstNotNullOfOrNull { load(it) }
+        }
+        when (val decoded = bitmap) {
+            null -> if (peeked) ViewerLoad.Failed else ViewerLoad.Loading
+            else -> ViewerLoad.Ready(decoded, isMotionPhoto = isMotionPhoto)
+        }
     }
 
     Dialog(
@@ -211,23 +287,62 @@ fun ImageViewerHost(
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.safeDrawing)
                 )
-            }
 
-            IconButton(
-                onClick = state::dismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
-                    .systemBarsPadding()
-                    .padding(Spacing.sm)
-            ) {
-                Icon(
-                    imageVector = FeatherIcons.X,
-                    contentDescription = stringResource(R.string.common_close),
-                    tint = Color.White
+                is ViewerLoad.ReadyAnimated -> ZoomableImage(
+                    painter = loaded.painter,
+                    contentDescription = request.title.ifBlank { stringResource(R.string.common_image_preview) },
+                    onTap = state::dismiss,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
                 )
             }
+
+            // 动态照片（Motion Photo）角标：至少标识，与右上角 × 对称放在左上角。
+            if (loadState is ViewerLoad.Ready && loadState.isMotionPhoto) {
+                MotionPhotoBadge(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .systemBarsPadding()
+                        .padding(Spacing.sm)
+                )
+            }
+
+            // 文件树来源：顶部栏换成返回箭头（左）+ 三点（右），点三点弹出宿主注入的文件操作菜单。
+            // 聊天 / Markdown（origin != FILE_TREE）保持旧行为：仅右上 × 关闭、无菜单。图片无顶部标题。
+            val isFileTree = request.origin == ViewerOrigin.FILE_TREE
+            var actionsNonce by remember { mutableIntStateOf(0) }
+            ViewerHeader(
+                isFileTree = isFileTree,
+                title = "",
+                onDismiss = state::dismiss,
+                onMore = { actionsNonce++ }
+            )
+            // 每次点三点换一个 key，强制下方 slot 重新组合，重置其内部 sheet 的可见态以便再次打开。
+            // actions == null（core 内兜底）或 origin != FILE_TREE 时不组合任何东西 —— 点三点 no-op。
+            if (isFileTree && actions != null && actionsNonce > 0) {
+                key(actionsNonce) {
+                    actions(request, state::dismiss)
+                }
+            }
         }
+    }
+}
+
+/** 动态照片（Motion Photo）角标：半透明背板 + 白字，不写死颜色魔数，圆角走 [Radius.sm]。 */
+@Composable
+private fun MotionPhotoBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(Radius.sm),
+        color = Color.Black.copy(alpha = BADGE_BACKDROP_ALPHA),
+        contentColor = Color.White
+    ) {
+        Text(
+            text = stringResource(R.string.viewer_motion_photo),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+        )
     }
 }
 
@@ -254,6 +369,9 @@ private fun LoadFailedPlaceholder(modifier: Modifier = Modifier) {
 
 /** 背板不透明度。Compose 的 Dialog 本身还会给 window 加一层 dim，这里不必给满。 */
 private const val BACKDROP_ALPHA = 0.92f
+
+/** 动态照片角标背板不透明度：比背板略深，让白字在亮图上也读得清。 */
+private const val BADGE_BACKDROP_ALPHA = 0.6f
 
 private const val MIN_SCALE = 1f
 
@@ -345,13 +463,46 @@ fun ZoomableImage(
     modifier: Modifier = Modifier,
     onBackgroundTap: (() -> Unit)? = null
 ) {
+    // 包成 BitmapPainter 复用同一套手势 / 缩放内核：intrinsicSize 就是位图像素尺寸，
+    // 行为与直接用 bitmap 渲染完全一致（PDF 查看器仍走这个入口）。
+    ZoomableImage(
+        painter = BitmapPainter(bitmap),
+        contentDescription = contentDescription,
+        onTap = onTap,
+        modifier = modifier,
+        onBackgroundTap = onBackgroundTap
+    )
+}
+
+/**
+ * [ZoomableImage] 的 Painter 版本：供动图（GIF / 动图 WebP）逐帧播放使用。
+ *
+ * 渲染层换成 Painter，缩放 / 位移 / 双击 / 单击手势逻辑与位图版完全共用；尺寸按
+ * [Painter.intrinsicSize] 算，动图未知尺寸时退化到容器尺寸（Fit 充满）。
+ */
+@Composable
+fun ZoomableImage(
+    painter: Painter,
+    contentDescription: String?,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+    onBackgroundTap: (() -> Unit)? = null
+) {
     var container by remember { mutableStateOf(IntSize.Zero) }
     var scale by remember { mutableFloatStateOf(MIN_SCALE) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var zoomAnim by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
-    val imageSize = remember(bitmap) { IntSize(bitmap.width, bitmap.height) }
+    val imageSize = remember(painter) {
+        val s = painter.intrinsicSize
+        // 动图可能报未就绪 / INFINITE（宽高 <= 0，已覆盖 Size.Unspecified 的 -1），此时交给容器尺寸 Fit 充满。
+        if (s.width > 0f && s.height > 0f) {
+            IntSize(s.width.toInt(), s.height.toInt())
+        } else {
+            IntSize.Zero
+        }
+    }
     val content = remember(imageSize, container) { fitInside(imageSize, container) }
     val center = remember(container) { Offset(container.width / 2f, container.height / 2f) }
     // 上限取「回到 1:1 解码像素」，否则长截图 Fit 之后缩得极小，5 倍也看不清字
@@ -426,7 +577,7 @@ fun ZoomableImage(
             }
     ) {
         ComposeImage(
-            bitmap = bitmap,
+            painter = painter,
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
             modifier = Modifier

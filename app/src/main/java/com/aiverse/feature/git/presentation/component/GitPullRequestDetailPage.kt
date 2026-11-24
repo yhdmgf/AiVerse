@@ -20,10 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -52,14 +54,17 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.feature.git.domain.model.GitHubCheckSummary
 import com.aiverse.feature.git.domain.model.GitHubComment
+import com.aiverse.feature.git.domain.model.GitHubCommitFile
 import com.aiverse.feature.git.domain.model.GitHubPullRequest
 import com.aiverse.feature.git.domain.model.GitHubPullRequestCommit
 import com.aiverse.feature.git.domain.model.GitHubPullRequestFile
@@ -95,6 +100,11 @@ internal fun GitPullRequestDetailPage(
     onMergePull: (String) -> Unit = {},
     onAskAgent: (String) -> Unit = {},
     onFileDiff: (String) -> Unit = {},
+    onCommitClick: (String) -> Unit = {},
+    onCommitDetailDismiss: () -> Unit = {},
+    onCommitFileDiff: (String, String) -> Unit = { _, _ -> },
+    commitFiles: Map<String, List<GitHubCommitFile>> = emptyMap(),
+    commitFilesLoading: String? = null,
     toastMessage: String? = null,
     onToastConsumed: () -> Unit = {}
 ) {
@@ -173,7 +183,12 @@ internal fun GitPullRequestDetailPage(
                 onReopenPull = onReopenPull,
                 onMergePull = onMergePull,
                 onAskAgent = onAskAgent,
-                onFileDiff = onFileDiff
+                onFileDiff = onFileDiff,
+                onCommitClick = onCommitClick,
+                onCommitFileDiff = onCommitFileDiff,
+                commitFiles = commitFiles,
+                commitFilesLoading = commitFilesLoading,
+                onCommitDetailDismiss = onCommitDetailDismiss
             )
         }
     }
@@ -199,13 +214,19 @@ private fun PullRequestDetailContent(
     onReopenPull: () -> Unit,
     onMergePull: (String) -> Unit,
     onAskAgent: (String) -> Unit,
-    onFileDiff: (String) -> Unit
+    onFileDiff: (String) -> Unit,
+    onCommitClick: (String) -> Unit,
+    onCommitFileDiff: (String, String) -> Unit,
+    commitFiles: Map<String, List<GitHubCommitFile>>,
+    commitFilesLoading: String?,
+    onCommitDetailDismiss: () -> Unit = {}
 ) {
     val clipboard = LocalClipboard.current
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var commentInput by remember { mutableStateOf("") }
     var deleteConfirmCommentId by remember { mutableStateOf<Long?>(null) }
+    var selectedCommitSha by remember { mutableStateOf<String?>(null) }
     var mergeConfirmVisible by remember { mutableStateOf(false) }
     var closeConfirmVisible by remember { mutableStateOf(false) }
     var mergeMethod by remember { mutableStateOf("merge") }
@@ -498,16 +519,26 @@ private fun PullRequestDetailContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable {
+                            selectedCommitSha = commit.sha
+                            onCommitClick(commit.sha)
+                        }
                         .padding(vertical = Spacing.xs),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = commit.sha.take(7).ifBlank { "—" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(Spacing.xxl * 2f)
+                    AuthorAvatar(
+                        name = commit.authorName,
+                        size = Spacing.xl,
+                        modifier = Modifier.padding(top = Spacing.xs)
                     )
+                    Spacer(Modifier.width(Spacing.sm))
                     Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = commit.sha.take(7).ifBlank { "—" },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Text(
                             text = commit.message.ifBlank { stringResource(R.string.git_pr_commit_unnamed) },
                             style = MaterialTheme.typography.bodySmall,
@@ -712,6 +743,22 @@ private fun PullRequestDetailContent(
         }
     }
 
+    selectedCommitSha?.let { sha ->
+        val commit = commits.firstOrNull { it.sha == sha }
+        if (commit != null) {
+            PrCommitDetailSheet(
+                commit = commit,
+                files = commitFiles[sha],
+                loading = commitFilesLoading == sha,
+                onDismiss = {
+                    selectedCommitSha = null
+                    onCommitDetailDismiss()
+                },
+                onFileDiff = { path -> onCommitFileDiff(sha, path) }
+            )
+        }
+    }
+
     deleteConfirmCommentId?.let { commentId ->
         AlertDialog(
             onDismissRequest = { deleteConfirmCommentId = null },
@@ -804,4 +851,206 @@ private fun fileStatusLabel(status: String): String = when (status) {
     "modified" -> stringResource(R.string.git_pr_file_modified)
     "renamed" -> stringResource(R.string.git_pr_file_renamed)
     else -> stringResource(R.string.git_pr_file_changed)
+}
+
+/** GitHub 文件状态 → 大写字母状态码（喂给 StatusChip）。 */
+private fun commitFileStatusCode(status: String): String = when (status) {
+    "added" -> "A"
+    "removed" -> "D"
+    "renamed" -> "R"
+    else -> "M"
+}
+
+/**
+ * PR 远端提交详情底部弹层：完整信息 + 复制哈希 + 改动文件清单（点击文件进逐行 diff）。
+ * 与 GitLogTab.CommitDetailSheet 区分：远端提交无本地建分支/打标签/重置操作，故不复用本体。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrCommitDetailSheet(
+    commit: GitHubPullRequestCommit,
+    files: List<GitHubCommitFile>?,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onFileDiff: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+
+    AdaptiveModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.lg)
+                .padding(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text(
+                text = commit.message.ifBlank { stringResource(R.string.git_pr_commit_unnamed) },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AuthorAvatar(name = commit.authorName, size = Spacing.lg)
+                Spacer(Modifier.width(Spacing.sm))
+                Text(
+                    text = commit.authorName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(Spacing.sm))
+                Text(
+                    text = formatIssueDate(commit.date),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = commit.sha,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    scope.launch {
+                        clipboard.setClipEntry(
+                            ClipEntry(ClipData.newPlainText("pr-commit-short", commit.sha.take(7)))
+                        )
+                    }
+                }) {
+                    Text(stringResource(R.string.git_copy_short_hash), style = MaterialTheme.typography.labelMedium)
+                }
+                TextButton(onClick = {
+                    scope.launch {
+                        clipboard.setClipEntry(
+                            ClipEntry(ClipData.newPlainText("pr-commit-full", commit.sha))
+                        )
+                    }
+                }) {
+                    Text(stringResource(R.string.git_copy_full_hash), style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            Spacer(Modifier.height(Spacing.xs))
+            when {
+                loading -> LoadingCommitFilesRow()
+                files == null -> Unit
+                files.isEmpty() -> Text(
+                    text = stringResource(R.string.git_no_files_changed),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                else -> {
+                    Text(
+                        text = stringResource(R.string.git_files_changed, files.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    files.forEach { file ->
+                        PrCommitFileRow(
+                            file = file,
+                            onClick = { onFileDiff(file.filename) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingCommitFilesRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(Spacing.lg)
+        )
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = stringResource(R.string.git_loading_files),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PrCommitFileRow(
+    file: GitHubCommitFile,
+    onClick: () -> Unit
+) {
+    val fileName = file.filename.substringAfterLast('/')
+    val directory = file.filename.substringBeforeLast('/', missingDelimiterValue = "")
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StatusChip(commitFileStatusCode(file.status))
+            Spacer(Modifier.width(Spacing.md))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (directory.isNotEmpty()) {
+                    Text(
+                        text = directory,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                text = "+${file.additions}",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = CiSuccessColor
+            )
+            Spacer(Modifier.width(Spacing.xs))
+            Text(
+                text = "-${file.deletions}",
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = CiFailureColor
+            )
+        }
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            thickness = 0.5.dp,
+            modifier = Modifier.padding(start = Spacing.xxl)
+        )
+    }
 }

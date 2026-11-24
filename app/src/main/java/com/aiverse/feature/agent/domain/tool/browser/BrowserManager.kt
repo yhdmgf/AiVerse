@@ -15,6 +15,7 @@ import android.view.ContextThemeWrapper
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.JsPromptResult
@@ -24,6 +25,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.ValueCallback
 import android.webkit.WebResourceRequest
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -2021,6 +2023,59 @@ class BrowserManager @Inject constructor(
         tab.loadDeferred = deferred
         tab.webView.reload()
         withTimeout(NAVIGATE_TIMEOUT_MS) { deferred.await() }.getOrThrow()
+    }
+
+    /**
+     * 清除浏览器缓存：HTTP 缓存、Cookie（含会话 Cookie）与网站数据（WebStorage，如
+     * LocalStorage / IndexDB 等），并在清完后刷新当前激活页让改动立即生效。
+     *
+     * WebView 相关操作必须在主线程执行，因此整体切到 [Dispatchers.Main]。每一步都用
+     * [runCatching] 包裹，单步失败仅记录日志而不中断后续清理，也不向外抛异常；
+     * 清理成功后通过 [publishState] 通知界面刷新。
+     */
+    suspend fun clearBrowserCache(): Boolean = withContext(Dispatchers.Main) {
+        var ok = true
+
+        // ① 清各标签页 WebView 的 HTTP 缓存
+        tabs.forEach { holder ->
+            runCatching { holder.webView.clearCache(true) }
+                .onFailure { e ->
+                    ok = false
+                    FileLogger.w(TAG, "清除 WebView HTTP 缓存失败", e)
+                }
+        }
+
+        // ② 清除 Cookie（含会话 Cookie）并落盘
+        runCatching {
+            CookieManager.getInstance().apply {
+                removeAllCookies(null)
+                removeSessionCookies(null)
+                flush()
+            }
+        }.onFailure { e ->
+            ok = false
+            FileLogger.w(TAG, "清除 Cookie 失败", e)
+        }
+
+        // ③ 清除网站数据（WebStorage）
+        runCatching {
+            WebStorage.getInstance().deleteAllData()
+        }.onFailure { e ->
+            ok = false
+            FileLogger.w(TAG, "清除网站数据（WebStorage）失败", e)
+        }
+
+        // ④ 刷新当前激活页，让清理立即生效（失败不阻塞结果）
+        runCatching {
+            findTab(activeTabId)?.let { tab ->
+                if (tab.url.isNotBlank()) tab.webView.reload()
+            }
+        }.onFailure { e ->
+            FileLogger.w(TAG, "清缓存后刷新当前页失败", e)
+        }
+
+        publishState()
+        ok
     }
 
     fun getUrl(tabId: String? = null): String = findTab(tabId ?: activeTabId)?.url ?: _state.value.url

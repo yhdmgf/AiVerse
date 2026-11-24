@@ -35,7 +35,7 @@ In an app that supports the system file picker, choose AiVerse to access two dir
 
 ## Images, Audio/Video, and Install Packages
 
-**Images** in the file tree (png / jpg / jpeg / gif / webp / bmp) open an in-app full-screen viewer when tapped, where you can pinch to zoom and double-tap to enlarge, consistent with viewing images in the chat area. **APK / APKS / XAPK** directly invoke the system installer when tapped (the first time, you are guided to enable "install unknown apps"). **Audio** (mp3 / m4a / aac / wav / ogg / flac / opus / mid / amr / 3gp, etc.) and **video** (mp4 / mkv / webm / avi / mov / ts / flv, etc.) open an **in-app full-screen player** when tapped (**from 1.0.3**): a near-black backdrop, an × at the top right to close, and the file name shown at the top; video fills the screen, and audio is a centered card with a draggable progress bar and play / pause. None of these three kinds enter the code editor; all other files still open the editing page as usual. When a file has been moved or deleted, or is an empty file, the player shows "Cannot play this file; it may have been moved or deleted".
+**Images** in the file tree (png / jpg / jpeg / gif / webp / bmp) open an in-app full-screen viewer when tapped, where you can pinch to zoom and double-tap to enlarge, consistent with viewing images in the chat area. Among them, **GIFs and animated WebPs play frame by frame in the viewer**, while static images still display as before; **Motion Photos** taken by the phone show a "Motion Photo" badge in the top-left corner of the viewer. **APK / APKS / XAPK** directly invoke the system installer when tapped (the first time, you are guided to enable "install unknown apps"). **Audio** (mp3 / m4a / aac / wav / ogg / flac / opus / mid / amr / 3gp, etc.) and **video** (mp4 / mkv / webm / avi / mov / ts / flv, etc.) open an **in-app full-screen player** when tapped (**from 1.0.3**): a near-black backdrop, an × at the top right to close, and the file name shown at the top; video fills the screen, and audio is a centered card with a draggable progress bar and play / pause. None of these three kinds enter the code editor; all other files still open the editing page as usual. When a file has been moved or deleted, or is an empty file, the player shows "Cannot play this file; it may have been moved or deleted".
 
 ## Opening Files from the Conversation
 
@@ -61,9 +61,10 @@ A remote SSH workspace cannot watch for changes on the remote file system and **
 
 The name can only be a single entry name: if it contains `/`, `\`, or is `.` or `..`, the confirm button is disabled — this prevents accidentally creating in the wrong directory. If an entry with the same name already exists, or the directory is not writable, a failure message is shown and the original file is not overwritten.
 
-**Long-press a file or subdirectory row** to rename and delete (both root nodes can only create):
+**Long-press a file or subdirectory row** to rename, send to chat, and delete (both root nodes can only create):
 
 -   **Rename**: only changes the name within the same directory; it does not move across directories.
+-   **Send to chat**: appends the file as an `@relative/path` reference into the current session's input box and automatically closes the sidebar; no need to enter multi-select mode first. This item is not shown for entries outside the workspace (e.g., local folders).
 -   **Delete**: a file is deleted directly; a folder is deleted recursively along with everything inside it, so a confirmation dialog appears first.
 
 Deletion Cannot Be Undone

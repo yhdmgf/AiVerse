@@ -1,0 +1,111 @@
+name: Sync Contributors
+
+# The credits wall is drawn from a snapshot of this repository's own history, and the app fetches
+# that snapshot from the data branch (data/contributors.json), alongside models.json and
+# container-images.json. So the wall keeps up with the repository without anybody cutting a
+# release, which is the point: contributors keep arriving, and a list baked into an APK would be a
+# list of whoever had arrived by the last release.
+#
+# The branch rather than a release asset or a gist: it needs no extra setup, raw.githubusercontent
+# serves it directly, and the file's own history is the record of how the credits changed.
+#
+# This never touches main. The snapshot is generated data, and a commit for it on every run would
+# be noise; the app reads it from the branch and falls back to the copy shipped in the APK.
+on:
+  schedule:
+    # Twice daily, in the small hours and at midday Beijing time (UTC+8), when commits are not
+    # being pushed.
+    - cron: '0 16 * * *'   # 北京 0:00
+    - cron: '0 4 * * *'    # 北京 12:00
+  workflow_dispatch:
+    inputs:
+      # A hand-entered list for people the commit history cannot see (a design, a translation
+      # pass) or to correct one. Passed to the script, which merges it into the counted
+      # contributors. Empty for a scheduled run, which credits the history alone.
+      extra_contributors:
+        description: '额外贡献者（JSON 数组，可选，例：[{"name":"某人","login":"gh名","commits":5,"note":"做了什么","areas":["UI"]}]）'
+        required: false
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - scripts/update-contributors.py
+      - .github/workflows/sync-contributors.yml
+
+permissions:
+  contents: write
+
+# 与 sync-models / sync-container-images 共用同一 group：三者都写 data 分支，串行执行避免并发互相覆盖。
+concurrency:
+  group: sync-data-branch
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The credits are read off the whole history, so a shallow clone would only ever see the
+          # commits since the last tag.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate the snapshot
+        env:
+          # Used to resolve which GitHub account each commit email belongs to.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Blank for a scheduled run or a dispatch with nothing typed in; the script treats an
+          # empty or malformed value as "nobody extra". Passed through the environment rather than
+          # interpolated into the command line so the JSON cannot be read as shell syntax.
+          EXTRA_CONTRIBUTORS: ${{ github.event.inputs.extra_contributors }}
+        run: python scripts/update-contributors.py --out "$RUNNER_TEMP/contributors.json" --extra "$EXTRA_CONTRIBUTORS"
+
+      - name: Publish to the data branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          cp "$RUNNER_TEMP/contributors.json" "$RUNNER_TEMP/contributors.publish.json"
+
+          # data 分支由多个同步任务共同写入（models.json / container-images.json / contributors.json），
+          # 因此必须基于其现有内容增量重建、只覆盖本次负责的文件。关键：远端已有 data 分支时，取不到就中止
+          # 发布，绝不能退化成空树快照——那会把别的任务刚发布的文件删掉。只有远端确实还没有该分支时才从空树创建。
+          set +e
+          git ls-remote --exit-code --heads origin data > /dev/null 2>&1
+          ls_remote_code=$?
+          set -e
+          case "$ls_remote_code" in
+            0) base_tree="origin/data" ;;
+            2) base_tree=""; echo "远端尚无 data 分支，将首次创建" ;;
+            *) echo "无法确认 data 分支状态（git ls-remote 退出码 $ls_remote_code），中止发布以免覆盖其它数据文件"; exit 1 ;;
+          esac
+
+          if [ -n "${base_tree:-}" ]; then
+            git fetch origin data
+            # 与远端现存文件比对，无变化则跳过（避免无意义提交）
+            if git show origin/data:data/contributors.json > "$RUNNER_TEMP/contributors.old.json" 2>/dev/null \
+               && cmp -s "$RUNNER_TEMP/contributors.old.json" "$RUNNER_TEMP/contributors.publish.json"; then
+              echo "贡献者快照无变动，跳过提交"
+              exit 0
+            fi
+          fi
+
+          # 仍以「单个无父提交」发布，保持 data 分支只有最新快照、不累积历史。
+          snapshot_branch="data-snapshot-$$-$RANDOM"
+          git checkout --orphan "$snapshot_branch"
+          if [ -n "${base_tree:-}" ]; then
+            git read-tree "$base_tree"
+          else
+            git read-tree --empty
+          fi
+          mkdir -p data
+          cp "$RUNNER_TEMP/contributors.publish.json" data/contributors.json
+          git add -f data/contributors.json
+
+          git commit -q -m "chore(data): 同步贡献者快照"
+          git push -f origin HEAD:data

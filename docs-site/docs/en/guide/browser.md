@@ -13,7 +13,7 @@ Tap "Built-in browser" in the card at the bottom of the sidebar:
 
 Type a URL in the address bar and press Enter to navigate; if what you type doesn't look like a URL (e.g. it contains spaces or Chinese), it's handed to the built-in search engine Bing automatically. A refresh button is provided on the right of the address bar, and the bottom bar below includes back, forward, new tab, multi-tab management, and a more settings menu (the three-bar icon). While a page loads, a linear progress bar appears below the address bar.
 
-Tapping the three-bar icon on the right of the bottom bar opens the "Browser settings & tools" panel, which centrally manages dark mode, developer tools, browser identification (User-Agent), screenshots, bookmarks, history, and the home page (**bookmarks, history, home page, and screenshots since 1.0.3**).
+Tapping the three-bar icon on the right of the bottom bar opens the "Browser settings & tools" panel, which centrally manages dark mode, developer tools, browser identification (User-Agent), screenshots, bookmarks, history, the home page, and clearing the cache (**bookmarks, history, home page, and screenshots since 1.0.3**).
 
 ## Local File Preview
 
@@ -26,9 +26,9 @@ The AI can also open a local page and take a screenshot for analysis via the `na
 
 **Note**: in remote workspace mode the workspace files are on the remote side, so only the page itself can be loaded and the relative resources (CSS/JS/images) referenced by the HTML will fail; local workspaces are not affected.
 
-## Bookmarks / History / Home Page / Screenshots
+## Bookmarks / History / Home Page / Screenshots / Clear Cache
 
-In the bottom bar's three-bar menu, besides dark mode, developer tools, and browser identification, four management capabilities are provided (**since 1.0.3**):
+In the bottom bar's three-bar menu, besides dark mode, developer tools, and browser identification, five management capabilities are provided (**since 1.0.3**):
 
 ### Bookmarks
 
@@ -45,6 +45,10 @@ In "Three-bar → Bookmarks" you can "Add current page" to save the current URL 
 ### Screenshots
 
 "Three-bar → Screenshot" captures the current page as a JPEG, saved **without needing storage permission** into the container workspace at `~/workspace/.aiverse/browser-screenshots/`; after saving, the system share sheet is brought up automatically so you can send it to other apps. No storage permission is requested and the media library isn't used. The container path is what's shown in the Toast.
+
+### Clear Cache
+
+"Three-bar → Clear Cache" wipes the browser's HTTP cache, cookies, and site data (such as LocalStorage and login states), then automatically refreshes the current page so the change takes effect immediately. Because this signs you out of websites you've logged into and cannot be undone, a second confirmation is shown after you tap it. Use it to "reset" the browser when troubleshooting page issues or switching accounts.
 
 ## Web Page File Upload (since 1.0.0)
 
@@ -151,6 +155,10 @@ Handle a pending `confirm`/`prompt` dialog (accept or dismiss); when the browser
 `back` / `forward` / `reload`
 
 Browser navigation control; back/forward wait for the navigation to complete
+
+`clearCache`
+
+Clear the browser's HTTP cache, cookies, and site data (including login states), then refresh the current page
 
 How `alert`/`confirm`/`prompt` pop-ups are handled depends on whether the browser panel is open:
 

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +17,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -28,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -87,7 +87,9 @@ data class MediaViewerRequest(
     /** 文件名，兼作无障碍描述与失败提示；留空回退到「文件」。 */
     val title: String = "",
     /** 音频 / 视频，决定渲染哪个播放器。由调用方按文件名 + MIME 判定。 */
-    val kind: MediaKind
+    val kind: MediaKind,
+    /** 打开来源：文件树打开时顶部栏换成返回箭头 + 三点菜单入口；默认 null = 聊天 / Markdown 旧行为。 */
+    val origin: ViewerOrigin? = null
 )
 
 /** 打开应用内播放器的句柄：调用方只管 show，不关心加载与播放。 */
@@ -132,11 +134,15 @@ private sealed interface MediaLoad {
  * `decorFitsSystemWindows = false` + 近黑背板 + 右上关闭），保证音视频查看与图片查看视觉一致。
  *
  * @param resolve 把 [MediaSource] 解成宿主 [File]；实现方自行切 IO 线程，返回 null 表示这个来源拿不到。
+ * @param actions 文件操作菜单 slot（可选，仅 feature 层注入）。仅当请求 [MediaViewerRequest.origin]
+ *   为 [ViewerOrigin.FILE_TREE] 且本参数非 null 时，右上三点才弹出它；core 不感知 feature，
+ *   不传或 origin 非 FILE_TREE 时点三点为 no-op，行为与旧版一致。
  */
 @Composable
 fun MediaPlayerHost(
     state: MediaViewerState,
-    resolve: suspend (MediaSource) -> File?
+    resolve: suspend (MediaSource) -> File?,
+    actions: (@Composable (request: MediaViewerRequest, onDismissViewer: () -> Unit) -> Unit)? = null
 ) {
     val request = state.request ?: return
     val fileState by produceState<MediaLoad>(MediaLoad.Loading, request, resolve) {
@@ -198,34 +204,23 @@ fun MediaPlayerHost(
                 }
             }
 
-            // 顶部标题（让开安全区与右上关闭钮）。视频铺满时叠在画面上，白字在小图上也看得清。
-            if (fileState is MediaLoad.Ready && request.title.isNotBlank()) {
-                Text(
-                    text = request.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .systemBarsPadding()
-                        .padding(start = Spacing.lg, top = Spacing.sm, end = 56.dp, bottom = Spacing.xs)
-                )
-            }
-
-            IconButton(
-                onClick = state::dismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
-                    .systemBarsPadding()
-                    .padding(Spacing.sm)
-            ) {
-                Icon(
-                    imageVector = FeatherIcons.X,
-                    contentDescription = stringResource(R.string.common_close),
-                    tint = Color.White
-                )
+            // 顶部栏 + 标题：文件树来源换成返回箭头（左）+ 三点（右），聊天 / Markdown 保持右上 × 关闭。
+            // 标题仅在媒体就绪后显示（与旧版一致）；文件树形态下居中、左右各让开一个触控目标宽度。
+            // 历史硬编码 56.dp 让位宽度已收敛为 LocalUIDensityTokens.touchTarget（见 ViewerHeader）。
+            val isFileTree = request.origin == ViewerOrigin.FILE_TREE
+            var actionsNonce by remember { mutableIntStateOf(0) }
+            ViewerHeader(
+                isFileTree = isFileTree,
+                title = if (fileState is MediaLoad.Ready) request.title else "",
+                onDismiss = state::dismiss,
+                onMore = { actionsNonce++ }
+            )
+            // 每次点三点换一个 key，强制下方 slot 重新组合，重置其内部 sheet 可见态以便再次打开；
+            // actions == null 或 origin != FILE_TREE 时不组合任何东西 —— 点三点 no-op。
+            if (isFileTree && actions != null && actionsNonce > 0) {
+                key(actionsNonce) {
+                    actions(request, state::dismiss)
+                }
             }
         }
     }

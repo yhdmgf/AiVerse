@@ -25,7 +25,7 @@
 ## 图像生成与编辑（generateImage / editImage）
 - 两者都使用「设置 → 默认模型 → 生图模型」配置的供应商与模型；未配置或不支持时返回带设置指引的错误。
 - `generateImage`：文生图。按 `prompt` 生成图片，支持 `size`、`n`（最多 4）、`output_path`（不传则落 `~/.aiverse/generated-images/`）及 OpenAI 特有参数（quality / background / style / output_format 等）。生成结果始终作为图片返回给聊天区。
-- `editImage`：改图 / 图生图。需传 `paths`（1–4 张工作区参考图，第一张为底图、其余为参考）与 `prompt`（改图指令），可选 `n`、`size`、`output_path`。
+- `editImage`：改图 / 图生图。需传 `paths`（1–4 张工作区参考图，第一张为底图、其余为参考）与 `prompt`（改图指令），可选 `n`、`size`、`output_path` 及 OpenAI 特有参数 quality。
   - **参考图会上传给生图服务**：不要用 `editImage` 处理含敏感信息的图片。
   - OpenAI 兼容供应商走 `POST /v1/images/edits`（multipart），Gemini 供应商走 generateContent 并把参考图作为 inlineData 传入。
   - 模型不支持改图（如 dall-e-3）或未配置生图模型时，会返回错误并提示到「设置 → 默认模型 → 生图模型」更换支持图像编辑的模型。

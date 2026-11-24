@@ -1,0 +1,29 @@
+{
+  "generated": "2026-11-24",
+  "contributors": [
+    {
+      "name": "yhdmgf",
+      "login": "yhdmgf",
+      "avatarUrl": "https://github.com/yhdmgf.png?size=256",
+      "commits": 79,
+      "areas": [
+        "DOCS",
+        "APP",
+        "AGENT"
+      ],
+      "note": null
+    },
+    {
+      "name": "aiverse-app",
+      "login": "aiverse-app",
+      "avatarUrl": "https://github.com/aiverse-app.png?size=256",
+      "commits": 23,
+      "areas": [
+        "APP",
+        "AGENT",
+        "UI"
+      ],
+      "note": null
+    }
+  ]
+}

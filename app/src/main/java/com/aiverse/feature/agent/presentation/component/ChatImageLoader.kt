@@ -11,6 +11,7 @@ import com.aiverse.core.ui.MediaKind
 import com.aiverse.core.ui.MediaSource
 import com.aiverse.core.ui.MediaViewerRequest
 import com.aiverse.core.ui.decodeSampledBitmap
+import com.aiverse.core.ui.ViewerPeek
 import com.aiverse.core.ui.mediaKindOf
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.agent.presentation.AgentAttachment
@@ -115,6 +116,157 @@ private fun decodeExistingFile(file: File, maxEdge: Int, maxPixels: Long): Image
     if (!file.isFile || file.length() <= 0L) return null
     return decodeSampledBitmap(file.absolutePath, maxEdge, maxPixels)
 }
+
+/**
+ * 全屏查看器的动图 / 动态照片探查器：在静态解码之前先跑一趟，把动图从静态图里分出来。
+ *
+ * - 动图（GIF / 动图 WebP）交 `rememberAsyncImagePainter` 逐帧播放 —— 静态解码链
+ *   （[decodeSampledBitmap] / Coil 首帧）只会拿到第一帧；
+ * - 动态照片（Motion Photo，JPEG/HEIF 里嵌 GCamera / Samsung 的 XMP 标记）本身仍是静态图，
+ *   但带标记好让查看器打角标，返回 [ViewerPeek.StaticMotionPhoto]。
+ *
+ * 动图判定靠扩展名 + 文件头魔数双保险：远程图 / 临时副本扩展名可能丢，靠魔数兜底。
+ * 动态照片只对 JPEG / HEIF 类容器嗅探，避免把普通 GIF / WebP 误标。
+ */
+internal fun motionAwarePeek(fileAccess: FileAccessProvider): suspend (ImageSource) -> ViewerPeek? = { source ->
+    withContext(Dispatchers.IO) {
+        runCatching {
+            when (source) {
+                is ImageSource.Url ->
+                    if (looksAnimated(source.url)) ViewerPeek.Animated(source.url) else null
+
+                is ImageSource.LocalFile -> peekFile(File(source.path))
+
+                is ImageSource.ContainerPath -> peekFile(fileAccess.copyToLocal(source.path))
+
+                is ImageSource.Base64 -> {
+                    val bytes = Base64.getDecoder().decode(source.data)
+                    when {
+                        looksAnimated(bytes) -> ViewerPeek.Animated(
+                            "data:image/gif;base64,${source.data}"
+                        )
+                        hasMotionPhotoMarker(bytes) -> ViewerPeek.StaticMotionPhoto
+                        else -> null
+                    }
+                }
+            }
+        }.getOrNull()
+    }
+}
+
+private fun peekFile(file: File): ViewerPeek? {
+    if (!file.isFile || file.length() <= 0L) return null
+    return when {
+        looksAnimated(file) -> ViewerPeek.Animated(file)
+        hasMotionPhotoMarker(file) -> ViewerPeek.StaticMotionPhoto
+        else -> null
+    }
+}
+
+/** 按扩展名猜是否动图容器（GIF / WebP）。扩展名是弱信号，可能丢，需魔数兜底。 */
+private fun looksAnimated(pathOrUrl: String): Boolean {
+    val ext = pathOrUrl.substringBefore('?').substringAfterLast('.', "").lowercase()
+    return ext == "gif" || ext == "webp"
+}
+
+private fun looksAnimated(file: File): Boolean =
+    looksAnimated(file.name) || looksAnimatedHeader(readHeader(file))
+
+private fun looksAnimated(bytes: ByteArray): Boolean = looksAnimatedHeader(readHeader(bytes))
+
+/** 取判魔数要用的头部：文件读前 [HEADER_SCAN_BYTES] 字节，数组直接取前缀。 */
+private fun readHeader(file: File): ByteArray =
+    file.inputStream().use { input ->
+        val buf = ByteArray(HEADER_SCAN_BYTES)
+        val n = input.read(buf)
+        if (n <= 0) ByteArray(0) else buf.copyOf(n)
+    }
+
+private fun readHeader(bytes: ByteArray): ByteArray =
+    bytes.copyOf(minOf(HEADER_SCAN_BYTES, bytes.size))
+
+private fun looksAnimatedHeader(header: ByteArray): Boolean {
+    if (header.size < 12) return false
+    // GIF: "GIF87a" / "GIF89a"
+    if (header[0] == 'G'.code.toByte() && header[1] == 'I'.code.toByte() && header[2] == 'F'.code.toByte()) {
+        return true
+    }
+    // WebP: "RIFF"...."WEBP"。是否动图要看 VP8X 的 ANIM 位，这里从宽：整份交给 Coil，
+    // 静态 WebP 也会被正常解码成单帧，不会误伤。
+    val riff = header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
+        header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
+    val webp = header[8] == 'W'.code.toByte() && header[9] == 'E'.code.toByte() &&
+        header[10] == 'B'.code.toByte() && header[11] == 'P'.code.toByte()
+    return riff && webp
+}
+
+/**
+ * 动态照片标记：Google 相机 `GCamera:MotionPhoto` / 新版 `GCamera:MotionPhotoVersion`、
+ * 三星 `MotionPhoto` / `MotionPhotoData`，都落在 XMP 里。JPEG 的 XMP 在文件头部 APP1 段、
+ * HEIF 在 ftyp 附近的 meta box，都在文件头 / 尾部，扫这两段就够，不必读整份大图。
+ */
+private fun hasMotionPhotoMarker(file: File): Boolean {
+    if (!isMotionPhotoContainer(file.name)) return false
+    // 头部只读一次，供下方的动图判定与标记扫描共用。
+    val head = readHeader(file)
+    if (scanForMotionMarker(head)) return true
+    // 尾部：部分厂商把 XMP / 动图数据放文件尾。读的时候向前多带 MOTION_MARKER.size 个字节做重叠，
+    // 避免标记恰好横跨「头尾分段截断点」被切成两半而漏检；重叠多扫一点无副作用。
+    val tail = runCatching {
+        java.io.RandomAccessFile(file, "r").use { raf ->
+            val len = raf.length()
+            val start = maxOf(0L, len - HEADER_SCAN_BYTES)
+            raf.seek(start)
+            val tailLen = len - start
+            val overlap = minOf(MOTION_MARKER.size.toLong(), start).toInt()
+            val buf = ByteArray((tailLen + overlap).toInt())
+            raf.seek(start - overlap)
+            raf.readFully(buf)
+            buf
+        }
+    }.getOrNull() ?: return false
+    return scanForMotionMarker(tail)
+}
+
+private fun hasMotionPhotoMarker(bytes: ByteArray): Boolean {
+    if (!isMotionPhotoContainerBytes(bytes)) return false
+    return scanForMotionMarker(bytes)
+}
+
+private fun isMotionPhotoContainer(pathOrUrl: String): Boolean {
+    val ext = pathOrUrl.substringBefore('?').substringAfterLast('.', "").lowercase()
+    return ext in MOTION_PHOTO_EXTS
+}
+
+private fun isMotionPhotoContainerBytes(bytes: ByteArray): Boolean {
+    // JPEG: FF D8 FF；HEIC/HEIF: 偏移 4 起 "ftyp"。
+    val jpeg = bytes.size >= 3 &&
+        bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+    val heif = bytes.size >= 8 &&
+        bytes[4] == 'f'.code.toByte() && bytes[5] == 't'.code.toByte() &&
+        bytes[6] == 'y'.code.toByte() && bytes[7] == 'p'.code.toByte()
+    return jpeg || heif
+}
+
+private fun scanForMotionMarker(bytes: ByteArray): Boolean {
+    if (bytes.size < MOTION_MARKER.size) return false
+    val limit = bytes.size - MOTION_MARKER.size
+    var i = 0
+    while (i <= limit) {
+        var j = 0
+        while (j < MOTION_MARKER.size && bytes[i + j] == MOTION_MARKER[j]) j++
+        if (j == MOTION_MARKER.size) return true
+        i++
+    }
+    return false
+}
+
+private const val HEADER_SCAN_BYTES = 64 * 1024
+
+private val MOTION_PHOTO_EXTS = setOf("jpg", "jpeg", "heic", "heif")
+
+// 只匹配一次能覆盖 GCamera:MotionPhoto / GCamera:MotionPhotoVersion / MotionPhotoData。
+private val MOTION_MARKER = "MotionPhoto".toByteArray(Charsets.UTF_8)
 
 /**
  * 待发送图片附件的查看请求。

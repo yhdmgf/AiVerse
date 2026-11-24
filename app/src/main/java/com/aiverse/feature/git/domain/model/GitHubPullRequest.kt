@@ -141,6 +141,47 @@ data class GitHubPullRequestFile(
     @SerializedName("previous_filename") val previousFilename: String? = null
 )
 
+/**
+ * 单个提交的完整详情（commits/{sha} 接口，含每个文件的 patch 正文）。
+ * 与 [GitHubPullRequestCommit] 的区别：后者是 PR 提交列表的轻量条目（无 files），
+ * 本类用于点开某条提交后的弹层——展示提交信息 + 可逐文件看 diff。
+ */
+data class GitHubCommitDetail(
+    val sha: String = "",
+    val commit: GitHubCommitInfo? = null,
+    val author: GitHubIssueUser? = null,
+    val parents: List<GitHubCommitSha> = emptyList(),
+    val files: List<GitHubCommitFile> = emptyList()
+) {
+    /** 提交信息全文（多行含正文）；列表场景可只取首行。 */
+    val message: String get() = commit?.message.orEmpty()
+    /** 仅首行标题，供弹层头部展示。 */
+    val title: String get() = message.lineSequence().firstOrNull().orEmpty()
+    val authorName: String
+        get() = author?.login?.takeIf { it.isNotBlank() } ?: commit?.author?.name.orEmpty()
+    val date: String get() = commit?.author?.date.orEmpty()
+}
+
+/** 提交的父提交引用（parents 接口只用到 sha）。 */
+data class GitHubCommitSha(
+    val sha: String = ""
+)
+
+/**
+ * 单个提交里某文件的变更（commits/{sha} 接口的 files 数组项，含 patch 正文）。
+ * patch 为 null 表示 GitHub 未返回正文——二进制文件或 diff 过大时省略，调用方需降级。
+ */
+data class GitHubCommitFile(
+    val filename: String = "",
+    /** added / removed / modified / renamed / copied / changed / unchanged。 */
+    val status: String = "",
+    val additions: Int = 0,
+    val deletions: Int = 0,
+    val changes: Int = 0,
+    @SerializedName("previous_filename") val previousFilename: String? = null,
+    val patch: String? = null
+)
+
 /** 合并 PR 的结果。 */
 data class GitHubMergeResult(
     val merged: Boolean = false,

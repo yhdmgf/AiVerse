@@ -15,12 +15,14 @@ import com.aiverse.feature.git.domain.GitErrorMessage
 import com.aiverse.feature.git.domain.GitHubIssuesRepository
 import com.aiverse.feature.git.domain.GitHubPullRequestsRepository
 import com.aiverse.feature.git.domain.GitRepository
+import com.aiverse.feature.git.domain.PatchDiffParser
 import com.aiverse.feature.git.domain.parseGithubRepoUrl
 import com.aiverse.feature.git.domain.model.GitBranch
 import com.aiverse.feature.git.domain.model.GitCommit
 import com.aiverse.feature.git.domain.model.GitFileChange
 import com.aiverse.feature.git.domain.model.GitGraph
 import com.aiverse.feature.git.domain.model.GitHubCheckSummary
+import com.aiverse.feature.git.domain.model.GitHubCommitFile
 import com.aiverse.feature.git.domain.model.GitHubComment
 import com.aiverse.feature.git.domain.model.GitHubIssue
 import com.aiverse.feature.git.domain.model.GitHubPullRequest
@@ -233,6 +235,12 @@ class GitViewModel @Inject constructor(
         val pullFiles: List<GitHubPullRequestFile> = emptyList(),
         /** 是否正在加载详情页文件列表。 */
         val pullFilesLoading: Boolean = false,
+        /** 详情页里点开查看的提交 sha；null 表示未打开提交弹层。 */
+        val prCommitDetailSha: String? = null,
+        /** 已懒加载的 PR 提交文件清单（含 patch 正文），按 sha 缓存。 */
+        val prCommitFiles: Map<String, List<GitHubCommitFile>> = emptyMap(),
+        /** 正在加载文件清单的提交 sha。 */
+        val prCommitFilesLoading: String? = null,
         /** 新建 PR 弹层是否可见。 */
         val createPullVisible: Boolean = false,
         /** 新建 PR 是否正在提交。 */
@@ -813,7 +821,10 @@ class GitViewModel @Inject constructor(
                 pullCommits = emptyList(),
                 pullCommitsLoading = false,
                 pullFiles = emptyList(),
-                pullFilesLoading = false
+                pullFilesLoading = false,
+                prCommitDetailSha = null,
+                prCommitFiles = emptyMap(),
+                prCommitFilesLoading = null
             )
         }
     }
@@ -901,6 +912,48 @@ class GitViewModel @Inject constructor(
         val files = pullRequestsRepository.listPullRequestFiles(number).getOrDefault(emptyList())
         if (_state.value.pullDetailNumber != number) return
         _state.update { it.copy(pullFiles = files, pullFilesLoading = false) }
+    }
+
+    /**
+     * 打开详情页某条提交的弹层。若文件清单（含 patch）尚未加载则懒加载（不置 busy，
+     * 只读查看不应阻塞写操作）。与 [loadPullCommitsFor] 同款竞态守卫：离开详情页后丢弃过期结果。
+     */
+    fun openPrCommitDetail(sha: String) {
+        val current = _state.value
+        if (current.prCommitDetailSha == sha) return
+        _state.update { it.copy(prCommitDetailSha = sha) }
+        if (sha in current.prCommitFiles) return
+        val number = current.pullDetailNumber ?: return
+        _state.update { it.copy(prCommitFilesLoading = sha) }
+        viewModelScope.launch {
+            val files = pullRequestsRepository.getCommit(sha).getOrNull()?.files.orEmpty()
+            if (_state.value.pullDetailNumber != number) return@launch
+            _state.update {
+                it.copy(prCommitFiles = it.prCommitFiles + (sha to files), prCommitFilesLoading = null)
+            }
+        }
+    }
+
+    /** 关闭详情页提交弹层（保留已加载的文件清单缓存）。 */
+    fun closePrCommitDetail() = _state.update { it.copy(prCommitDetailSha = null) }
+
+    /**
+     * 纯函数：把 GitHub patch 正文直接组装成 [DiffData]，供 PR 提交弹层点文件看逐行 diff。
+     * 与 [computeDiff] 的区别：不需要取两侧文件内容跑 LCS，patch 里已含行级差异与行号。
+     * patch 为 null/blank（二进制或 diff 过大 GitHub 不返回）时降级为「文件过大」提示页。
+     * 不做语法高亮（[DiffRow.highlighted] 置 null，DiffViewer 降级纯文本渲染）。
+     * 只做数据转换、不碰 openDiff/finishDiff 状态机，返回值交由 UI 覆盖层渲染。
+     */
+    fun computeDiffFromPatch(filePath: String, patch: String?): DiffData {
+        if (patch.isNullOrBlank()) {
+            return DiffData(filePath, "", "", emptyList(), 0, 0, isLarge = true)
+        }
+        val rows = PatchDiffParser.parsePatch(patch).map {
+            DiffRow(it.type, it.text, null, it.oldLineNum, it.newLineNum)
+        }
+        val added = rows.count { it.type == LineDiff.LineType.ADD }
+        val removed = rows.count { it.type == LineDiff.LineType.REMOVE }
+        return DiffData(filePath, "", "", rows, added, removed)
     }
 
     /** 关闭/重开当前详情页 PR。 */

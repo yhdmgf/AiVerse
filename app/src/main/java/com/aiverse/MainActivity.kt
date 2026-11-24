@@ -99,6 +99,7 @@ import com.aiverse.core.ui.PAGE_MOTION_MS
 import com.aiverse.core.ui.PdfSource
 import com.aiverse.core.ui.PdfViewerHost
 import com.aiverse.core.ui.PdfViewerRequest
+import com.aiverse.core.ui.ViewerOrigin
 import com.aiverse.core.ui.openFileExternal
 import com.aiverse.core.ui.VerticalSplitHandle
 import com.aiverse.core.ui.appImageLoader
@@ -121,6 +122,7 @@ import com.aiverse.feature.agent.presentation.component.AIChatPanel
 import com.aiverse.feature.agent.presentation.component.ChatDrawerContent
 import com.aiverse.feature.agent.presentation.component.LocalChatAnimationsEnabled
 import com.aiverse.feature.agent.presentation.component.chatImageLoader
+import com.aiverse.feature.agent.presentation.component.motionAwarePeek
 import com.aiverse.feature.agent.presentation.component.mediaFileResolver
 import com.aiverse.feature.agent.presentation.component.openSentAttachment
 import com.aiverse.feature.launch.presentation.LaunchGate
@@ -756,13 +758,18 @@ fun AppNavigation(
         val mediaKind = mediaKindOf(name)
         when {
             ext in PREVIEWABLE_IMAGE_EXTS -> drawerImageViewerState.show(
-                ImageViewerRequest(listOf(ImageSource.ContainerPath(path)), name)
+                ImageViewerRequest(listOf(ImageSource.ContainerPath(path)), name, ViewerOrigin.FILE_TREE)
             )
             mediaKind != null -> drawerMediaViewerState.show(
-                MediaViewerRequest(sources = listOf(MediaSource.ContainerPath(path)), title = name, kind = mediaKind)
+                MediaViewerRequest(
+                    sources = listOf(MediaSource.ContainerPath(path)),
+                    title = name,
+                    kind = mediaKind,
+                    origin = ViewerOrigin.FILE_TREE
+                )
             )
             isPdfFile(name) -> drawerPdfViewerState.show(
-                PdfViewerRequest(sources = listOf(PdfSource.ContainerPath(path)), title = name)
+                PdfViewerRequest(sources = listOf(PdfSource.ContainerPath(path)), title = name, origin = ViewerOrigin.FILE_TREE)
             )
             ext in INSTALLABLE_APK_EXTS -> scope.launch {
                 openSentAttachment(
@@ -1316,9 +1323,40 @@ fun AppNavigation(
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
     // 文件树里点开的图片/音视频走这个查看器/播放器；聊天面板自带一套，两层互不影响。
-    ImageViewerHost(state = drawerImageViewerState, load = drawerImageLoad)
-    MediaPlayerHost(state = drawerMediaViewerState, resolve = drawerMediaResolve)
-    PdfViewerHost(state = drawerPdfViewerState, resolve = drawerPdfResolve)
+    // 三个宿主都注入文件操作菜单 slot：仅当请求 origin == FILE_TREE 时右上三点才弹出（聊天/Markdown 不受影响）。
+    // slot 内部弹 ViewerFileActionSheet，复用 agentViewModel 的文件操作回调；动作只关 sheet，
+    // 仅删除在确认成功后才 onDismissViewer 退出预览回文件树。
+    ImageViewerHost(
+        state = drawerImageViewerState,
+        load = drawerImageLoad,
+        peek = motionAwarePeek(agentViewModel.fileAccess),
+        actions = { request, onDismissViewer ->
+            val path = request.sources.filterIsInstance<ImageSource.ContainerPath>().firstOrNull()?.path
+            if (path != null) {
+                ViewerFileActionSheet(path, request.title, agentViewModel, scope, onDismissViewer)
+            }
+        }
+    )
+    MediaPlayerHost(
+        state = drawerMediaViewerState,
+        resolve = drawerMediaResolve,
+        actions = { request, onDismissViewer ->
+            val path = request.sources.filterIsInstance<MediaSource.ContainerPath>().firstOrNull()?.path
+            if (path != null) {
+                ViewerFileActionSheet(path, request.title, agentViewModel, scope, onDismissViewer)
+            }
+        }
+    )
+    PdfViewerHost(
+        state = drawerPdfViewerState,
+        resolve = drawerPdfResolve,
+        actions = { request, onDismissViewer ->
+            val path = request.sources.filterIsInstance<PdfSource.ContainerPath>().firstOrNull()?.path
+            if (path != null) {
+                ViewerFileActionSheet(path, request.title, agentViewModel, scope, onDismissViewer)
+            }
+        }
+    )
     if (expanded) {
         // 大屏不套 ModalNavigationDrawer：侧栏常驻在左，抽屉那套 scrim / 手势 / 锚点在这里完全用不上。
         // 侧栏只在聊天页展开：设置页自己就是「菜单 + 详情」两栏，外面再套一层会话侧栏就成了三栏。

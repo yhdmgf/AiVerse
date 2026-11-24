@@ -112,6 +112,7 @@ import com.aiverse.feature.settings.domain.model.ModelMetadata
 import com.aiverse.feature.settings.domain.model.WelcomeEntry
 import com.aiverse.feature.settings.presentation.SettingsViewModel
 import com.aiverse.feature.settings.presentation.ShizukuViewModel
+import com.aiverse.feature.settings.presentation.AboutViewModel
 import com.aiverse.feature.phonecontrol.presentation.AccessibilityGrantScreen
 import com.aiverse.feature.phonecontrol.presentation.AppRulesScreen
 import com.aiverse.feature.phonecontrol.presentation.PhoneControlScreen
@@ -1876,16 +1877,21 @@ fun SettingsScreen(
                         androidx.hilt.navigation.compose.hiltViewModel()
                     TtsSettingsSection(viewModel = ttsViewModel)
                 }
-                SettingsSection.About -> AboutSection(
-                    updateCheckEnabled = updateCheckEnabled,
-                    updateCheckChannel = updateCheckChannel,
-                    updateCheckMirror = updateCheckMirror,
-                    onToggleUpdateCheck = { viewModel.setUpdateCheckEnabled(it) },
-                    onSelectChannel = { viewModel.setUpdateCheckChannel(it) },
-                    onSelectMirror = { viewModel.setUpdateCheckMirror(it) },
-                    onCheckUpdate = { viewModel.checkUpdate(manual = true) },
-                    isTestPackage = viewModel.isTestPackage
-                )
+                SettingsSection.About -> {
+                    val aboutViewModel: AboutViewModel =
+                        androidx.hilt.navigation.compose.hiltViewModel()
+                    AboutSection(
+                        updateCheckEnabled = updateCheckEnabled,
+                        updateCheckChannel = updateCheckChannel,
+                        updateCheckMirror = updateCheckMirror,
+                        onToggleUpdateCheck = { viewModel.setUpdateCheckEnabled(it) },
+                        onSelectChannel = { viewModel.setUpdateCheckChannel(it) },
+                        onSelectMirror = { viewModel.setUpdateCheckMirror(it) },
+                        onCheckUpdate = { viewModel.checkUpdate(manual = true) },
+                        isTestPackage = viewModel.isTestPackage,
+                        contributorWallService = aboutViewModel.contributorWallService
+                    )
+                }
             }
         }
     }

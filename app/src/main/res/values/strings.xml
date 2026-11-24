@@ -926,6 +926,7 @@
     <string name="common_name">名称</string>
     <string name="common_image_preview">图片预览</string>
     <string name="common_image_load_failed">图片加载失败，文件可能已被移动或删除</string>
+    <string name="viewer_motion_photo">动态照片</string>
     <string name="common_play">播放</string>
     <string name="common_pause">暂停</string>
     <string name="common_media_load_failed">无法播放该文件，文件可能已被移动或删除</string>
@@ -2937,6 +2938,12 @@
     <string name="browser_homepage_unset">未设置</string>
     <string name="browser_homepage_set_toast">已设置主页</string>
     <string name="browser_homepage_cleared_toast">已清除主页</string>
+    <string name="browser_clear_cache">清除缓存</string>
+    <string name="browser_clear_cache_confirm_title">清除浏览缓存？</string>
+    <string name="browser_clear_cache_confirm_message">将清除 HTTP 缓存、Cookie 与网站数据（含登录态），此操作无法撤销。</string>
+    <string name="browser_clear_cache_confirm">清除</string>
+    <string name="browser_clear_cache_done">已清除缓存并刷新页面</string>
+    <string name="browser_clear_cache_failed">缓存清除未全部完成，请重试</string>
     <string name="sig_invalid_title">签名校验失败</string>
     <string name="sig_invalid_message">签名不对，请在正规平台下载</string>
     <string name="sig_invalid_button">前往官网</string>
@@ -3153,6 +3160,13 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="plugin_web_page_failed">插件页面加载失败</string>
     <string name="plugin_web_page_retry">重试</string>
     <string name="plugin_page_unsupported">该插件页面贡献暂不支持</string>
+    <string name="plugin_webview_login_confirm_title">允许插件登录？</string>
+    <string name="plugin_webview_login_confirm_body">「%1$s」将在应用内打开 %2$s 的登录页。登录 Cookie 仅本次返回给该插件，用后即清除，不会保存。</string>
+    <string name="plugin_webview_login_confirm_allow">允许登录</string>
+    <string name="plugin_webview_login_confirm_cancel">取消</string>
+    <string name="plugin_webview_login_title">登录</string>
+    <string name="plugin_webview_login_timeout">登录超时，请重试</string>
+    <string name="plugin_webview_login_failed">登录页加载失败</string>
     <string name="apk_download_failed">下载失败</string>
     <string name="apk_chunk_incomplete">分片 %1$d 不完整（%2$d/%3$d）</string>
     <string name="apk_size_mismatch">安装包大小不符（%1$d/%2$d）</string>
@@ -3326,4 +3340,29 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="launch_star_point_3">模型与密钥都留在本地，不经过第三方服务器</string>
     <string name="launch_star_action">去 GitHub 点 Star</string>
     <string name="launch_star_optional_hint">点不点都不影响使用，直接点右下角「开始使用」即可。</string>
+
+    <!-- 贡献者墙 -->
+    <string name="about_contributors_title">贡献者墙</string>
+    <string name="about_contributors_hint">拖动查看 · 双指缩放 · 点击头像看详情</string>
+    <string name="about_contributors_commits">%1$d 次提交</string>
+    <string name="about_contributors_view_github">在 GitHub 查看</string>
+    <string name="about_contributors_contribute_title">参与开发</string>
+    <string name="about_contributors_contribute_desc">在 GitHub 上参与开发</string>
+    <string name="about_contributors_summary_code">参与了 %1$s 相关工作</string>
+    <string name="about_contributors_summary_default">感谢为 AiVerse 做出贡献</string>
+    <string name="about_contributors_close">关闭</string>
+    <string name="about_contributors_area_app">应用</string>
+    <string name="about_contributors_area_server">服务端</string>
+    <string name="about_contributors_area_adb">设备控制</string>
+    <string name="about_contributors_area_build">构建</string>
+    <string name="about_contributors_area_i18n">本地化</string>
+    <string name="about_contributors_area_docs">文档</string>
+    <string name="about_contributors_desc">感谢每一位让 AiVerse 变得更好的人</string>
+    <string name="about_contributors_area_agent">智能体</string>
+    <string name="about_contributors_area_terminal">终端</string>
+    <string name="about_contributors_area_plugin">插件</string>
+    <string name="about_contributors_area_git">版本控制</string>
+    <string name="about_contributors_area_editor">编辑器</string>
+    <string name="about_contributors_area_ui">界面</string>
+    <string name="about_contributors_area_core">核心</string>
 </resources>

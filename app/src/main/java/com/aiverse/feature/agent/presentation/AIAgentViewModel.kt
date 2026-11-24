@@ -1877,6 +1877,16 @@ class AIAgentViewModel @Inject constructor(
     }
 
     /**
+     * 清除当前会话的「优化输入」撤销快照（消息发出后调用）。
+     * 一旦消息已经发出，被覆盖的旧草稿已无恢复意义，此时保留快照只会让撤销按钮常驻、
+     * 误导用户以为还能撤回到优化前。直接丢弃快照即可让 `canUndoOptimize` 回落为 false。
+     */
+    fun clearUndoOptimize() {
+        val id = _currentSessionId.value ?: return
+        _optimizedOriginals.value = _optimizedOriginals.value - id
+    }
+
+    /**
      * 各会话各自的待发送附件，按会话区分存在内存里（与草稿同一作用域）。
      * 以前放在聊天页 composable 的 remember，切到设置页再回来附件就被销毁；现在提到会话级 ViewModel，
      * 切页 / 切会话都在（草稿文字不走，附件也不走）。content uri 落盘从简，暂只保进程内存活期间。
