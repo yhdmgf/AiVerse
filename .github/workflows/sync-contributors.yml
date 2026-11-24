@@ -62,7 +62,14 @@ jobs:
           # empty or malformed value as "nobody extra". Passed through the environment rather than
           # interpolated into the command line so the JSON cannot be read as shell syntax.
           EXTRA_CONTRIBUTORS: ${{ github.event.inputs.extra_contributors }}
-        run: python scripts/update-contributors.py --out "$RUNNER_TEMP/contributors.json" --extra "$EXTRA_CONTRIBUTORS"
+        run: |
+          # Dump the last published snapshot off the data branch and hand it to the script via
+          # --prev. Reading it off git (not raw.githubusercontent) sidesteps the CDN cache, so the
+          # carry-forward can never read a stale copy and silently drop somebody. A missing data
+          # branch (first run) yields an empty file, which the script treats as nobody to carry.
+          git fetch origin data || true
+          git show origin/data:data/contributors.json > "$RUNNER_TEMP/contributors.prev.json" 2>/dev/null || echo '[]' > "$RUNNER_TEMP/contributors.prev.json"
+          python scripts/update-contributors.py --out "$RUNNER_TEMP/contributors.json" --extra "$EXTRA_CONTRIBUTORS" --prev "$RUNNER_TEMP/contributors.prev.json"
 
       - name: Publish to the data branch
         run: |
