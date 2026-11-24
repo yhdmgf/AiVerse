@@ -3,7 +3,6 @@ package com.aiverse.feature.settings.presentation.component
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,10 +11,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.aiverse.R
-import com.aiverse.core.ui.AdaptiveModalBottomSheet
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.feature.settings.domain.model.Contributor
@@ -47,10 +47,11 @@ import compose.icons.feathericons.Zap
 /**
  * What a face says when it is chosen: who this is, what they worked on, and where to find them.
  *
- * Laid out like the wall's sibling project does it - a large photo, the name, the handle, a line of
- * prose and then the areas as chips - so the two read as the same idea rather than as two designs.
+ * A centered dialog rather than a sheet, laid out like the wall's sibling project does it - a large
+ * photo, the name, the handle, a line of prose and then the areas as chips - so the two read as the
+ * same idea rather than as two designs.
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ContributorDetailsDialog(
     contributor: Contributor,
@@ -60,97 +61,116 @@ internal fun ContributorDetailsDialog(
     val t = LocalUIDensityTokens.current
     val profileUrl = contributor.profileUrl
 
-    AdaptiveModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = t.lg)
-                .padding(bottom = t.xl),
-            verticalArrangement = Arrangement.spacedBy(t.md),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // One face, on screen, drawn large: the only place a picture is worth its full
-            // size rather than a step off the wall's own scale.
-            ContributorAvatar(
-                contributor = contributor,
-                onScreen = true,
-                targetPx = 512,
-                modifier = Modifier.size(t.scale(LARGE_AVATAR_DP))
-            )
-
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(t.xs)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(t.md),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = contributor.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                // One face, on screen, drawn large: the only place a picture is worth its full
+                // size rather than a step off the wall's own scale.
+                ContributorAvatar(
+                    contributor = contributor,
+                    onScreen = true,
+                    targetPx = 512,
+                    modifier = Modifier.size(t.scale(LARGE_AVATAR_DP))
                 )
-                contributor.login
-                    ?.takeIf { !it.equals(contributor.name, ignoreCase = true) }
-                    ?.let { login ->
-                        Text(
-                            text = "@$login",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                Text(
-                    text = stringResource(R.string.about_contributors_commits, contributor.commits),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
 
-            if (contributor.areas.isNotEmpty()) {
-                FlowRow(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(t.sm),
-                    verticalArrangement = Arrangement.spacedBy(t.sm)
+                    verticalArrangement = Arrangement.spacedBy(t.xs)
                 ) {
-                    contributor.areas.forEach { ContributionChip(it) }
-                }
-            }
-
-            if (profileUrl != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        onClick = { openUrl(context, profileUrl) },
-                        shape = contributorPillShape(),
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(
-                                horizontal = t.lg,
-                                vertical = t.sm
-                            ),
-                            horizontalArrangement = Arrangement.spacedBy(t.xs),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = FeatherIcons.ExternalLink,
-                                contentDescription = null,
-                                modifier = Modifier.size(t.scale(CHIP_ICON_DP))
-                            )
+                    Text(
+                        text = contributor.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    contributor.login
+                        ?.takeIf { !it.equals(contributor.name, ignoreCase = true) }
+                        ?.let { login ->
                             Text(
-                                text = stringResource(R.string.about_contributors_view_github),
-                                style = MaterialTheme.typography.labelLarge
+                                text = "@$login",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
+                    Text(
+                        text = stringResource(R.string.about_contributors_commits, contributor.commits),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Text(
+                    text = contributor.note?.takeIf { it.isNotBlank() }
+                        ?: contributorSummary(contributor),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (contributor.areas.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(t.sm),
+                        verticalArrangement = Arrangement.spacedBy(t.sm)
+                    ) {
+                        contributor.areas.forEach { ContributionChip(it) }
                     }
                 }
             }
+        },
+        confirmButton = {
+            if (profileUrl != null) {
+                Surface(
+                    onClick = { openUrl(context, profileUrl) },
+                    shape = contributorPillShape(),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Row(
+                        modifier = Modifier.padding(
+                            horizontal = t.lg,
+                            vertical = t.sm
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(t.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = FeatherIcons.ExternalLink,
+                            contentDescription = null,
+                            modifier = Modifier.size(t.scale(CHIP_ICON_DP))
+                        )
+                        Text(
+                            text = stringResource(R.string.about_contributors_view_github),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.about_contributors_close))
+            }
         }
+    )
+}
+
+@Composable
+private fun contributorSummary(contributor: Contributor): String {
+    val areas = contributor.areas.map { stringResource(it.labelRes()) }.joinToString("、")
+    return if (areas.isEmpty()) {
+        stringResource(R.string.about_contributors_summary_default)
+    } else {
+        stringResource(R.string.about_contributors_summary_code, areas)
     }
 }
 

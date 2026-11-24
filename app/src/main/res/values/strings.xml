@@ -3346,6 +3346,11 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="about_contributors_hint">拖动查看 · 双指缩放 · 点击头像看详情</string>
     <string name="about_contributors_commits">%1$d 次提交</string>
     <string name="about_contributors_view_github">在 GitHub 查看</string>
+    <string name="about_contributors_contribute_title">参与开发</string>
+    <string name="about_contributors_contribute_desc">在 GitHub 上参与开发</string>
+    <string name="about_contributors_summary_code">参与了 %1$s 相关工作</string>
+    <string name="about_contributors_summary_default">感谢为 AiVerse 做出贡献</string>
+    <string name="about_contributors_close">关闭</string>
     <string name="about_contributors_area_app">应用</string>
     <string name="about_contributors_area_server">服务端</string>
     <string name="about_contributors_area_adb">设备控制</string>

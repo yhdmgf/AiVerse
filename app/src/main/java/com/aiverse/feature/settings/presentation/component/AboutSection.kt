@@ -1,5 +1,10 @@
 package com.aiverse.feature.settings.presentation.component
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,12 +32,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,6 +72,7 @@ import com.aiverse.core.ui.ExpandableChevronIcon
 import com.aiverse.core.ui.ChevronRotationStyle
 import compose.icons.feathericons.Download
 import compose.icons.feathericons.Github
+import compose.icons.feathericons.GitBranch
 import compose.icons.feathericons.Globe
 import compose.icons.feathericons.MessageCircle
 import compose.icons.feathericons.RefreshCw
@@ -93,14 +103,25 @@ internal fun AboutSection(
     // 更新设置默认收起：关于页首屏只保留版本与入口，自动检查/通道/镜像按需展开。
     var showUpdateSettings by remember { mutableStateOf(false) }
 
-    // 贡献者墙：先展示 APK 内置快照兜底，再经统一拉取器后台刷新；无数据时整个入口不出现。
+    // 贡献者墙：先展示 APK 内置快照兜底，仅在用户展开时才经统一拉取器后台刷新；无数据时整个入口不出现。
     var contributors by remember { mutableStateOf(contributorWallService?.initial().orEmpty()) }
     var showContributors by rememberSaveable { mutableStateOf(false) }
     var selectedContributor by remember { mutableStateOf<Contributor?>(null) }
-    LaunchedEffect(contributorWallService) {
-        val service = contributorWallService ?: return@LaunchedEffect
-        runCatching { service.fetch() }.getOrNull()?.let { fetched ->
-            if (fetched.isNotEmpty()) contributors = fetched
+    val coroutineScope = rememberCoroutineScope()
+
+    // 仅在用户展开贡献者墙时才发起网络请求，避免设置页初始化时不必要的后台加载。
+    // DisposableEffect 确保 AboutSection 离开组合时自动取消进行中的请求。
+    DisposableEffect(showContributors, contributorWallService) {
+        var job: Job? = null
+        if (showContributors && contributorWallService != null && contributors.isEmpty()) {
+            job = coroutineScope.launch {
+                runCatching { contributorWallService.fetch() }.getOrNull()?.let { fetched ->
+                    if (fetched.isNotEmpty()) contributors = fetched
+                }
+            }
+        }
+        onDispose {
+            job?.cancel()
         }
     }
 
@@ -253,6 +274,15 @@ internal fun AboutSection(
             )
             if (contributors.isNotEmpty()) {
                 SettingsDivider()
+                // The contribute link stays above the collapsible wall so it is reachable without
+                // expanding anything - the wall is for browsing, this is the one-tap call to action.
+                SettingsRow(
+                    icon = FeatherIcons.GitBranch,
+                    title = stringResource(R.string.about_contributors_contribute_title),
+                    subtitle = stringResource(R.string.about_contributors_contribute_desc),
+                    onClick = { openUrl(context, CONTRIBUTE_URL) }
+                )
+                SettingsDivider()
                 // 贡献者墙入口默认收起，与上方更新设置同一套折叠模式。
                 SettingsRow(
                     icon = FeatherIcons.Users,
@@ -269,18 +299,24 @@ internal fun AboutSection(
                         )
                     }
                 )
-                if (showContributors) {
-                    SettingsDivider()
-                    ContributorWall(
-                        contributors = contributors,
-                        onSelect = { selectedContributor = it }
-                    )
-                    Text(
-                        text = stringResource(R.string.about_contributors_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.semanticColors.subtleText,
-                        modifier = Modifier.padding(top = Spacing.md)
-                    )
+                AnimatedVisibility(
+                    visible = showContributors,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column {
+                        SettingsDivider()
+                        ContributorWall(
+                            contributors = contributors,
+                            onSelect = { selectedContributor = it }
+                        )
+                        Text(
+                            text = stringResource(R.string.about_contributors_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.semanticColors.subtleText,
+                            modifier = Modifier.padding(top = Spacing.md)
+                        )
+                    }
                 }
             }
         }
@@ -613,3 +649,4 @@ private data class AppVersion(val name: String, val code: Long)
 private const val GITHUB_REPO_URL = "https://github.com/yhdmgf/AiVerse"
 private const val LICENSE_URL = "https://github.com/yhdmgf/AiVerse/blob/main/LICENSE"
 private const val FEEDBACK_URL = "https://github.com/yhdmgf/AiVerse/issues/new"
+private const val CONTRIBUTE_URL = "https://github.com/yhdmgf/AiVerse/fork"

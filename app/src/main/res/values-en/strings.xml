@@ -3347,6 +3347,11 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="about_contributors_hint">Drag to explore · Pinch to zoom · Tap an avatar for details</string>
     <string name="about_contributors_commits">%1$d commits</string>
     <string name="about_contributors_view_github">View on GitHub</string>
+    <string name="about_contributors_contribute_title">Contribute</string>
+    <string name="about_contributors_contribute_desc">Contribute on GitHub</string>
+    <string name="about_contributors_summary_code">Contributed to %1$s</string>
+    <string name="about_contributors_summary_default">Thanks for contributing to AiVerse</string>
+    <string name="about_contributors_close">Close</string>
     <string name="about_contributors_area_app">App</string>
     <string name="about_contributors_area_server">Server</string>
     <string name="about_contributors_area_adb">Device control</string>

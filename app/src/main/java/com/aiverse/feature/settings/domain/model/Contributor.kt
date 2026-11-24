@@ -32,6 +32,10 @@ enum class ContributorArea(val key: String, val color: Color) {
  * The colour a domain's badge is drawn in, one per domain and no two alike, so the wall reads each
  * badge by its colour before its label. Held here rather than in the dialog so the enum - not the
  * caller - owns the pairing of a domain with the colour that stands for it.
+ *
+ * Colors are defined as hex constants and would benefit from migration to MaterialTheme in a
+ * follow-up PR to support proper dark/light theme adaptation. Current colors are readable in both
+ * themes but may have suboptimal contrast in some edge cases.
  */
 private val AreaColorApp = Color(0xFF3DDC84)
 private val AreaColorServer = Color(0xFF4C8DFF)
@@ -64,7 +68,9 @@ data class Contributor(
     val login: String?,
     val avatarUrl: String?,
     val commits: Int,
-    val areas: List<ContributorArea>
+    val areas: List<ContributorArea>,
+    /** A "what they did" line written by hand for contributors credited off the workflow; null otherwise. */
+    val note: String?
 ) {
     val profileUrl: String? get() = login?.let { "https://github.com/$it" }
 }
@@ -94,7 +100,8 @@ fun parseContributors(payload: String): List<Contributor> {
                     login = item.optionalText("login"),
                     avatarUrl = item.optionalText("avatarUrl"),
                     commits = item.optInt("commits"),
-                    areas = areas
+                    areas = areas,
+                    note = item.optionalText("note")
                 )
             )
         }

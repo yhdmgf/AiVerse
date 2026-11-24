@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 贡献者墙快照数据源：从本仓库 `contributors-data` 分支拉取 CI 生成的 `contributors.json`。
+ * 贡献者墙快照数据源：从本仓库 `data` 分支拉取 CI 生成的 `contributors.json`。
  *
  * 三级兜底：[RepoDataFetcher] 网络（含其内置磁盘 TTL 缓存与断网回退）→ APK 内置 assets 快照。
  * 解析统一走 domain 的 [parseContributors]（含 JSON null "null" 字面量坑修复），此处不重复实现。
@@ -44,9 +44,9 @@ class ContributorWallService @Inject constructor(
     }.getOrNull()?.let(::parseContributors).orEmpty()
 
     private companion object {
-        /** 快照发布在 `contributors-data` 分支根目录，与 `sync-contributors.yml` 的发布位置一致。 */
-        private const val CONTRIBUTORS_BRANCH = "contributors-data"
-        private const val REPO_PATH = "contributors.json"
+        /** 快照发布在 `data` 分支的 `data/` 目录，与 `sync-contributors.yml` 的发布位置一致。 */
+        private const val CONTRIBUTORS_BRANCH = "data"
+        private const val REPO_PATH = "data/contributors.json"
         private const val ASSET_PATH = "contributors.json"
     }
 }

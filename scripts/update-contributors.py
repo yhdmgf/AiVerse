@@ -57,8 +57,8 @@ ALIASES = {
         "yhdmgf@users.noreply.github.com",
         "qlqqyx@qq.com",
     ],
-    "aiverse-app": ["aiverse-app@users.noreply.github.com"],
-    "qldwj": [
+    "aiverse-app": [
+        "aiverse-app@users.noreply.github.com",
         "262981771+qldwj@users.noreply.github.com",
         "qldwj@users.noreply.github.com",
     ],
@@ -79,11 +79,39 @@ EXCLUDED_NAMES = re.compile(r"\[bot\]|^weblate$|^anonymous$|^github-actions", re
 LOGIN_OVERRIDES = {
     "yhdmgf": "yhdmgf",
     "aiverse-app": "aiverse-app",
-    "qldwj": "qldwj",
+}
+
+# The name each account goes by on the wall, as a fallback for runs without the network. When a
+# run does reach GitHub, the display name is read fresh off the account, so this only matters
+# offline - the point is to show a person, not an account handle, even then.
+LOGIN_NAME_OVERRIDES = {
+    "yhdmgf": "yhdmgf",
+    "aiverse-app": "aiverse-app",
 }
 
 # Order matters: the first area that matches wins. Kept in sync with the Kotlin ContributorArea.
 AREA_ORDER = ["APP", "CORE", "AGENT", "TERMINAL", "EDITOR", "GIT", "PLUGIN", "UI", "DOCS"]
+
+# Every domain the wall can draw a badge for - the Kotlin ContributorArea enum. A hand-entered
+# contributor may name any of these directly, including the ones no commit path maps to (SERVER,
+# ADB, BUILD, I18N), so this is deliberately wider than AREA_ORDER, which only ranks the domains
+# that path matching can produce.
+VALID_AREA_KEYS = frozenset(
+    ["APP", "SERVER", "ADB", "BUILD", "I18N", "DOCS", "AGENT", "TERMINAL", "PLUGIN", "GIT",
+     "EDITOR", "UI", "CORE"]
+)
+
+
+def area_rank(area: str) -> int:
+    """Where a domain sits in the wall's fixed order, whatever produced it.
+
+    AREA_ORDER ranks the domains path matching can reach; a hand-entered area may name one it
+    cannot (SERVER, ADB, BUILD, I18N). Those sort after the known ones rather than raising.
+    """
+    if area in AREA_ORDER:
+        return AREA_ORDER.index(area)
+    return len(AREA_ORDER) + sorted(VALID_AREA_KEYS - set(AREA_ORDER)).index(area)
+
 
 # Paths under the Java source root, written relative to `com/aiverse/`. Prefixes, not substrings,
 # so a sibling that merely contains the same letters does not steal the badge.
@@ -197,19 +225,48 @@ def git_history() -> tuple[collections.Counter, dict[str, str], dict[str, collec
 
 
 def resolve_account(email: str, remote: str) -> tuple[str | None, str | None]:
-    """Which GitHub account, and which picture, this commit email belongs to."""
+    """Which GitHub account, and which picture, this commit email belongs to.
+
+    Security: parses JSON natively instead of using --jq, avoiding shell injection if an email
+    contains characters that could be interpreted as jq expressions.
+    """
     if shutil.which("gh") is None:
         return None, None
     query = urllib.parse.quote(email, safe="")
     result = subprocess.run(
-        ["gh", "api", f"repos/{remote}/commits?author={query}&per_page=1",
-         "--jq", '.[0].author | [(.login // ""), (.avatar_url // "")] | @tsv'],
+        ["gh", "api", f"repos/{remote}/commits?author={query}&per_page=1"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
-    parts = result.stdout.strip().split("\t")
-    if len(parts) != 2 or not parts[0]:
+    try:
+        payload = json.loads(result.stdout)
+        if not payload:
+            return None, None
+        author = payload[0].get("author") or {}
+        login = author.get("login")
+        avatar_url = author.get("avatar_url")
+        return login, avatar_url
+    except (json.JSONDecodeError, IndexError, KeyError, TypeError):
         return None, None
-    return parts[0], parts[1] or None
+
+
+def resolve_profile(login: str) -> str | None:
+    """The display name a GitHub account goes by now, distinct from its immutable login.
+
+    People rename themselves to something they would rather be called; the commit author name is
+    frozen whenever that happened, so it lags behind. Read fresh off the account each run so the
+    wall follows along. Returns None on any failure - the caller then falls back to the login.
+    """
+    if shutil.which("gh") is None:
+        return None
+    result = subprocess.run(
+        ["gh", "api", f"users/{urllib.parse.quote(login, safe='')}"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    try:
+        payload = json.loads(result.stdout)
+        return payload.get("name") or None
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return None
 
 
 def remote_slug() -> str:
@@ -232,9 +289,13 @@ def known_accounts() -> dict[str, tuple[str | None, str | None]]:
         return {}
     found = {}
     for entry in payload.get("contributors", []):
-        key = entry.get("name") or entry.get("login")
+        key = entry.get("login") or entry.get("name")
         if key:
-            found[key] = (entry.get("login"), entry.get("avatarUrl"))
+            found[key] = (
+                entry.get("login"),
+                entry.get("avatarUrl"),
+                entry.get("name"),
+            )
     return found
 
 
@@ -306,24 +367,35 @@ def build(network: bool, remote: str) -> dict:
     people.sort(key=lambda p: (-p["commits"], p["name"]))
 
     for person in people:
-        recorded = known.get(person["name"], (None, None))
-        login = LOGIN_OVERRIDES.get(person["name"]) or recorded[0]
-        avatar_url = recorded[1]
-        for email in person["_emails"]:
-            if login:
-                break
-            if network:
-                login, avatar_url = resolve_account(email, remote)
+        # The login comes first, keyed by the stable commit author name so a later rename cannot
+        # break the lookup.
+        login = LOGIN_OVERRIDES.get(person["name"])
+        avatar_url = None
+        if login is None:
+            for email in person["_emails"]:
+                if network:
+                    login, avatar_url = resolve_account(email, remote)
+                    if login:
+                        break
 
-        # The picture is the account's own, at its own URL: nothing is carried in the app, and
-        # whoever has no account has no picture either, which the wall draws as their initial.
+        # Once the login is known, the name people go by now is read off their account: a commit's
+        # author name is frozen whenever they last renamed, so it trails behind what they call
+        # themselves today. Fall back to the login, which always resolves even offline.
+        cached = known.get(login, (None, None, None)) if login else (None, None, None)
+        display = (
+            LOGIN_NAME_OVERRIDES.get(login)
+            or (resolve_profile(login) if (login and network) else None)
+            or cached[2]
+        ) if login else None
+
         person["login"] = login
-        person["avatarUrl"] = avatar_url or (
+        person["name"] = display or login or person["name"]
+        person["avatarUrl"] = avatar_url or cached[1] or (
             f"https://github.com/{login}.png?size=256" if login else None
         )
+        # A note is only ever hand-entered (see --extra); a counted contributor has none to show.
+        person["note"] = None
         person.pop("_emails")
-
-    people = merge_same_account(people)
 
     return {
         "generated": subprocess.run(
@@ -332,6 +404,60 @@ def build(network: bool, remote: str) -> dict:
         ).stdout.strip(),
         "contributors": people,
     }
+
+
+def merge_extra(people: list[dict], extra: list[dict]) -> list[dict]:
+    """Fold hand-entered contributors into the ones read off the history.
+
+    A schedule can only ever credit what a commit records, but someone may have earned a place on
+    the wall without one - a design, a translation pass, a decision. A manual run names them here,
+    and they are merged rather than appended so a hand-entered entry and a counted one for the same
+    account become a single face on the wall, not two.
+
+    Each entry is matched on its login (its name where there is no login). A match adds the commits
+    and unions the areas; the display name and the note are the hand-entered ones, since the person
+    typing them is saying how they want to be shown and what they did. An entry for nobody counted
+    is added outright. Returns the list re-sorted the way the wall reads it.
+    """
+    for entry in extra:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        login = str(entry.get("login") or "").strip() or None
+        note = str(entry.get("note") or "").strip() or None
+        try:
+            commits = int(entry.get("commits") or 0)
+        except (TypeError, ValueError):
+            commits = 0
+        raw_areas = entry.get("areas")
+        areas = [a for a in raw_areas if isinstance(a, str) and a in VALID_AREA_KEYS] \
+            if isinstance(raw_areas, list) else []
+
+        key = login or name
+        existing = next((p for p in people if (p["login"] or p["name"]) == key), None)
+        if existing is not None:
+            existing["commits"] += commits
+            union = dict.fromkeys(existing["areas"] + areas)
+            existing["areas"] = sorted(union, key=area_rank)[:3]
+            existing["name"] = name
+            existing["note"] = note
+            existing["avatarUrl"] = existing["avatarUrl"] or (
+                f"https://github.com/{login}.png?size=256" if login else None
+            )
+            continue
+
+        people.append({
+            "name": name,
+            "login": login,
+            "avatarUrl": f"https://github.com/{login}.png?size=256" if login else None,
+            "commits": commits,
+            "areas": sorted(set(areas), key=area_rank)[:3],
+            "note": note,
+        })
+
+    return sorted(people, key=lambda p: (-p["commits"], p["name"]))
 
 
 def render(payload: dict) -> str:
@@ -346,9 +472,26 @@ def main() -> int:
     parser.add_argument("--no-network", action="store_true",
                         help="do not ask GitHub or download avatars")
     parser.add_argument("--out", default=OUTPUT, help="where to write the snapshot")
+    parser.add_argument("--extra", default="",
+                        help="a JSON array of hand-entered contributors to merge in")
     args = parser.parse_args()
 
-    content = render(build(network=not (args.no_network or args.check), remote=remote_slug()))
+    # A hand-entered list arrives as a JSON string. Parse it natively rather than through a shell,
+    # and treat an empty or malformed one as "nobody extra" - a scheduled run passes nothing and
+    # must still run, and a typo in a manual run should not take the whole snapshot down.
+    extra: list[dict] = []
+    if args.extra.strip():
+        try:
+            parsed = json.loads(args.extra)
+        except json.JSONDecodeError:
+            print("Ignoring --extra: it is not valid JSON.", file=sys.stderr)
+            parsed = []
+        if isinstance(parsed, list):
+            extra = parsed
+
+    payload = build(network=not (args.no_network or args.check), remote=remote_slug())
+    payload["contributors"] = merge_extra(payload["contributors"], extra)
+    content = render(payload)
 
     if args.check:
         current = open(args.out, encoding="utf-8").read() if os.path.isfile(args.out) else ""

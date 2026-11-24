@@ -1,6 +1,7 @@
 package com.aiverse.feature.settings.presentation.component
 
 import androidx.compose.animation.rememberSplineBasedDecay
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,10 +51,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
-import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.aiverse.R
 import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.feature.settings.data.remote.ContributorAvatars
 import com.aiverse.feature.settings.domain.model.Contributor
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -389,9 +391,9 @@ internal fun avatarBucket(targetPx: Int): Int {
  * A face that is off screen draws its initial and loads nothing: it is not visible, and a wall of
  * well over a hundred faces cannot hold everybody's photograph at once.
  *
- * Pictures come from Coil ([AsyncImage]), which keeps its own memory and disk cache, so the loading
- * is skipped rather than the drawing - an off-screen face stays at its initial until the wall moves
- * it into view, then fades its photograph in over the placeholder.
+ * Pictures come from [ContributorAvatars], which keeps its own memory and disk cache with bounded
+ * concurrency, so the loading is skipped rather than the drawing - an off-screen face stays at its
+ * initial until the wall moves it into view, then fades its photograph in over the placeholder.
  */
 @Composable
 internal fun ContributorAvatar(
@@ -401,14 +403,26 @@ internal fun ContributorAvatar(
     modifier: Modifier = Modifier
 ) {
     val t = LocalUIDensityTokens.current
-    val model = if (onScreen) {
-        ImageRequest.Builder(LocalContext.current)
-            .data(contributor.avatarUrl)
-            .size(targetPx)
-            .crossfade(true)
-            .build()
-    } else {
-        null
+    val context = LocalContext.current
+
+    // The picture is keyed by URL alone, never by the on-screen size: zooming changes the pixel
+    // size we ask for, and resetting on that would blank every face back to its initial for a
+    // frame each time the wall is pinched. A size change re-runs the loader below and swaps the
+    // bitmap in place once the sharper decode lands, leaving the current picture up meanwhile.
+    var bitmap by remember(contributor.avatarUrl) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(contributor.avatarUrl, onScreen, targetPx) {
+        // A face that leaves the screen drops its bitmap so the wall does not hold every picture;
+        // one that is visible loads for the current pixel size and swaps the sharper decode in only
+        // once it is ready, so a mid-zoom reload never falls back to the initial for a frame.
+        if (!onScreen) {
+            bitmap = null
+            return@LaunchedEffect
+        }
+        val loaded = ContributorAvatars.load(context, contributor, targetPx)
+        if (loaded != null) {
+            bitmap = loaded
+        }
     }
 
     Box(
@@ -422,9 +436,10 @@ internal fun ContributorAvatar(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (model != null) {
-            AsyncImage(
-                model = model,
+        val picture = bitmap
+        if (picture != null) {
+            Image(
+                bitmap = picture,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
