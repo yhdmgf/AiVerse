@@ -67,6 +67,7 @@ import com.aiverse.feature.terminal.domain.takeTailLines
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.UriPathResolver
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
+import com.aiverse.feature.agent.domain.tool.PendingToolPermission
 import com.aiverse.feature.agent.domain.tool.ToolPermissionManager
 import com.aiverse.feature.agent.domain.tool.ToolRegistry
 import com.aiverse.feature.agent.domain.tool.mode.PlanApprovalManager
@@ -1503,7 +1504,15 @@ class AIAgentViewModel @Inject constructor(
         if (id == null) null else states[id]
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val pendingToolPermission = toolPermissionManager.pendingRequest
+    // 多会话并行时按当前会话过滤（与下方 pendingUserQuestion 同款）：只展示属于当前会话的
+    // 授权请求，避免 A 会话挂起的弹窗串到 B 会话、在错的面板上批准另一会话的工具权限。
+    // 侧边栏「等待授权」指示灯仍走未过滤的 awaitingPermissionSessionIds，全部会话照常点亮。
+    val pendingToolPermission: StateFlow<PendingToolPermission?> = combine(
+        _currentSessionId,
+        toolPermissionManager.pendingRequest
+    ) { id, request ->
+        request?.takeIf { it.sessionId == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** 当前展示的授权弹窗所属会话标题（多会话并行时供弹窗标注归属）。会话不存在时回退空串。 */
     val pendingToolPermissionSessionTitle: StateFlow<String> = combine(
@@ -1545,7 +1554,15 @@ class AIAgentViewModel @Inject constructor(
         if (id == null) emptyList() else queues[id] ?: emptyList()
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val pendingPlanApproval: StateFlow<PlanApprovalRequest?> = planApprovalManager.pendingApproval
+    // 计划审批面板同款按当前会话过滤：只展示属于当前会话的审批请求，避免 A 的计划面板
+    // 出现在 B 上、在错的面板点「批准并实施」批到另一会话的计划（Issue #218）。
+    // 侧边栏指示灯仍走未过滤的 approvalSessionIds，全部待批会话照常点亮。
+    val pendingPlanApproval: StateFlow<PlanApprovalRequest?> = combine(
+        _currentSessionId,
+        planApprovalManager.pendingApproval
+    ) { id, approval ->
+        approval?.takeIf { it.sessionId == id }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** 当前正阻塞等待用户审批的会话 id 集合（工具授权 / 提问 / 退出计划审批）。 */
     val approvalSessionIds: StateFlow<Set<String>> = combine(
