@@ -6,6 +6,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.io.ByteArrayInputStream
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -72,6 +73,15 @@ fun MarkdownPreviewWebView(
                     view: WebView,
                     request: WebResourceRequest
                 ): WebResourceResponse? {
+                    // 预览环境断外网：只放行虚拟 origin（assetLoader）。开 JS 后附件脚本可能主动 fetch/加外部子资源，
+                    // 若放行外部 host 会把预览内容外联泄露；这里对外部 host 一律回空 404，与「外链一律拦下」一致。
+                    if (request.url.host != MarkdownPreviewViewModel.ASSET_HOST) {
+                        FileLogger.w(TAG, "预览拦截外联请求: ${request.url}")
+                        return WebResourceResponse(
+                            "text/plain", "utf-8", 404, "Not Found", emptyMap(),
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
                     val response = viewModel.assetLoader.shouldInterceptRequest(request.url)
                     FileLogger.v(TAG, "预览资源请求: ${request.url} -> ${if (response == null) "走网络" else "已拦截"}")
                     return response
