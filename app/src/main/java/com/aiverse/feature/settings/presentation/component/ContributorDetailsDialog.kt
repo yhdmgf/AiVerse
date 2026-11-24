@@ -36,13 +36,11 @@ import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.Edit3
 import compose.icons.feathericons.ExternalLink
 import compose.icons.feathericons.GitBranch
-import compose.icons.feathericons.Globe
 import compose.icons.feathericons.Layout
+import compose.icons.feathericons.MessageSquare
 import compose.icons.feathericons.Package
-import compose.icons.feathericons.Server
 import compose.icons.feathericons.Smartphone
 import compose.icons.feathericons.Terminal
-import compose.icons.feathericons.Zap
 
 /**
  * What a face says when it is chosen: who this is, what they worked on, and where to find them.
