@@ -7,9 +7,6 @@ val TEXT_EXTS = setOf(
     "txt", "md", "kt", "java", "js", "ts", "json", "xml", "html", "css", "py", "sh", "gradle", "kts"
 )
 
-/** Office 文档（应用内打不开、只给「用其他应用打开」出口）的扩展名。 */
-private val OFFICE_EXTS = setOf("doc", "docx", "xls", "xlsx", "ppt", "pptx")
-
 /**
  * 扩展名 → MIME 统一映射（跨 feature 共享）。
  *
@@ -39,10 +36,6 @@ private val EXT_MIME_TYPES = mapOf(
     "zip" to "application/zip",
     "apk" to "application/vnd.android.package-archive"
 )
-
-/** 文件名（或容器路径）是否 Office 文档：应用内无法渲染，只能交给系统应用打开。 */
-fun isOfficeDocument(fileName: String): Boolean =
-    fileName.substringAfterLast('.', "").lowercase() in OFFICE_EXTS
 
 /**
  * 按扩展名查 MIME；查不到回退 [URLConnection.guessContentTypeFromName]，仍拿不到返回 null

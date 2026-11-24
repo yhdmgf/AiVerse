@@ -6,6 +6,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.io.ByteArrayInputStream
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -27,8 +28,9 @@ import com.aiverse.feature.editor.presentation.MarkdownPreviewViewModel
  *
  * [html] 为空时按 Markdown 渲染：原文经 [MarkdownPreviewViewModel.buildHtml] 套进内置模板，
  * 由模板里的 marked + DOMPurify 在页面内解析，故这条路径必须开 JS。
- * [html] 非空时按原生 HTML 渲染：内容直接 load 进 WebView，**禁用 JS**（附件里的 HTML 不可信，
- * 禁 JS 可杜绝脚本执行），CSS 与相对路径图片仍经 assetLoader 正常加载。
+ * [html] 非空时按原生 HTML 渲染：内容直接 load 进 WebView，同样启用 JS——附件 HTML 会执行页面自带脚本
+ * （canvas 小游戏、交互页等），禁 JS 会黑屏只剩背景色；附件 HTML 虽不可信，但预览环境已沙箱化：
+ * 无 JS 桥、禁文件/内容访问、资源仅经 assetLoader 虚拟 https origin、外链一律拦下，风险与 Markdown 路径同级。
  *
  * 预览页里的本地文件链接会像浏览器一样就地导航过去（Markdown 目标由 [MarkdownPreviewViewModel] 渲染成新预览页）；
  * 返回键优先回退 WebView 历史、到头再退出预览；外部链接不跳转。
@@ -53,8 +55,10 @@ fun MarkdownPreviewWebView(
     val webView = remember {
         val themedContext = ContextThemeWrapper(context, webViewThemeRes(dark))
         WebView(themedContext).apply {
-            // 原生 HTML 路径禁 JS：附件 HTML 不可信，禁 JS 杜绝脚本执行（XSS）
-            settings.javaScriptEnabled = !renderHtml
+            // 两条路径都开 JS：Markdown 靠页内 marked+DOMPurify 解析；原生 HTML 需要执行页面自带脚本（canvas/交互页），
+            // 禁 JS 会黑屏只剩背景色。附件 HTML 虽不可信，但预览环境已沙箱化：无 JS 桥、禁文件/内容访问、
+            // 资源仅经 assetLoader 虚拟 https origin、外链一律拦下，风险与 Markdown 路径同级。
+            settings.javaScriptEnabled = true
             // 页面只经 assetLoader 取资源，不暴露本地文件系统
             settings.allowFileAccess = false
             settings.allowContentAccess = false
@@ -69,6 +73,15 @@ fun MarkdownPreviewWebView(
                     view: WebView,
                     request: WebResourceRequest
                 ): WebResourceResponse? {
+                    // 预览环境断外网：只放行虚拟 origin（assetLoader）。开 JS 后附件脚本可能主动 fetch/加外部子资源，
+                    // 若放行外部 host 会把预览内容外联泄露；这里对外部 host 一律回空 404，与「外链一律拦下」一致。
+                    if (request.url.host != MarkdownPreviewViewModel.ASSET_HOST) {
+                        FileLogger.w(TAG, "预览拦截外联请求: ${request.url}")
+                        return WebResourceResponse(
+                            "text/plain", "utf-8", 404, "Not Found", emptyMap(),
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
                     val response = viewModel.assetLoader.shouldInterceptRequest(request.url)
                     FileLogger.v(TAG, "预览资源请求: ${request.url} -> ${if (response == null) "走网络" else "已拦截"}")
                     return response

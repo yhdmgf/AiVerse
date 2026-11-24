@@ -61,11 +61,12 @@ A remote SSH workspace cannot watch for changes on the remote file system and **
 
 The name can only be a single entry name: if it contains `/`, `\`, or is `.` or `..`, the confirm button is disabled — this prevents accidentally creating in the wrong directory. If an entry with the same name already exists, or the directory is not writable, a failure message is shown and the original file is not overwritten.
 
-**Long-press a file or subdirectory row** to rename, send to chat, and delete (both root nodes can only create):
+**Long-press a file or subdirectory row** to rename, send to chat, and delete, or open it with another app (both root nodes can only create):
 
 -   **Rename**: only changes the name within the same directory; it does not move across directories.
 -   **Send to chat**: appends the file as an `@relative/path` reference into the current session's input box and automatically closes the sidebar; no need to enter multi-select mode first. This item is not shown for entries outside the workspace (e.g., local folders).
 -   **Delete**: a file is deleted directly; a folder is deleted recursively along with everything inside it, so a confirmation dialog appears first.
+-   **Open with another app**: hands the file to a system app (Office documents, images, archives, special formats that rely on external scripts, etc.); this item is not shown for directories. Remote files are downloaded to the device in full before being opened.
 
 Deletion Cannot Be Undone
 
@@ -104,6 +105,7 @@ At the top left is back; at the top right, in order, are undo, redo, save, and s
 -   When a Markdown file is open, an extra **preview toggle** button appears to the left of the undo button; tap it to switch to the rendered view and tap again to return to the source. Preview and source share the same editing state, so switching doesn't lose unsaved changes.
 -   The preview is a full Markdown render: **HTML embedded in the document (centered headings, images, table layout, badges, etc.) is displayed as usual**, code blocks have syntax highlighting, and the colors follow the app's light/dark theme. Relative-path images in the document (such as `docs/a.png`) are read from the current workspace, and they display under a remote workspace too; network images (badges, online charts, etc.) need a connection to load. Tapping links inside the preview doesn't navigate away, to avoid leaving the current document.
 -   The preview doesn't render LaTeX formulas; for documents with formulas, switch back to the source to view them.
+-   Native HTML files run their own scripts when previewed (such as canvas mini-games and interactive pages), so pages that rely on scripts to display render properly and stay interactive.
 -   Below the navigation bar is a small file-name bar: the file name on the left (with an asterisk in front when there are unsaved changes), and the cursor's row/column position and the file encoding on the right.
 -   The **bottom symbol shortcut bar** scrolls horizontally; leftmost are cursor movement left/right and indent (Tab), followed by symbols commonly used in programming (brackets, quotes, operators, `;` `:` `|` `&`, etc.), which are inserted at the cursor when tapped. When the soft keyboard is up, the symbol bar floats above the keyboard.
 -   When there are unsaved changes, tapping back or pressing the system back key first shows a confirmation dialog, where you can choose "Don't save" or "Save and exit".

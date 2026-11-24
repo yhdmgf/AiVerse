@@ -164,9 +164,11 @@ class MarkdownPreviewViewModel @Inject constructor(
         "bmp" -> "image/bmp"
         "svg" -> "image/svg+xml"
         "ico" -> "image/x-icon"
+        // JS 单独返回正确的 MIME：外部 <script src> 只有在 application/javascript 下才会被执行
+        "js", "mjs" -> "application/javascript"
         // 文本类（含无扩展名的 LICENSE / README 等）按纯文本返回，预览页里能直接显示而不被当成下载
         "txt", "text", "log", "json", "jsonc", "yml", "yaml", "toml", "ini", "conf", "cfg", "properties",
-        "xml", "html", "htm", "css", "js", "mjs", "ts", "tsx", "jsx", "kt", "kts", "java", "py", "rb",
+        "xml", "html", "htm", "css", "ts", "tsx", "jsx", "kt", "kts", "java", "py", "rb",
         "go", "rs", "c", "h", "cpp", "hpp", "cs", "php", "swift", "sh", "bash", "zsh", "sql", "gradle",
         "gitignore", "env", "csv" -> "text/plain"
         else -> if (ext.isEmpty()) "text/plain" else "application/octet-stream"

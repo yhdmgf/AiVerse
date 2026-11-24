@@ -179,7 +179,6 @@ import compose.icons.feathericons.Upload
 import compose.icons.feathericons.UploadCloud
 import androidx.compose.ui.res.stringResource
 import com.aiverse.R
-import com.aiverse.core.util.isOfficeDocument
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.YearMonth
@@ -1829,8 +1828,9 @@ private fun FileBrowserTab(
                 onRemoveLocalFolder(root.hostPath)
             }
         } else null
-        // Office 文档应用内打不开（进编辑器只会被当二进制拒绝）：给一个「用其他应用打开」出口。
-        val openWithAction: (() -> Unit)? = if (node.entry.isDirectory || !isOfficeDocument(node.path)) {
+        // 应用内不便处理/不适合渲染的文件交给系统应用打开（远程先整份下载到宿主再授权分享）：
+        // 对所有文件开放，仅目录不显示这一项（issue #224）。
+        val openWithAction: (() -> Unit)? = if (node.entry.isDirectory) {
             null
         } else {
             {
