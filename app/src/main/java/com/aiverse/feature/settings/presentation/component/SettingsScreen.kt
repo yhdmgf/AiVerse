@@ -217,6 +217,8 @@ internal enum class SettingsSection(@param:StringRes val titleRes: Int) {
     Storage(R.string.settings_storage),
     TokenStats(R.string.settings_token_stats_title),
     Backup(R.string.settings_backup),
+    SessionManagement(R.string.settings_session_management_title),
+    SessionDetail(R.string.settings_session_management_title),
     About(R.string.settings_about),
     Appearance(R.string.settings_appearance),
     AppearanceDensity(R.string.settings_appearance_density_title),
@@ -278,7 +280,9 @@ fun SettingsScreen(
     onRerunOnboarding: () -> Unit = {},
     onboardingStep: OnboardingStep? = null,
     onOnboardingModelAdded: (() -> Unit)? = null,
-    onOnboardingDismissFetchDialog: (() -> Unit)? = null
+    onOnboardingDismissFetchDialog: (() -> Unit)? = null,
+    onOpenSessionInChat: (String) -> Unit = {},
+    onSessionsMutated: () -> Unit = {}
 ) {
     val providers by viewModel.providers.collectAsStateWithLifecycle()
     val logLevel by viewModel.logLevel.collectAsStateWithLifecycle()
@@ -955,6 +959,11 @@ fun SettingsScreen(
             // 它的构造即触发一次全盘统计，不能提到 SettingsScreen 顶层（那样每次进设置页都会扫盘）。
             val storageViewModel: com.aiverse.feature.settings.presentation.StorageViewModel? =
                 if (current == SettingsSection.Storage) androidx.hilt.navigation.compose.hiltViewModel() else null
+            // 会话管理页与详情页共用同一个 ViewModel：详情页由主页点入，二者操作同一批会话数据。
+            val sessionMgmtViewModel: com.aiverse.feature.settings.presentation.SessionManagementViewModel? =
+                if (current == SettingsSection.SessionManagement || current == SettingsSection.SessionDetail)
+                    androidx.hilt.navigation.compose.hiltViewModel()
+                else null
             // 插件详情（已装/商店/开发）自己有一条带返回和「更多」的顶栏，外层分区顶栏这时让位，
             // 否则会叠成两条（issue #167）。
             var pluginDetailOpen by remember { mutableStateOf(false) }
@@ -1332,6 +1341,9 @@ fun SettingsScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
+                        }
+                        SettingsSection.SessionManagement -> {
+                            SelectionToggleAction(selectionFor(SettingsSection.SessionManagement))
                         }
                         else -> {}
                     }
@@ -1813,6 +1825,23 @@ fun SettingsScreen(
                 SettingsSection.SubAgentEditor -> {} // 已在上方 early return 处理
                 SettingsSection.RemoteServers -> {} // 已在上方 early return 处理
                 SettingsSection.Backup -> {} // 已在上方 early return 处理
+                SettingsSection.SessionManagement -> sessionMgmtViewModel?.let { vm ->
+                    SessionManagementSectionHost(
+                        viewModel = vm,
+                        selection = selectionFor(SettingsSection.SessionManagement),
+                        onOpenDetail = { section = SettingsSection.SessionDetail },
+                        onOpenInChat = onOpenSessionInChat,
+                        onSessionsMutated = onSessionsMutated
+                    )
+                }
+                SettingsSection.SessionDetail -> sessionMgmtViewModel?.let { vm ->
+                    SessionDetailSectionHost(
+                        viewModel = vm,
+                        onOpenInChat = onOpenSessionInChat,
+                        onSessionsMutated = onSessionsMutated,
+                        onDeletedNavigateBack = { section = SettingsSection.SessionManagement }
+                    )
+                }
                 SettingsSection.Memory -> {
                     // 防御：记忆开关关闭时该入口行已整行隐藏，此处兜底不渲染记忆管理内容。
                     if (memoryEnabled) {
@@ -2587,6 +2616,12 @@ internal fun SettingsMenu(
                 icon = FeatherIcons.Save,
                 title = stringResource(SettingsSection.Backup.titleRes),
                 onClick = { onOpen(SettingsSection.Backup) }
+            )
+            SettingsDivider()
+            SettingsRow(
+                icon = FeatherIcons.MessageSquare,
+                title = stringResource(SettingsSection.SessionManagement.titleRes),
+                onClick = { onOpen(SettingsSection.SessionManagement) }
             )
             SettingsDivider()
             SettingsRow(

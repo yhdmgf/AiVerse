@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.aiverse.feature.agent.data.local.entity.ChatSessionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -41,6 +42,33 @@ interface ChatSessionDao {
 
     @Query("SELECT * FROM chat_sessions")
     suspend fun getAllOnce(): List<ChatSessionEntity>
+
+    /** 全部会话（跨工作区，含子代理会话）的实时流，供会话管理页按工作区分桶展示。 */
+    @Query("SELECT * FROM chat_sessions ORDER BY updatedAt DESC")
+    fun getAllSessionsFlow(): Flow<List<ChatSessionEntity>>
+
+    /** 批量把指定会话迁移到目标工作区（仅根会话调用，返回受影响行数）。 */
+    @Query("UPDATE chat_sessions SET workspacePath = :target WHERE id IN (:ids)")
+    suspend fun updateWorkspacePathByIds(ids: List<String>, target: String): Int
+
+    /** 级联迁移：把指定父会话下的子会话一并迁到目标工作区（保持父子同工作区）。 */
+    @Query("UPDATE chat_sessions SET workspacePath = :target WHERE parentId IN (:parentIds)")
+    suspend fun updateWorkspacePathByParents(parentIds: List<String>, target: String): Int
+
+    /**
+     * 批量迁移会话到目标工作区，并级联迁移其子会话。
+     * 分块（每块 500）执行以规避 SQLite 变量上限；先迁根会话再按父 id 级联子会话。
+     * @return 迁移的会话总行数（根 + 子）
+     */
+    @Transaction
+    suspend fun moveSessionsToWorkspace(sessionIds: List<String>, targetWorkspacePath: String): Int {
+        var moved = 0
+        sessionIds.chunked(500).forEach { ids ->
+            moved += updateWorkspacePathByIds(ids, targetWorkspacePath)
+            moved += updateWorkspacePathByParents(ids, targetWorkspacePath)
+        }
+        return moved
+    }
 
     /** 分页读取（keyset：按 updatedAt,id 字典序取 [limit] 条），供备份流式导出。 */
     @Query("SELECT * FROM chat_sessions WHERE updatedAt > :lastUpdatedAt OR (updatedAt = :lastUpdatedAt AND id > :lastId) ORDER BY updatedAt ASC, id ASC LIMIT :limit")

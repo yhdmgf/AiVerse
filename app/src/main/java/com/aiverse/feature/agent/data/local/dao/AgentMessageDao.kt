@@ -247,7 +247,67 @@ interface AgentMessageDao {
         """
     )
     suspend fun sessionStorageUsage(limit: Int): List<SessionStorageUsage>
+
+    /**
+     * 全部会话的消息数（跨工作区，排除已压缩与内部摘要行），供会话管理页批量展示各会话消息条数。
+     * 与 [getRootSessionsWithCountByWorkspace] 保持同一套排除口径（isCompacted / isContextSummary / isCompactionMarker）。
+     */
+    @Query(
+        """
+        SELECT sessionId, COUNT(*) AS messageCount
+        FROM agent_messages
+        WHERE isCompacted = 0
+          AND isContextSummary = 0
+          AND isCompactionMarker = 0
+        GROUP BY sessionId
+        """
+    )
+    fun getAllSessionMessageCountsFlow(): Flow<List<SessionMessageCount>>
+
+    /**
+     * 跳全部工作区搜索聊天记录：命中用户 / 助手正文，排除已压缩与内部摘要行。
+     * 与 [searchInWorkspace] 同一口径，仅去掉工作区限定条件；返回结果额外带回会话所在工作区路径。
+     * [escapedQuery] 已由调用方转义 LIKE 通配符（`!` `%` `_`），配合 SQL 里的 ESCAPE '!'。
+     */
+    @Query(
+        """
+        SELECT m.id AS messageId,
+               m.sessionId AS sessionId,
+               s.title AS sessionTitle,
+               s.workspacePath AS workspacePath,
+               m.role AS role,
+               m.content AS content,
+               m.timestamp AS timestamp
+        FROM agent_messages m
+        JOIN chat_sessions s ON s.id = m.sessionId
+        WHERE m.isCompacted = 0
+          AND m.isContextSummary = 0
+          AND m.isCompactionMarker = 0
+          AND m.role IN ('USER', 'ASSISTANT')
+          AND m.content LIKE '%' || :escapedQuery || '%' ESCAPE '!'
+        ORDER BY m.timestamp DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun searchAllWorkspaces(escapedQuery: String, limit: Int): List<GlobalChatSearchMatch>
 }
+
+/** 全局（跳工作区）搜索的命中投影：在 [ChatSearchMatch] 基础上多带会话所在工作区路径。 */
+data class GlobalChatSearchMatch(
+    val messageId: String,
+    val sessionId: String,
+    val sessionTitle: String,
+    val workspacePath: String,
+    val role: String,
+    val content: String,
+    val timestamp: Long
+)
+
+/** 全局会话消息数投影（[AgentMessageDao.getAllSessionMessageCountsFlow] 的投影）。 */
+data class SessionMessageCount(
+    val sessionId: String,
+    val messageCount: Int
+)
 
 /** 跨会话聊天记录搜索的命中投影（[AgentMessageDao.searchInWorkspace] 的投影）。 */
 data class ChatSearchMatch(
