@@ -843,7 +843,7 @@ fun AppNavigation(
             onToggleExpand = { agentViewModel.toggleExpand(it) },
             onOpenFile = openTreeEntry,
             onOpenWith = { path ->
-                // Office 文档应用内打不开：交给系统应用（远程先整份下载到宿主再授权分享）。
+                // 交给系统应用打开（远程先整份下载到宿主再授权分享），不限文件类型。
                 scope.launch {
                     val file = withContext(Dispatchers.IO) {
                         runCatching { agentViewModel.fileAccess.copyToLocal(path) }.getOrNull()
