@@ -44,6 +44,8 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 import urllib.parse
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -90,14 +92,14 @@ LOGIN_NAME_OVERRIDES = {
 }
 
 # Order matters: the first area that matches wins. Kept in sync with the Kotlin ContributorArea.
-AREA_ORDER = ["APP", "CORE", "AGENT", "TERMINAL", "EDITOR", "GIT", "PLUGIN", "UI", "DOCS"]
+AREA_ORDER = ["APP", "CORE", "TERMINAL", "EDITOR", "GIT", "PLUGIN", "UI", "DOCS"]
 
 # Every domain the wall can draw a badge for - the Kotlin ContributorArea enum. A hand-entered
-# contributor may name any of these directly, including the ones no commit path maps to (SERVER,
-# ADB, BUILD, I18N), so this is deliberately wider than AREA_ORDER, which only ranks the domains
-# that path matching can produce.
+# contributor may name any of these directly, including the ones no commit path maps to (BUILD,
+# ISSUE), so this is deliberately wider than AREA_ORDER, which only ranks the domains that path
+# matching can produce.
 VALID_AREA_KEYS = frozenset(
-    ["APP", "SERVER", "ADB", "BUILD", "I18N", "DOCS", "AGENT", "TERMINAL", "PLUGIN", "GIT",
+    ["APP", "BUILD", "DOCS", "ISSUE", "TERMINAL", "PLUGIN", "GIT",
      "EDITOR", "UI", "CORE"]
 )
 
@@ -106,7 +108,7 @@ def area_rank(area: str) -> int:
     """Where a domain sits in the wall's fixed order, whatever produced it.
 
     AREA_ORDER ranks the domains path matching can reach; a hand-entered area may name one it
-    cannot (SERVER, ADB, BUILD, I18N). Those sort after the known ones rather than raising.
+    cannot (BUILD, ISSUE). Those sort after the known ones rather than raising.
     """
     if area in AREA_ORDER:
         return AREA_ORDER.index(area)
@@ -116,7 +118,6 @@ def area_rank(area: str) -> int:
 # Paths under the Java source root, written relative to `com/aiverse/`. Prefixes, not substrings,
 # so a sibling that merely contains the same letters does not steal the badge.
 FEATURE_AREAS = {
-    "feature/agent": "AGENT",
     "feature/terminal": "TERMINAL",
     "feature/workspace": "CORE",
     "feature/editor": "EDITOR",
@@ -434,13 +435,20 @@ def merge_extra(people: list[dict], extra: list[dict]) -> list[dict]:
         raw_areas = entry.get("areas")
         areas = [a for a in raw_areas if isinstance(a, str) and a in VALID_AREA_KEYS] \
             if isinstance(raw_areas, list) else []
+        # A pinned entry states the badges exactly, so they replace whatever the history derived
+        # rather than piling onto it. A hand-typed --extra entry still unions, so naming one more
+        # domain adds it without erasing the ones the commits earned.
+        override_areas = entry.get("pinned") is True
 
         key = login or name
         existing = next((p for p in people if (p["login"] or p["name"]) == key), None)
         if existing is not None:
             existing["commits"] += commits
-            union = dict.fromkeys(existing["areas"] + areas)
-            existing["areas"] = sorted(union, key=area_rank)[:3]
+            if override_areas:
+                existing["areas"] = sorted(set(areas), key=area_rank)[:3]
+            else:
+                union = dict.fromkeys(existing["areas"] + areas)
+                existing["areas"] = sorted(union, key=area_rank)[:3]
             existing["name"] = name
             existing["note"] = note
             existing["avatarUrl"] = existing["avatarUrl"] or (
@@ -458,6 +466,64 @@ def merge_extra(people: list[dict], extra: list[dict]) -> list[dict]:
         })
 
     return sorted(people, key=lambda p: (-p["commits"], p["name"]))
+
+
+def fetch_persisted_manual(remote: str) -> list[dict]:
+    """Read the hand-added contributors off the last published snapshot.
+
+    The wall is recomputed from the commit history every run, and a schedule can only ever credit
+    what a commit records. Someone added by hand - a reviewer, a translator, a reporter whose
+    contribution left no commit - would therefore drop off the next time the workflow fires without
+    an --extra list naming them. Reading them back off the published snapshot and folding them in
+    again makes a hand-added face sticky: once on the wall, it stays there until a maintainer
+    removes it from the snapshot itself.
+
+    Only entries with no commits of their own are carried over, so a real contributor is never
+    duplicated or inflated by their own past snapshot. Network failures degrade to an empty list so
+    an offline or first run still succeeds.
+    """
+    url = f"https://raw.githubusercontent.com/{remote}/data/{OUTPUT}"
+    try:
+        request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    contributors = payload.get("contributors")
+    if not isinstance(contributors, list):
+        return []
+    manual = []
+    for entry in contributors:
+        if not isinstance(entry, dict):
+            continue
+        commits = entry.get("commits")
+        if isinstance(commits, int) and not isinstance(commits, bool) and commits > 0:
+            continue
+        if not str(entry.get("name") or "").strip():
+            continue
+        manual.append({
+            "name": entry.get("name"),
+            "login": entry.get("login"),
+            "commits": 0,
+            "note": entry.get("note"),
+            "areas": entry.get("areas") if isinstance(entry.get("areas"), list) else [],
+        })
+    return manual
+
+
+def merge_persisted_manual(people: list[dict], persisted: list[dict], remote: str) -> list[dict]:
+    """Fold the hand-added contributors from the last snapshot back into this run's wall.
+
+    Merged, not appended: a name that also shows up counted this run becomes one face, and a
+    hand-added note or area the operator re-stated in --extra wins because that call runs after
+    this one. Anyone only ever added by hand is carried forward verbatim.
+    """
+    if not persisted:
+        return people
+    return merge_extra(people, persisted)
+
 
 
 def render(payload: dict) -> str:
@@ -491,6 +557,11 @@ def main() -> int:
 
     payload = build(network=not (args.no_network or args.check), remote=remote_slug())
     payload["contributors"] = merge_extra(payload["contributors"], extra)
+    # Carry forward anyone added by hand on an earlier run, so a scheduled fire without an
+    # --extra list cannot silently drop them off the wall.
+    payload["contributors"] = merge_persisted_manual(
+        payload["contributors"], fetch_persisted_manual(remote_slug()), remote_slug()
+    )
     content = render(payload)
 
     if args.check:

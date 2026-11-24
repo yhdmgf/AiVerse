@@ -447,7 +447,7 @@ internal fun ContributorAvatar(
             )
         } else {
             Text(
-                text = contributor.name.firstOrNull()?.uppercase() ?: "?",
+                text = (contributor.login ?: contributor.name).firstOrNull()?.uppercase() ?: "?",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

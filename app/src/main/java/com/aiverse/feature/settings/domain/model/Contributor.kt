@@ -14,12 +14,9 @@ import org.json.JSONObject
  */
 enum class ContributorArea(val key: String, val color: Color) {
     APP("APP", AreaColorApp),
-    SERVER("SERVER", AreaColorServer),
-    ADB("ADB", AreaColorAdb),
     BUILD("BUILD", AreaColorBuild),
-    I18N("I18N", AreaColorI18n),
     DOCS("DOCS", AreaColorDocs),
-    AGENT("AGENT", AreaColorAgent),
+    ISSUE("ISSUE", AreaColorIssue),
     TERMINAL("TERMINAL", AreaColorTerminal),
     PLUGIN("PLUGIN", AreaColorPlugin),
     GIT("GIT", AreaColorGit),
@@ -38,12 +35,9 @@ enum class ContributorArea(val key: String, val color: Color) {
  * themes but may have suboptimal contrast in some edge cases.
  */
 private val AreaColorApp = Color(0xFF3DDC84)
-private val AreaColorServer = Color(0xFF4C8DFF)
-private val AreaColorAdb = Color(0xFF9575CD)
 private val AreaColorBuild = Color(0xFFF9A825)
-private val AreaColorI18n = Color(0xFFEF6C00)
 private val AreaColorDocs = Color(0xFF26A69A)
-private val AreaColorAgent = Color(0xFF26C6DA)
+private val AreaColorIssue = Color(0xFFFF8A65)
 private val AreaColorTerminal = Color(0xFFB388FF)
 private val AreaColorPlugin = Color(0xFFEC407A)
 private val AreaColorGit = Color(0xFFFF7043)
