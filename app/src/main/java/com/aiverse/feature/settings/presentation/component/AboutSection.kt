@@ -109,11 +109,17 @@ internal fun AboutSection(
     var selectedContributor by remember { mutableStateOf<Contributor?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
-    // 仅在用户展开贡献者墙时才发起网络请求，避免设置页初始化时不必要的后台加载。
+    // 展开贡献者墙时先展示本地已有的快照（磁盘缓存 / 内置），再在后台强制条件请求对账。
+    // 这样每次打开都能拿到最新数据（如 CI 刚发布、或手动添加的贡献者），而无需重装或清数据。
     // DisposableEffect 确保 AboutSection 离开组合时自动取消进行中的请求。
     DisposableEffect(showContributors, contributorWallService) {
         var job: Job? = null
-        if (showContributors && contributorWallService != null && contributors.isEmpty()) {
+        if (showContributors && contributorWallService != null) {
+            // 先立即用本地缓存填充，保证界面不空白且响应快。
+            runCatching { contributorWallService.fetchCached() }.getOrNull()?.let { cached ->
+                if (cached.isNotEmpty()) contributors = cached
+            }
+            // 后台对账最新数据（ETag 没变则 304 零成本，有新贡献者则本次拉到），到了就地刷新。
             job = coroutineScope.launch {
                 runCatching { contributorWallService.fetch() }.getOrNull()?.let { fetched ->
                     if (fetched.isNotEmpty()) contributors = fetched
