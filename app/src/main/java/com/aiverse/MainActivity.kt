@@ -1194,7 +1194,16 @@ fun AppNavigation(
                         if (onboardingUiState.active && onboardingUiState.step == OnboardingStep.SIMULATE_FETCH_DIALOG) {
                             onboardingCoordinator.goToStep(OnboardingStep.PROVIDER_FETCH_MODELS)
                         }
-                    }
+                    },
+                    onOpenSessionInChat = { sessionId ->
+                        agentViewModel.selectSession(sessionId)
+                        // 从会话管理页跳回聊天页并选中该会话；已在聊天页时无需导航。
+                        if (currentRoute != "chat") {
+                            navController.navigate("chat") { popUpTo("chat") { inclusive = false } }
+                        }
+                    },
+                    // 会话列表由 DAO Flow（getRootSessionsByWorkspace）派生，增删改自动刷新聊天侧，无需手动重建。
+                    onSessionsMutated = { }
                 )
             }
             composable("favorites") {

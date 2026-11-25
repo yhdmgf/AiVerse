@@ -5,6 +5,7 @@ import com.aiverse.feature.agent.data.local.dao.AgentMessageDao
 import com.aiverse.feature.agent.data.local.dao.ChatSessionDao
 import com.aiverse.feature.agent.data.local.entity.ChatSessionEntity
 import com.aiverse.feature.agent.domain.model.AgentMode
+import com.aiverse.feature.agent.domain.model.ChatSession
 import com.aiverse.feature.agent.domain.model.GoalStatus
 import com.aiverse.feature.agent.domain.model.ReasoningEffort
 import com.aiverse.feature.agent.presentation.MessageRole
@@ -117,6 +118,34 @@ class SessionUseCase @Inject constructor(
             }
         }
         return count
+    }
+
+    /**
+     * 把一批会话迁移到目标工作区，并回收目标工作区多余的空会话。
+     *
+     * 只搬根会话（parentId == null）且当前不在目标工作区的会话；子会话由 DAO 级联迁移以保持父子同工作区。
+     * 搬完后对目标工作区做「最多保留一个空会话」回收，优先保留 [preferredEmptyId]（调用方已定位的空会话）。
+     *
+     * @param sessionIds 待迁移的会话 id
+     * @param targetWorkspacePath 目标工作区路径
+     * @param preferredEmptyId 迁移后目标工作区优先保留的空会话 id，可为 null
+     * @return 搬迁前的会话快照（domain 模型），供 UI 回滚展示或提示
+     */
+    suspend fun moveSessionsToWorkspace(
+        sessionIds: List<String>,
+        targetWorkspacePath: String,
+        preferredEmptyId: String? = null
+    ): List<ChatSession> {
+        // 只挑根会话且不在目标工作区的，子会话随父级联，不单独处理
+        val roots = sessionIds.mapNotNull { chatSessionDao.getById(it) }
+            .filter { it.parentId == null && it.workspacePath != targetWorkspacePath }
+        if (roots.isEmpty()) return emptyList()
+        // 先取搬迁前快照，供调用方展示「搬了什么」
+        val snapshot = roots.map { it.toDomain() }
+        chatSessionDao.moveSessionsToWorkspace(roots.map { it.id }, targetWorkspacePath)
+        // 目标工作区可能因此出现多个空会话，回收多余的（优先保留调用方指定的那个）
+        recycleEmptySessions(targetWorkspacePath, preferredEmptyId)
+        return snapshot
     }
 
     /**
