@@ -33,7 +33,8 @@ class ParseFetchedMetadataTest {
 
         val deepseek = result["deepseek-v4.1-flash"]!!
         assertEquals(1_000_000, deepseek.contextTokens)
-        assertEquals(1_000_000, deepseek.inputTokens)
+        // 该模型未返回 max_input_tokens，输入窗口留空（不再强制等于总窗口，见 issue 用量翻倍修复）。
+        assertEquals(0, deepseek.inputTokens)
         assertTrue(deepseek.supportsTools)
 
         val gptx = result["gpt-x"]!!
@@ -75,7 +76,10 @@ class ParseFetchedMetadataTest {
 
         val gemini = result["gemini-2.5-pro"]!! // models/ 前缀已剥
         assertEquals("Gemini 2.5 Pro", gemini.displayName) // displayName 不带 models/
-        assertEquals(1_048_576, gemini.contextTokens)
+        // Gemini 只返回 inputTokenLimit（单次输入窗口），无总上下文窗口：contextTokens 留空回退，
+        // inputTokens 独立解析（不再把输入窗口误当总窗口，见 issue 用量翻倍修复）。
+        assertEquals(0, gemini.contextTokens)
+        assertEquals(1_048_576, gemini.inputTokens)
         assertEquals(65_536, gemini.outputTokens)
         assertTrue(gemini.supportsTools)
     }
@@ -102,5 +106,18 @@ class ParseFetchedMetadataTest {
         val result = parse(raw, ProviderType.OPENAI)
 
         assertEquals(1_000_000, result["m"]!!.contextTokens)
+    }
+
+    @Test
+    fun inputWindowOnly_doesNotCountAsTotalContext() {
+        // 接口只返回 max_input_tokens（单次输入窗口）而无 context_length（总窗口）：
+        // 不能把输入窗口误当总上下文窗口，否则预算被低估、用量百分比翻倍（issue 场景 8%→16%）。
+        val raw = """[{"id": "m", "max_input_tokens": 64000}]"""
+
+        val result = parse(raw, ProviderType.OPENAI)
+
+        val m = result["m"]!!
+        assertEquals(0, m.contextTokens) // 未提供总窗口，留空回退目录/默认
+        assertEquals(64_000, m.inputTokens) // 输入窗口独立解析
     }
 }

@@ -365,7 +365,12 @@ class ModelApiService @Inject constructor(
             if (id.isBlank()) continue
 
             // 上下文窗口候选：不含 max_tokens——Anthropic 的 max_tokens 是输出上限，不是上下文窗口。
-            val contextTokens = longField(obj, "context_length", "context_window", "max_context_length", "max_model_len", "max_input_tokens", "inputTokenLimit")
+            // 也不含 max_input_tokens/inputTokenLimit——它们是「单次输入窗口」，不是总上下文窗口；
+            // 若接口只返回输入窗口而无总窗口，误当总窗口会把预算低估、用量百分比翻倍（issue 场景 8%→16%）。
+            val contextTokens = longField(obj, "context_length", "context_window", "max_context_length", "max_model_len")
+                ?.takeIf { it > 0 }?.toInt()
+            // 单次最大输入窗口：独立于总窗口解析（不再强制等于 contextTokens）。
+            val inputTokens = longField(obj, "max_input_tokens", "inputTokenLimit")
                 ?.takeIf { it > 0 }?.toInt()
             // 输出上限候选：Anthropic 的 max_tokens 归到这里（如 8192），避免被误当上下文显示成 8K。
             val outputTokens = longField(obj, "max_output_tokens", "max_output", "max_tokens", "outputTokenLimit")
@@ -384,7 +389,7 @@ class ModelApiService @Inject constructor(
                     ?: obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { type != ProviderType.GEMINI && it.isNotBlank() }
                     ?: id,
                 contextTokens = contextTokens ?: 0,
-                inputTokens = contextTokens,
+                inputTokens = inputTokens ?: 0,
                 outputTokens = outputTokens,
                 supportsTools = supportsTools ?: false,
                 supportsVision = supportsVision ?: false,
