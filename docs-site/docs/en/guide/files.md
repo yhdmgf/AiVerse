@@ -67,6 +67,7 @@ The name can only be a single entry name: if it contains `/`, `\`, or is `.` or 
 -   **Send to chat**: appends the file as an `@relative/path` reference into the current session's input box and automatically closes the sidebar; no need to enter multi-select mode first. This item is not shown for entries outside the workspace (e.g., local folders).
 -   **Delete**: a file is deleted directly; a folder is deleted recursively along with everything inside it, so a confirmation dialog appears first.
 -   **Open with another app**: hands the file to a system app (Office documents, images, archives, special formats that rely on external scripts, etc.); this item is not shown for directories. Remote files are downloaded to the device in full before being opened.
+-   **Properties**: view detailed information about a file or folder, popping up a bottom drawer styled the same as the long-press menu. The drawer shows: **Type** (for files, the MIME type inferred from the extension, with text-like types shown as `text/plain`; for folders, it shows "Folder"), **Size** (a file shows its size in bytes directly; a folder first shows "Calculating…" and, once the background scan finishes, fills in "N files · size" — large remote directories may be slow, and the result may already be stale by the time you look at it if files have changed), **Location** (the file's full path inside the container), **Modified**, and **Permissions** (`rwx`).
 
 Deletion Cannot Be Undone
 

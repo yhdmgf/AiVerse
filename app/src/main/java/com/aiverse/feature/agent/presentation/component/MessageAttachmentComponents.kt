@@ -1,60 +1,88 @@
 package com.aiverse.feature.agent.presentation.component
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.aiverse.R
 import com.aiverse.core.theme.Brand
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.ui.LocalImageViewer
+import com.aiverse.core.ui.decodeSampledBitmap
 import com.aiverse.core.ui.copyToShareCache
 import com.aiverse.core.ui.isShareableFile
-import com.aiverse.core.ui.openFileExternal
 import com.aiverse.core.ui.LocalMediaViewer
+import com.aiverse.core.ui.openFileExternal
+import com.aiverse.core.ui.readImageSize
+import com.aiverse.core.ui.saveImageToGallery
 import com.aiverse.core.ui.MediaKind
 import com.aiverse.core.ui.ThumbnailCache
 import com.aiverse.core.ui.VoiceMessageBar
 import com.aiverse.core.ui.mediaKindOf
 import com.aiverse.core.util.ApkInstaller
+import com.aiverse.core.util.shareableMimeType
 import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
+import compose.icons.feathericons.Download
 import compose.icons.feathericons.FileText
 import compose.icons.feathericons.Image
+import compose.icons.feathericons.Maximize
 import compose.icons.feathericons.Music
+import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Share2
 import compose.icons.feathericons.Video
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 附件缩略图边长：一行一个文件时左侧的小图，够看清是截图还是照片即可。 */
@@ -73,7 +101,11 @@ private val AttachmentThumbSize = 44.dp
 @Composable
 internal fun MessageAttachmentList(
     attachments: List<AgentAttachment>,
-    onClick: ((AgentAttachment) -> Unit)? = null
+    /** 紧凑行（工具卡片缩略图行）还是内联大卡（消息气泡图片画廊大图 / 视频内联播放器）。 */
+    compact: Boolean = false,
+    onClick: ((AgentAttachment) -> Unit)? = null,
+    /** 消息气泡里「插入聊天」动作回调；工具卡片不传。仅非 compact 时图片大卡展示该动作。 */
+    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -82,7 +114,12 @@ internal fun MessageAttachmentList(
         verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
         attachments.forEach { attachment ->
-            MessageAttachmentRow(attachment = attachment, onClick = onClick)
+            MessageAttachmentRow(
+                attachment = attachment,
+                compact = compact,
+                onClick = onClick,
+                onInsertAttachment = onInsertAttachment
+            )
         }
     }
 }
@@ -90,17 +127,63 @@ internal fun MessageAttachmentList(
 @Composable
 private fun MessageAttachmentRow(
     attachment: AgentAttachment,
+    compact: Boolean = false,
+    onClick: ((AgentAttachment) -> Unit)? = null,
+    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+) {
+    val t = LocalUIDensityTokens.current
+    // 附件媒体类型：音频改内联语音条（不弹播放器），视频在消息气泡改内联播放器（issue #238）。
+    val mediaKind = mediaKindOf(attachment.fileName, attachment.mimeType)
+    val isAudio = mediaKind == MediaKind.AUDIO
+    val isVideo = mediaKind == MediaKind.VIDEO
+    if (isAudio) {
+        // 音频：内联语音条，替代原「缩略图 + 文件名 + 大小·路径」行，不再弹应用内播放器。
+        val fallbackName = stringResource(R.string.common_file)
+        val name = attachment.fileName.ifBlank { fallbackName }
+        VoiceMessageBar(
+            file = remember(attachment.localPath) {
+                attachment.localPath.takeIf { it.isNotBlank() }?.let(::File)
+            },
+            title = name,
+            sizeText = formatBytes(attachment.sizeBytes),
+            pathText = attachment.containerPath.ifBlank { attachment.fileName },
+            containerColor = chatMutedSurfaceColor(),
+            cornerRadius = t.imageCorner
+        )
+        return
+    }
+    // 消息气泡（compact=false）里图片 / 视频改内联大卡：图片画廊大图（横图封顶 4:3、竖图自然比例 +
+    // 操作条），视频内联播放器（只做播放 + 全屏入口）。工具卡片（compact=true）保持原缩略图行，行为不变。
+    if (!compact && attachment.isImage) {
+        LargeImageAttachment(attachment = attachment, onInsertAttachment = onInsertAttachment)
+        return
+    }
+    if (!compact && isVideo) {
+        InlineVideoAttachment(attachment = attachment)
+        return
+    }
+    CompactAttachmentRow(attachment = attachment, onClick = onClick)
+}
+
+/**
+ * 紧凑附件行：左侧缩略图 + 文件名 + 大小 · 容器路径，整行可点。
+ *
+ * 工具卡片（compact=true）的图片 / 视频仍走这里；消息气泡里图片解码失败、视频取源失败也回退到这里。
+ * 点击语义：图片一律走内置全屏查看器（隐式依赖组合树上层提供 [LocalImageViewer]，聊天区都满足）；
+ * 视频走应用内播放器；其余非图片（含 md/html）用调用方给的 [onClick] —— 工具卡片传的是「系统 app 打开」，
+ * 助手气泡不传即不可点。
+ */
+@Composable
+private fun CompactAttachmentRow(
+    attachment: AgentAttachment,
     onClick: ((AgentAttachment) -> Unit)? = null
 ) {
     val viewer = LocalImageViewer.current
     val mediaViewer = LocalMediaViewer.current
     val t = LocalUIDensityTokens.current
-    // 附件媒体类型：音频改内联语音条（不弹播放器），视频仍走应用内播放器（issue #91）。
     val mediaKind = mediaKindOf(attachment.fileName, attachment.mimeType)
-    val isAudio = mediaKind == MediaKind.AUDIO
     val isVideo = mediaKind == MediaKind.VIDEO
     // 图片走内置全屏查看器；视频走应用内播放器；其余非图片交给调用方的「系统 app 打开」。
-    // 音频不再设整行 handler（不弹播放器），由下方内联语音条自处理点击。
     val handler: (() -> Unit)? = when {
         attachment.isImage -> ({ viewer.show(attachment.toViewerRequest()) })
         isVideo -> ({ mediaViewer.show(attachment.toMediaRequest()) })
@@ -121,20 +204,6 @@ private fun MessageAttachmentRow(
         listOf(formatBytes(attachment.sizeBytes), attachment.containerPath)
             .filter { it.isNotBlank() }
             .joinToString(" · ")
-    }
-    if (isAudio) {
-        // 音频：内联语音条，替代原「缩略图 + 文件名 + 大小·路径」行，不再弹应用内播放器。
-        VoiceMessageBar(
-            file = remember(attachment.localPath) {
-                attachment.localPath.takeIf { it.isNotBlank() }?.let(::File)
-            },
-            title = name,
-            sizeText = formatBytes(attachment.sizeBytes),
-            pathText = attachment.containerPath.ifBlank { attachment.fileName },
-            containerColor = chatMutedSurfaceColor(),
-            cornerRadius = t.imageCorner
-        )
-        return
     }
     Surface(
         shape = RoundedCornerShape(t.imageCorner),
@@ -185,6 +254,339 @@ private fun MessageAttachmentRow(
                 )
             }
         }
+    }
+}
+
+/** 内联大图的加载状态：解码与宽高都就绪后按比例渲染；失败回退紧凑行。 */
+private sealed interface LargeImageLoad {
+    object Loading : LargeImageLoad
+    object Failed : LargeImageLoad
+    data class Ready(val bitmap: ImageBitmap, val size: Pair<Int, Int>?) : LargeImageLoad
+}
+
+/**
+ * 消息气泡里的图片内联大卡（issue #238）：
+ * - 横图（宽高比 ≥ 4:3）封顶 4:3（卡高 = 卡宽 × 3/4），[ContentScale.Fit] 居中留边；
+ * - 竖图 / 长截图（宽高比 < 4:3）按自然比例显示，最大高上限按 UIDensityTokens.scale 缩放（约 400dp）
+ *   防长截图顶满屏，不裁切。
+ * 点击大图走内置全屏查看器（[LocalImageViewer]）；下方操作条提供「保存到相册 / 分享 / 插入聊天」。
+ *
+ * 大图独立解码链：不走 44dp 缩略图（[ThumbnailCache]），按卡宽采样解码（[decodeSampledBitmap]），
+ * 宽高比经 [readImageSize] 只读边界，不申请像素内存。
+ */
+@Composable
+private fun LargeImageAttachment(
+    attachment: AgentAttachment,
+    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+) {
+    val viewer = LocalImageViewer.current
+    val t = LocalUIDensityTokens.current
+    val fileAccess = LocalChatFileAccess.current
+    val density = LocalDensity.current
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val cardWidth = maxWidth
+        // 卡宽（px）：decodeSampledBitmap 的 maxEdge 是像素，先把布局宽换算成 px 作为采样基准。
+        val cardWidthPx = with(density) { cardWidth.toPx() }.toInt()
+        val state by produceState<LargeImageLoad>(LargeImageLoad.Loading, attachment, fileAccess, cardWidthPx) {
+            val file = withContext(Dispatchers.IO) { resolveLocalFile(attachment, fileAccess) }
+            if (file == null) {
+                value = LargeImageLoad.Failed
+                return@produceState
+            }
+            val size = withContext(Dispatchers.IO) { readImageSize(file.absolutePath) }
+            // 采样 maxEdge 取「显示所需较大边」而非只看卡宽：竖图 / 长截图显示高度可到 t.scale(400)dp
+            // （通常大于卡宽），只按卡宽采样会让解码分辨率低于显示分辨率、被 Fit 轻微放大而发虚。
+            // 显示高与卡高同一口径（横图封顶 4:3 / 竖图自然比例封顶），保证解码 >= 显示、不虚也不超采。
+            val aspect = if (size != null && size.second > 0) {
+                size.first.toFloat() / size.second.toFloat()
+            } else {
+                4f / 3f
+            }
+            val displayHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400))
+            val maxEdgePx = with(density) { maxOf(cardWidth, displayHeight).toPx() }.toInt()
+            val bitmap = withContext(Dispatchers.IO) { decodeSampledBitmap(file.absolutePath, maxEdgePx) }
+            value = if (bitmap != null) LargeImageLoad.Ready(bitmap, size) else LargeImageLoad.Failed
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            when (val loaded = state) {
+                LargeImageLoad.Failed -> CompactAttachmentRow(attachment = attachment, onClick = null)
+                else -> {
+                    val (bitmap, size) = when (loaded) {
+                        is LargeImageLoad.Ready -> loaded.bitmap to loaded.size
+                        else -> null to null
+                    }
+                    // 宽高比：读不到边界时按横图 4:3 兜底，避免长宽未知时卡高失控。
+                    val aspect = if (size != null && size.second > 0) {
+                        size.first.toFloat() / size.second.toFloat()
+                    } else {
+                        4f / 3f
+                    }
+                    // 横图封顶 4:3；竖图 / 长截图自然比例但封顶（约 400dp），防顶满屏且不裁切。
+                    val cardHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400))
+                    Surface(
+                        shape = RoundedCornerShape(t.imageCorner),
+                        color = chatMutedSurfaceColor(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(cardHeight)
+                                .clip(RoundedCornerShape(t.imageCorner))
+                                .clickable { viewer.show(attachment.toViewerRequest()) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (bitmap != null) {
+                                ComposeImage(
+                                    bitmap = bitmap,
+                                    contentDescription = attachment.fileName.ifBlank {
+                                        stringResource(R.string.common_image_preview)
+                                    },
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                // 解码中：居中转圈占位
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(t.scale(28))
+                                )
+                            }
+                        }
+                    }
+                    // 操作条：保存到相册 / 分享 / 插入聊天（仅消息气泡有插入回调时展示）。
+                    AttachmentActionRow(
+                        attachment = attachment,
+                        onInsertAttachment = onInsertAttachment
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 内联大卡显示高度：横图（宽高比 ≥ 4:3）封顶 4:3（卡高 = 卡宽 × 3/4），[ContentScale.Fit] 居中留边；
+ * 竖图 / 长截图（宽高比 < 4:3）按自然比例（卡高 = 卡宽 / aspect），但不超过 [maxHeight]（约 400dp），
+ * 防长截图顶满屏且不裁切。采样口径（[LargeImageAttachment] 的 maxEdge）与渲染卡高共用这一份，
+ * 避免解码分辨率与显示高度脱节（竖图按卡宽采样会被 Fit 轻微放大发虚）。
+ */
+private fun largeImageCardHeight(cardWidth: Dp, aspect: Float, maxHeight: Dp): Dp =
+    if (aspect >= 4f / 3f) {
+        cardWidth * 3f / 4f
+    } else {
+        (cardWidth / aspect).coerceAtMost(maxHeight)
+    }
+
+/** 内联视频的加载状态：取源就绪后渲染播放器；失败回退紧凑行。 */
+private sealed interface InlineVideoLoad {
+    object Loading : InlineVideoLoad
+    object Failed : InlineVideoLoad
+    data class Ready(val file: File) : InlineVideoLoad
+}
+
+/**
+ * 消息气泡里的视频内联播放器（issue #238）：有界卡片 + ExoPlayer/PlayerView + 控制器 +
+ * 右下角全屏入口（复用 [LocalMediaViewer]）。取源统一走 [mediaFileResolver]（远程 SSH 先整份下载）。
+ * 默认不自动播放，用户点 ▶ 才播；失败时回退紧凑行（仍可点开全屏播放器重试）。
+ */
+@Composable
+private fun InlineVideoAttachment(attachment: AgentAttachment) {
+    val mediaViewer = LocalMediaViewer.current
+    val t = LocalUIDensityTokens.current
+    val fileAccess = LocalChatFileAccess.current
+    val resolve = remember(fileAccess) { mediaFileResolver(fileAccess) }
+    val request = remember(attachment) { attachment.toMediaRequest() }
+    val state by produceState<InlineVideoLoad>(InlineVideoLoad.Loading, request, resolve) {
+        val file = request.sources.firstNotNullOfOrNull { resolve(it) }
+            ?.takeIf { it.isFile && it.length() > 0L }
+        value = if (file != null) InlineVideoLoad.Ready(file) else InlineVideoLoad.Failed
+    }
+    when (val loaded = state) {
+        InlineVideoLoad.Failed -> CompactAttachmentRow(attachment = attachment, onClick = null)
+        else -> {
+            Surface(
+                shape = RoundedCornerShape(t.imageCorner),
+                color = Color.Black,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(t.scale(200))
+                ) {
+                    if (loaded is InlineVideoLoad.Ready) {
+                        InlineVideoPlayer(file = loaded.file)
+                    } else {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    // 全屏入口：复用应用内播放器（内含 FIT↔FILL 全屏切换），不再重复造全屏。
+                    IconButton(
+                        onClick = { mediaViewer.show(request) },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(Spacing.sm)
+                    ) {
+                        Icon(
+                            imageVector = FeatherIcons.Maximize,
+                            contentDescription = stringResource(R.string.chat_attachment_fullscreen),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 有界视频播放器：ExoPlayer + PlayerView，[AspectRatioFrameLayout.RESIZE_MODE_FIT] 居中显示，
+ * 自带控制器（进度 / 播放暂停 / 时间）。随组合进入创建、离开释放；默认不自动播放。
+ */
+@Composable
+private fun InlineVideoPlayer(file: File) {
+    val context = LocalContext.current
+    val exoPlayer = remember(file) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+            prepare()
+            playWhenReady = false
+        }
+    }
+    DisposableEffect(exoPlayer) {
+        onDispose { exoPlayer.release() }
+    }
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                player = exoPlayer
+                useController = true
+                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+/**
+ * 图片大卡操作条：保存到相册（[saveImageToGallery]）、分享（系统分享面板）、插入聊天（[onInsertAttachment]）。
+ * 保存 / 分享在组件内用 [LocalContext] + [rememberCoroutineScope] + [LocalChatFileAccess] 处理；
+ * 文件失效时先经文件访问抽象重取（[resolveLocalFile]）。
+ */
+@Composable
+private fun AttachmentActionRow(
+    attachment: AgentAttachment,
+    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val fileAccess = LocalChatFileAccess.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
+    ) {
+        AttachmentActionChip(
+            icon = FeatherIcons.Download,
+            label = stringResource(R.string.chat_attachment_save)
+        ) {
+            scope.launch {
+                val local = withContext(Dispatchers.IO) { resolveLocalFile(attachment, fileAccess) }
+                if (local == null) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.chat_attachment_save_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+                val ok = saveImageToGallery(context, local, attachment.mimeType)
+                val messageRes = when {
+                    ok -> R.string.chat_attachment_saved
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> R.string.chat_attachment_save_unsupported
+                    else -> R.string.chat_attachment_save_failed
+                }
+                Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT).show()
+            }
+        }
+        AttachmentActionChip(
+            icon = FeatherIcons.Share2,
+            label = stringResource(R.string.chat_attachment_share)
+        ) {
+            scope.launch {
+                val uri = withContext(Dispatchers.IO) {
+                    val local = resolveLocalFile(attachment, fileAccess) ?: return@withContext null
+                    val shareable = if (isShareableFile(context, local)) local else copyToShareCache(context, local)
+                    shareable?.let {
+                        runCatching {
+                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it)
+                        }.getOrNull()
+                    }
+                }
+                if (uri == null) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.chat_open_file_unshareable),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = shareableMimeType(attachment.mimeType, attachment.fileName)
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runCatching {
+                    context.startActivity(Intent.createChooser(send, context.getString(R.string.chat_attachment_share)))
+                }
+            }
+        }
+        if (onInsertAttachment != null) {
+            AttachmentActionChip(
+                icon = FeatherIcons.Plus,
+                label = stringResource(R.string.chat_attachment_insert_chat)
+            ) {
+                onInsertAttachment(attachment)
+            }
+        }
+    }
+}
+
+/** 操作条单项：小图标 + 文字，轻量可点。 */
+@Composable
+private fun AttachmentActionChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val t = LocalUIDensityTokens.current
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(t.rMdLarge))
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(t.scale(16))
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

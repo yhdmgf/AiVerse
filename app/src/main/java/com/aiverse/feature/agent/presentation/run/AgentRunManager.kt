@@ -1506,7 +1506,16 @@ class AgentRunManager @Inject constructor(
                     is AgentEvent.Failed -> {
                         failed = true
                         setCompacting(sessionId, false)
-                        setAgentState(sessionId, AgentUIState.Error(describeFailure(event)))
+                        // Issue #237：能关联到触发失败的用户消息（userMsgId 已落库）时，把错误气泡挂到
+                        // 该消息下方；内部续跑轮（persistUserMessage=false）userMsgId 不落库、无法关联，
+                        // 传 null 走会话末尾兜底气泡（否则按 messageId 找不到渲染 item，气泡不会显示）。
+                        setAgentState(
+                            sessionId,
+                            AgentUIState.Error(
+                                describeFailure(event),
+                                messageId = userMsgId.takeIf { persistUserMessage }
+                            )
+                        )
                         if (isSub) {
                             sessionUseCase.getSessionById(sessionId)?.parentId?.let { parentId ->
                                 subAgentEventBus.emit(

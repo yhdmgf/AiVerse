@@ -442,6 +442,7 @@ internal fun ToolMessageBody(
             val opener = LocalAttachmentOpener.current
             MessageAttachmentList(
                 attachments = message.attachments,
+                compact = true,
                 onClick = { opener.open(it) }
             )
         }

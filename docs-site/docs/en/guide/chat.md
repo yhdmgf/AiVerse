@@ -150,7 +150,7 @@ If you leave midway and come back (switching to the terminal, the settings page,
 
 The streaming output stage stays consistent with after it's persisted: the AI reply is likewise rendered with the selected bubble style (styles like Classic white outline and Soft shadow have a bubble background, while **No bubble** mode lays it directly on the page), so the streaming tail won't look disconnected from the bubble after persisting.
 
-**Errors from a failed request** (**since 1.0.3**): they're no longer concentrated in one place on the page, but shown **below the AI reply that triggered them**, scrolling along with the message flow so you can match which round went wrong.
+**Errors from a failed request** (**since 1.0.3**): they're no longer pinned at the end of the message flow or concentrated in one place on the page. The failure bubble is now **attached below the message that triggered the failure** — scrolling along with the message flow, so you can match which round / which message went wrong. Once the next message succeeds, the old failure bubble doesn't follow along to behind the new message. Only when the failure can't be associated with a specific message (for example, an authentication or connection failure that occurs before any reply is produced) is the failure bubble shown at the end of the session's message flow.
 
 The message area uses a **flat document flow** layout: what you send is a light-colored bubble on the right with the send time noted below; the AI's reply by default has an outline bubble around it (you can change it to No bubble or other styles in "Settings → Appearance"; when set to **No bubble** it's laid directly on the page), and it keeps the same bubble appearance both during character-by-character output and once finally settled.
 
@@ -189,19 +189,28 @@ Any image in chat can be tapped to view the full image, consistently in four pla
 -   An image shown in the body of an AI reply (a chart or screenshot the AI generated, or one it read from the workspace);
 -   An image the AI sent you with the send-file tool (or image generation).
 
+**Image attachments inside a message bubble** are now shown as an **inline large image card**: a gallery card capped at 4:3, displayed with Fit so vertical images or long screenshots aren't cropped; tap the card to open the full-screen viewer. Below the card, small text keeps the "name · size · container path", and below the image are three action buttons:
+
+-   **Save**: saves the image to the system gallery — on Android 10 and above no storage permission is needed, and it's saved to `Pictures/AiVerse`; on Android below 10 it shows that it's not supported.
+-   **Share**: opens the system share sheet.
+-   **Insert into chat**: adds the image to the input area as a reference image for the next message.
+
 Once full screen: pinch with two fingers to zoom, drag with one finger after zooming to view details, and double-tap to toggle between the original and the zoomed view. Tap the image, press the back key, or tap the × at the top right to close (tapping the image while zoomed doesn't close it, to avoid mis-taps while viewing details). On a tablet, whether the chat area takes half the screen or the full screen, the full image fills the entire screen.
 
 Once an image file has been moved or deleted it can't be opened and shows "Failed to load image". A GIF only shows its first frame.
 
 ## Files Sent by the AI
 
-Files the AI sends with `sendFile` (and the images it generates) appear in the chat area **one file per line**: a thumbnail or type icon on the left, the filename with "size · path" in the middle, and a `›` hint on the right that's tappable.
+Files the AI sends with `sendFile` (and the images it generates) appear in the chat area:
 
--   Tap an image line → view the image in-app in full screen; tap other types → hand it to the corresponding system app to open (an install package first confirms "Allow installing unknown apps").
--   **Audio and video** (**since 1.0.3**): tap to play directly in the app — the filename shows at the top, with play / pause and a draggable progress bar, and an × at the top right to close. For remote sessions, audio and video are fetched locally before playing; once a file is moved or deleted it shows "Unable to play this file; it may have been moved or deleted".
+-   **Images**: shown as an **inline large image card** — a 4:3-capped gallery card displayed with Fit, so vertical images or long screenshots aren't cropped; tap the card to open the full-screen viewer; below the card small text keeps the "name · size · container path", and below the image are three action buttons (Save / Share / Insert into chat), same as an image attachment inside a message bubble (see [Viewing Images in Full Screen](#viewing-images-in-full-screen)).
+-   **Video**: shown as an **inline player** — it plays directly in the message flow, with a full-screen entry, no autoplay by default, a placeholder while loading, and it falls back to a one-line file row on load or playback failure.
+-   **Audio**: shown as an **inline voice bar** (unchanged), tap to play directly in the app — the filename shows at the top, with play / pause and a draggable progress bar, and an × at the top right to close. For remote sessions, audio is fetched locally before playing; once a file is moved or deleted it shows "Unable to play this file; it may have been moved or deleted".
+-   **Other types**: **one file per line** — a type icon on the left, the filename with "size · path" in the middle, and a `›` hint on the right that's tappable; tap to hand it to the corresponding system app to open (an install package first confirms "Allow installing unknown apps").
+-   **Tool cards and other compact places still keep a one-line thumbnail** — for example, an image the AI generated in a tool call or read from the workspace is still shown as a one-line thumbnail near the tool card.
 -   **Document-type attachments open a dialog on tap** (**since 1.0.3**): tapping text-type attachments in a session such as Markdown / HTML / plain text pops up a choice panel first, where you can pick "Preview in app" (opening the editor's preview mode) or "Open with another app" to hand it to a system app. When you pick "Preview in app", HTML attachments run their own scripts in the preview page (such as canvas mini-games), so pages that rely on scripts open properly; external links are always blocked and won't navigate away.
 -   Once a file has been moved or deleted, tapping it shows "The file doesn't exist or has been moved"; when the location doesn't support sharing to other apps, a corresponding note is given. Files in external workspaces added via "Add external workspace" and directories mounted from custom images can be tapped open as well.
--   Each line is placed at the **location of the tool call** that sent the file, so when reviewing records you can see "at which step the AI sent this file"; file-carrying tools **don't participate in the "N tool calls" fold**, and it shows regardless of whether the group is collapsed.
+-   Each file is placed at the **location of the tool call** that sent the file, so when reviewing records you can see "at which step the AI sent this file"; file-carrying tools **don't participate in the "N tool calls" fold**, and it shows regardless of whether the group is collapsed.
 -   A single call takes at most 10 files, with a default per-file size cap of 100MB (adjustable in "Preferences → Tools"); if even one doesn't exist or exceeds the limit, the whole batch isn't sent, and the AI receives the failure reason and retries after correcting it.
 
 ## Usage and Duration Below a Reply
