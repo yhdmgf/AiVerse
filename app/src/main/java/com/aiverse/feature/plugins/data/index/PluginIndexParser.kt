@@ -3,44 +3,24 @@ package com.aiverse.feature.plugins.data.index
 import com.aiverse.feature.plugins.domain.LocalizedText
 import com.aiverse.feature.plugins.domain.PluginManifestParser
 import com.aiverse.feature.plugins.domain.SemVer
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.decodeFromString
 
 /**
  * 索引静态校验；不依赖 Android，便于单元测试。
  *
- * 同时支持两种格式：
- * - **新格式**（对象 + `schema_version`）：严格校验；
- * - **旧格式**（顶层数组，元素含 `creator` / `package` / `permission` 等字段）：
- *   宽松映射，缺少的 `license` / `repository` 等新字段降级为默认值，不报错。
+ * 与 Nox 版保持一致：单步反序列化 [PluginIndexDocument]，AUTHOR 允许中文等 Unicode 字母，
+ * 不再支持旧式顶层数组格式，也不再有 lastUpdate 字段（商店索引统一走 schema_version=1 对象格式）。
  */
 internal object PluginIndexParser {
 
-    private val AUTHOR = Regex("^[a-z][a-z0-9-]*$")
+    // 发布者允许中文等 Unicode 字母，与清单里的 publisher 规则保持一致。
+    private val AUTHOR = Regex("^[\\p{L}][\\p{L}\\p{N}_-]{0,31}$")
     private val LANGUAGE_TAG = Regex("^[a-z]{2,3}(-[a-z0-9]{2,8})*$")
 
     fun parse(bytes: ByteArray): PluginIndexDocument {
         if (bytes.size > MAX_INDEX_BYTES) throw PluginIndexException("index.json 超过 2 MiB")
-        val root = try {
-            PluginIndexJson.parseToJsonElement(bytes.toString(Charsets.UTF_8))
-        } catch (e: Exception) {
-            throw PluginIndexException("index.json 解析失败", e)
-        }
-        return when (root) {
-            is JsonArray -> parseLegacy(root)
-            is JsonObject -> parseSchema(root)
-            else -> throw PluginIndexException("index.json 顶层必须是对象或数组")
-        }
-    }
-
-    /** 新格式：顶层对象，必须带 `schema_version`，逐字段严格校验。 */
-    private fun parseSchema(root: JsonObject): PluginIndexDocument {
-        if ("schema_version" !in root) throw PluginIndexException("index.json 缺少 schema_version")
         val index = try {
-            PluginIndexJson.decodeFromJsonElement<PluginIndexDocument>(root)
+            PluginIndexJson.decodeFromString<PluginIndexDocument>(bytes.toString(Charsets.UTF_8))
         } catch (e: Exception) {
             throw PluginIndexException("index.json 解析失败", e)
         }
@@ -78,51 +58,6 @@ internal object PluginIndexParser {
         }
         return index
     }
-
-    /**
-     * 旧格式：顶层数组，元素形如
-     * `{"name":"...","version":"...","creator":"...","lastUpdate":...,"permission":["clipboard"],"package":"com.x.y"}`。
-     *
-     * 映射规则：`id=package`、`name=LocalizedText(name)`（中英文取同一值）、`author=creator`、
-     * `version=version`、`repository=""`、`license=null`、`tags=permission`、`lastUpdate` 原样保留。
-     * 缺 `creator` 或 `package` 的条目视为无效，静默丢弃；新字段缺失一律降级为空，不报错。
-     */
-    private fun parseLegacy(root: JsonArray): PluginIndexDocument {
-        if (root.size > MAX_PLUGINS) throw PluginIndexException("插件数量超过 $MAX_PLUGINS")
-        val ids = HashSet<String>()
-        val plugins = root.mapNotNull { element ->
-            val obj = element as? JsonObject ?: return@mapNotNull null
-            val id = (obj["package"] as? JsonPrimitive)?.contentOrNull?.trim()
-                ?: return@mapNotNull null
-            val author = (obj["creator"] as? JsonPrimitive)?.contentOrNull?.trim()
-                ?: return@mapNotNull null
-            if (id.isEmpty() || author.isEmpty()) return@mapNotNull null
-            val name = (obj["name"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty().ifEmpty { id }
-            val version = (obj["version"] as? JsonPrimitive)?.contentOrNull?.trim()
-                ?.takeIf { it.isNotEmpty() }
-            val tags = (obj["permission"] as? JsonArray)
-                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } }
-                ?.distinct()
-                ?.take(4)
-                .orEmpty()
-            if (!ids.add(id)) return@mapNotNull null
-            PluginIndexPlugin(
-                id = id,
-                name = LocalizedText.single(name),
-                description = LocalizedText.single(""),
-                author = author,
-                repository = "",
-                license = null,
-                tags = tags,
-                version = version,
-                lastUpdate = obj.longOrNull("lastUpdate")
-            )
-        }
-        return PluginIndexDocument(schemaVersion = 1, plugins = plugins)
-    }
-
-    private fun JsonObject.longOrNull(key: String): Long? =
-        (this[key] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
 
     private fun validateLocalized(
         pluginId: String,

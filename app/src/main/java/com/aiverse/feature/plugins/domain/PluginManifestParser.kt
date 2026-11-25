@@ -66,7 +66,7 @@ object PluginManifestParser {
     private val OVERLAY_KEYS = setOf("purpose", "surfaces")
     private val OVERLAY_SURFACE_KEYS = setOf("id", "page", "width", "height", "draggable", "snap")
 
-    private val PLUGIN_ID = Regex("^[a-z][a-z0-9-]{0,31}\\.[a-z][a-z0-9-]{0,31}$")
+    private val PLUGIN_ID = Regex("^[\\p{L}][\\p{L}\\p{N}_-]{0,31}\\.[\\p{L}][\\p{L}\\p{N}_-]{0,31}$")
     private val PUBLISHER = Regex("^[a-z][a-z0-9-]{0,31}$")
     private val LOCAL_ID = Regex("^[A-Za-z][A-Za-z0-9_-]{0,63}$")
     private val HANDLER_NAME = Regex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
