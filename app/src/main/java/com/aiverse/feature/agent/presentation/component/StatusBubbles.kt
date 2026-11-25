@@ -396,7 +396,7 @@ private const val TYPEWRITER_DRAIN_HARD_MS = 600L
 private const val TYPEWRITER_RATE_WINDOW_MS = 500L
 
 /** 打字机渲染节流间隔（ms）：~40fps 高频平滑快照，彻底消除低速模型的顿挫感。 */
-private const val TYPEWRITER_RENDER_INTERVAL_MS = 24L
+private const val TYPEWRITER_RENDER_INTERVAL_MS = 16L
 
 /** 按码点数量截断字符串，避免把 emoji 等代理对截成孤立的半个字符。 */
 private fun truncateToCodePoints(text: String, codePoints: Int): String {
