@@ -995,6 +995,37 @@ export interface HostMethodMap {
   'host.share.file': { params: { path: string; title?: string }; result: OkResult };
   'host.ui.openUrl': { params: { url: string }; result: OkResult };
 
+  /**
+   * 打开受控登录 WebView 完成第三方网页登录，回传登录后的 URL 与 Cookie。
+   *
+   * 兼容两套参数风格（**至少提供 `url` 或 `loginUrl` 之一**，宿主对两者都缺失抛 `PARAM_INVALID`）：
+   * - `url` + `cookieUrls`：Nox / 主进程风格，取 `cookieUrls[0]` 的 host 作为登录完成目标域；
+   *   `title` / `finishText` / `accentColor` / `showClose` 在本宿主被忽略，无需传；
+   * - `loginUrl` + `targetDomain`（可选 `cookieName`、`timeoutMs`）：AiVerse / 配置页风格。
+   * 用户取消时宿主 reject 并带 `LOGIN_CANCELED` 错误码。
+   */
+  'host.webview.login': {
+    params: {
+      /** 登录页地址；与 `loginUrl` 二选一（Nox 风格）。 */
+      url?: string;
+      /** 登录完成的目标域列表，取首个 host（Nox 风格）。 */
+      cookieUrls?: string[];
+      /** 登录页地址；与 `url` 二选一（配置页风格）。 */
+      loginUrl?: string;
+      /** 登录完成的目标域（配置页风格）。 */
+      targetDomain?: string;
+      /** 登录完成后需读取的 Cookie 名（配置页风格）。 */
+      cookieName?: string;
+      /** 超时毫秒，默认 300000，范围 10000–600000（配置页风格）。 */
+      timeoutMs?: number;
+    };
+    result: {
+      url: string;
+      finalUrl: string;
+      cookies: JsonObject;
+    };
+  };
+
   // 日志
   'host.log': {
     params: { level: LogLevel; message: string; tag?: string };
