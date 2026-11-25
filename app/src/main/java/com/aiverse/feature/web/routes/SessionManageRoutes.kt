@@ -3,6 +3,7 @@ package com.aiverse.feature.web.routes
 import com.aiverse.feature.agent.data.local.dao.RoleDao
 import com.aiverse.feature.agent.domain.model.ReasoningEffort
 import com.aiverse.feature.agent.domain.session.SessionUseCase
+import com.aiverse.feature.agent.domain.session.WorkspacePathResolver
 import com.aiverse.feature.web.ApiResponse
 import com.aiverse.feature.web.CreateSessionRequest
 import com.aiverse.feature.web.RenameSessionRequest
@@ -27,7 +28,8 @@ import io.ktor.server.routing.route
 fun Route.sessionManageRoutes(
     sessionUseCase: SessionUseCase,
     workspaceRepository: WorkspaceRepository,
-    roleDao: RoleDao
+    roleDao: RoleDao,
+    workspacePathResolver: WorkspacePathResolver
 ) {
     route("/api/sessions") {
         // 新建会话：workspacePath 缺省跟随当前工作区。
@@ -46,8 +48,15 @@ fun Route.sessionManageRoutes(
                 call.respond(HttpStatusCode.NotFound, ApiResponse(ok = false, error = "role not found"))
                 return@post
             }
+            // 与 App 端保持一致：选中带绑定工作区的角色时，新建会话归入该工作区。
+            // 但若请求显式指定了 workspacePath，尊重显式值，不用角色绑定覆盖。
+            val explicitWorkspace = req.workspacePath?.takeIf { it.isNotBlank() } != null
+            val resolvedWorkspace = when {
+                explicitWorkspace -> workspace
+                else -> workspacePathResolver.resolveForRole(roleId, workspace)
+            }
             val entity = sessionUseCase.newSessionEntity(
-                workspacePath = workspace,
+                workspacePath = resolvedWorkspace,
                 providerId = req.providerId,
                 model = req.model,
                 reasoningEffort = effort ?: ReasoningEffort.MEDIUM.name,
