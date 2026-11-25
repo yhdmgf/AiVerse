@@ -3301,6 +3301,9 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="roles_field_status">状态</string>
     <string name="roles_field_type">类型</string>
     <string name="roles_avatar_none">无</string>
+    <string name="roles_field_workspace">绑定工作区</string>
+    <string name="roles_field_workspace_none">不绑定</string>
+    <string name="roles_field_workspace_placeholder">选择工作区</string>
     <string name="roles_avatar_emoji">Emoji</string>
     <string name="roles_avatar_image">图片</string>
     <string name="roles_avatar_preview_name_placeholder">未填写名称</string>

@@ -22,6 +22,14 @@ After you have switched roles, newly created conversations carry over the role y
 
 Existing older conversations each keep their original role and are unaffected.
 
+## Role and Workspace Binding
+
+In the role edit page you can assign a "bound workspace" to a role. When bound, new conversations created with that role selected are automatically placed in the corresponding workspace, achieving a "switch role = switch environment" isolation experience (similar to qwenpaw's workspace mechanism).
+
+-   **Not Bound**: Default behavior; new conversations follow the currently selected workspace.
+-   **Bound Workspace**: When a new conversation is created with this role selected, it is automatically placed in the role's bound workspace; the session management page's bucketing and filtering work automatically.
+-   **Compatibility**: Old data (workspaceId = null) is fully compatible with unchanged behavior; backup export and import both preserve this field.
+
 ## Managing Roles
 
 Under "Settings → Roles" you can manage all roles. Built-in preset roles and custom roles are managed together.

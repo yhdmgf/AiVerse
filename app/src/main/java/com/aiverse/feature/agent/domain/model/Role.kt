@@ -38,7 +38,9 @@ data class Role(
     /** 列表排序权重，数值越小越靠前。 */
     val sortOrder: Int = 0,
     val createdAt: Long = 0L,
-    val updatedAt: Long = 0L
+    val updatedAt: Long = 0L,
+    /** 绑定的工作区名（[Workspace.name]，唯一标识）。null 表示不绑定，跟随当前工作区行为。 */
+    val workspaceId: String? = null
 ) {
     companion object {
         /** 内置默认角色 id：会话 [ChatSession.roleId] 为 null 时即绑定到它。 */
