@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>下载 AiVerse</title>
+<meta name="description" content="下载 AiVerse 安卓客户端 —— 在手机上完成完整开发流程的 AI 编程与移动工作站。提供正式版、预览版与测试版通道，支持 GitHub 直连与国内镜像下载，覆盖 ARM64、ARMv7、x86_64 等常见架构。">
+<meta name="keywords" content="AiVerse,安卓 AI 编程,移动工作站,AI 编程助手,APK 下载">
+<link rel="canonical" href="https://www.aivapp.cn/download.html">
+<title>AiVerse 安卓客户端下载 - 在手机上进行 AI 编程的移动工作站</title>
 <style>
 /* =====================================================================
    设计基调：静谧编辑风 —— 暖纸色中性底、墨色主操作、衬线版本号做视觉锚点，
@@ -172,7 +175,7 @@ html.dark .icon-btn .i-moon{display:none}
 /* ---------- 左栏：上下文层（版本 / 更新日志） ---------- */
 .rail{display:flex;flex-direction:column;min-height:0;padding:var(--s-6) var(--s-5) var(--s-5) var(--s-6);background:var(--surface-2);border-right:1px solid var(--border)}
 .rail-brand{display:flex;align-items:center;gap:var(--s-2);font-weight:600;font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-6)}
-.rail h2{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.rail h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
 .rail .sub{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-5);max-width:34ch}
 .eyebrow{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
 .badge{display:inline-flex;align-items:center;height:20px;padding:0 var(--s-2);border-radius:var(--r-1);font-size:var(--fs-xs);font-weight:600;letter-spacing:0;text-transform:none}
@@ -326,7 +329,7 @@ html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128
   .dl-panel{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);width:100%;height:min(92dvh,760px);border-radius:var(--r-3) var(--r-3) 0 0;border-bottom:0;transform:translateY(24px)}
   .rail{padding:var(--s-5) var(--s-5) var(--s-4);border-right:0;border-bottom:1px solid var(--border)}
   .rail-brand,.rail .sub,.notes-label{display:none}
-  .rail h2{display:none}
+  .rail h1{display:none}
   .ver-big{font-size:var(--fs-lg);min-height:28px}
   .release-note{display:none}
   .ops-bar{position:absolute;top:var(--s-2);right:var(--s-2);padding:0}
@@ -352,7 +355,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
  .dl-panel,.dl[data-open="true"] .dl-panel{width:100%;height:auto;min-height:calc(100dvh - 20px);max-height:none;border-radius:14px;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
  .rail{padding:22px 20px 16px}
  .rail-brand{display:flex!important;margin-bottom:10px}
- .rail h2{display:block!important;margin-bottom:4px}
+ .rail h1{display:block!important;margin-bottom:4px}
  .rail .sub{display:block!important;margin-bottom:12px}
  .ver-big{font-size:25px;min-height:30px}
  /* 移动端也显示更新公告，限高+内部滚动，避免挤占空间 */
@@ -368,7 +371,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 /* 独立下载页的视觉细节 */
 .rail{background:linear-gradient(155deg,var(--surface-2),var(--surface));}
 .rail-brand{letter-spacing:.02em}
-.rail h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
+.rail h1{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
 .eyebrow{letter-spacing:.07em;text-transform:uppercase}
 .ver-big{font-size:clamp(34px,4vw,48px);letter-spacing:-.045em}
 .ops-bar{padding:14px 16px 0}
@@ -379,7 +382,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 .pkg{border-radius:12px;padding:17px}
 .pkg.is-rec{border-color:var(--border-strong);box-shadow:0 5px 18px rgba(28,27,25,.055)}
 .pkg-name{letter-spacing:-.02em}
-@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h2{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
+@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h1{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
 
 /* =====================================================================
    测试版确认弹窗 .test-modal
@@ -435,7 +438,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     <!-- 左栏：上下文 -->
     <aside class="rail">
       <div class="rail-brand"><svg class="ic"><use href="#i-mark"/></svg>AiVerse</div>
-      <h2 id="dlTitle">下载 AiVerse</h2>
+      <h1 id="dlTitle">下载 AiVerse</h1>
       <p class="sub">在手机上完成完整开发流程的 AI 编程与移动工作站。</p>
 
       <div class="eyebrow" id="infoEyebrow"><span id="infoTitle">版本信息</span><span class="badge stable" id="channelBadge">正式版</span></div>
