@@ -91,10 +91,10 @@ The turn containing only tool calls also has its first-token latency counted.
 
 ## Context Usage (from 1.0.0)
 
-The chat page's input box has a **context usage ring** around it, reflecting how much of the model's available input budget the current session occupies. **From 1.0.0**:
+The chat page's top bar has a **context usage ring** (mini dashboard style), reflecting how much of the model's available input budget the current session occupies; when usage is 0 only a faint track remains.
 
--   **The usage ring shows a percentage**: the center directly shows the percentage used (formatted as a percentage, without scientific notation).
--   **Usage details**: tap the usage ring to view the breakdown, with a single-line display at the top showing "used / total", and below it each component (system prompt, tool definitions, conversation content, etc.) listed with its usage and share.
+-   **Usage details**: tap the usage ring to view the breakdown, led by the percentage in use followed by "used / total", and below it each component (system prompt, tool definitions, conversation content, etc.) listed with its usage and share.
+-   **Current model**: a footnote at the bottom of the details card names the model that this budget belongs to, so you can tell which model the limit refers to.
 
 ## Reset
 

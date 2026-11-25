@@ -166,10 +166,10 @@
     <string name="welcome_entry_preset_git_title">View Git Changes</string>
     <string name="welcome_entry_preset_git_subtitle">Review workspace changes</string>
     <string name="welcome_entry_preset_assist_title">Write Code for Me</string>
-    <string name="welcome_entry_preset_assist_subtitle">Describe the task and AI starts coding</string>
+    <string name="welcome_entry_preset_assist_subtitle">Say what to build; AI codes it</string>
     <string name="welcome_entry_preset_assist_prompt">Please implement the following requirement: </string>
     <string name="welcome_entry_preset_analyze_title">Troubleshoot Errors</string>
-    <string name="welcome_entry_preset_analyze_subtitle">Paste the error and AI locates the fix</string>
+    <string name="welcome_entry_preset_analyze_subtitle">Paste error; AI fixes it</string>
     <string name="welcome_entry_preset_analyze_prompt">Please investigate and fix the following error: </string>
     <!-- New conversation entry: settings / management UI -->
     <string name="settings_welcome_entries">New Chat Entries</string>

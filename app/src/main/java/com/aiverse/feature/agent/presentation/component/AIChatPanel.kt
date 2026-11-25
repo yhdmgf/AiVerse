@@ -1223,8 +1223,20 @@ fun AIChatPanel(
             ?: sessionLastInputTokens.takeIf { it > 0 }
             ?: 0
         val estimated = usage?.estimated ?: (currentSessionId != null && used == 0)
-        if (contextLimit > 0 && currentSessionId != null && (used > 0 || messages.isNotEmpty())) {
-            ContextUsageEstimator.estimate(messages, used, contextLimit, estimated)
+        // 首次进入会话（历史消息尚未加载 / 无事件 / 无真实用量）时返回 usedTokens=0 的明细而非 null：
+        // 与顶栏圆环的兜底一致（圆环 messages 空时 progress=0），且保证明细卡可展开（组件层不再硬编码 0 兜底），
+        // 避免 detail 为 null 时明细卡显示 0% 但圆环有进度的不一致。
+        if (contextLimit > 0 && currentSessionId != null) {
+            if (used > 0 || messages.isNotEmpty()) {
+                ContextUsageEstimator.estimate(messages, used, contextLimit, estimated)
+            } else {
+                ContextUsageDetail(
+                    usedTokens = 0,
+                    budgetTokens = contextLimit,
+                    fileTokens = 0, mcpTokens = 0, thinkingTokens = 0, otherTokens = 0,
+                    estimated = true
+                )
+            }
         } else null
     }
     val canUploadFiles = projectRoot.isNotBlank() && activeModelMetadata?.supportsTools == true

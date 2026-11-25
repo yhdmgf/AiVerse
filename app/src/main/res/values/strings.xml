@@ -117,10 +117,10 @@
     <string name="welcome_entry_preset_git_title">查看 Git 改动</string>
     <string name="welcome_entry_preset_git_subtitle">查看工作区改动</string>
     <string name="welcome_entry_preset_assist_title">帮我写代码</string>
-    <string name="welcome_entry_preset_assist_subtitle">描述需求，AI 直接开写</string>
+    <string name="welcome_entry_preset_assist_subtitle">说需求，AI 直接开写</string>
     <string name="welcome_entry_preset_assist_prompt">请帮我实现下面的需求：</string>
     <string name="welcome_entry_preset_analyze_title">排查报错</string>
-    <string name="welcome_entry_preset_analyze_subtitle">粘贴报错，AI 定位修复</string>
+    <string name="welcome_entry_preset_analyze_subtitle">贴报错，AI 定位修复</string>
     <string name="welcome_entry_preset_analyze_prompt">请帮我排查并修复下面的报错：</string>
     <!-- 新对话入口：设置/管理 UI -->
     <string name="settings_welcome_entries">新对话入口</string>

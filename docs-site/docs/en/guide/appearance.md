@@ -59,7 +59,8 @@ A single tap on the "Optimize input" button hands the content already written in
 
 -   **Sort by usage frequency** (**since 1.0.0**): enabled buttons are arranged from most to least frequently used, so commonly used buttons come first.
 -   **Overflow containment** (**since 1.0.0**): buttons that don't fit are tucked into the "···" menu on the right; tap to expand and view.
--   **Usage ring shows percentage** (**since 1.0.0**): the center of the context usage ring directly shows the percentage in use.
+-   **Two-row layout** (**since 1.0.5**): the first row is the input box and the second row is the tool bar — the current mode shows its name only (tap to pop the mode menu up and pick from auto/build/plan/expert), followed by a thin vertical divider, then the model, workspace, MCP, thinking and other quick entries to its right.
+-   **Send button color** (**since 1.0.5**): the sendable state uses the brand color; running is red (stop), queued messages are orange; in auto mode the mode name stays red, which is the safety-hint semantics.
 
 ## Interface Density
 
@@ -96,7 +97,7 @@ The code font size and the three toggles are all exported / imported with the th
 
 ## New Conversation Entries
 
-When you start a new blank conversation, a row of clickable **quick entry cards** appears below the welcome message (**since 1.0.3**), for example to open the terminal, view Git changes, or fill a frequently used prompt into the input box in one tap. Four entries are preset by default: Open terminal, View Git changes, Write code for me, and Troubleshoot errors.
+When you start a new blank conversation, a row of clickable **quick entry cards** appears below the welcome message (**since 1.0.3**), for example to open the terminal, view Git changes, or fill a frequently used prompt into the input box in one tap. Four entries are preset by default: Open terminal, View Git changes, Write code for me, and Troubleshoot errors. Each card has the same height and wraps its icon in a rounded tray with a faint brand-colored backing (**since 1.0.5**), with the title and the subtitle each on one line.
 
 In "Appearance → New conversation entries" you can add, remove, reorder, enable/disable, and customize icons, **up to 6**:
 

@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -12,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -77,12 +79,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.chatPanelGlassOr
+import com.aiverse.core.theme.glassBorderOr
+import com.aiverse.core.theme.glassOr
 import java.util.Calendar
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlinx.coroutines.delay
 import com.aiverse.R
 import com.aiverse.core.theme.Radius
@@ -312,7 +319,8 @@ internal fun ChatHeader(
                     tokenEstimated = tokenEstimated,
                     detail = contextUsageDetail,
                     thresholdPercent = compactionThresholdPercent,
-                    onCompact = onCompactContext
+                    onCompact = onCompactContext,
+                    modelName = modelName
                 )
                 // ··· 更多菜单：新建会话 / 打开 Git / 打开终端 收进下拉菜单。
                 HeaderOverflowMenu(
@@ -561,14 +569,32 @@ private fun HeaderContextUsageButton(
     tokenEstimated: Boolean,
     detail: ContextUsageDetail?,
     thresholdPercent: Int,
-    onCompact: () -> Unit
+    onCompact: () -> Unit,
+    modelName: String? = null
 ) {
-    var bubbleExpanded by remember { mutableStateOf(false) }
-    // 圆环中心相对根窗口的 X 坐标（px），用于把浮窗水平居中到屏幕。
+    // MutableTransitionState 驱动开合：动画中途翻转（快速反复点）时 Compose 会正确衔接当前进度，
+    // 不会出现 exit 未播完就 enter 的竞争（旧的 mutableStateOf + AnimatedVisibility 在此会卡住）。
+    val bubbleExpanded = remember { MutableTransitionState(false) }
+    // 圆环中心相对根窗口的 X 坐标（px），用于把浮窗水平对齐到圆环并钳制在屏幕内。
     var ringCenterX by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
+    val t = LocalUIDensityTokens.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val screenCenterX = with(density) { (screenWidthDp / 2f).dp.roundToPx() }
+    val screenWidthPx = with(density) { (screenWidthDp).dp.roundToPx() }
+    // 浮窗实际宽度（px），用于水平钳制与屏幕居中；初始给一个合理估计（最大宽 340dp），
+    // 避免首次渲染用 0 宽度导致浮窗中心定位偏位，实际值由 ComicUsageBubble.onSizeChanged 更新。
+    var bubbleWidthPx by remember { mutableStateOf(with(density) { 340.dp.roundToPx() }) }
+    // 首次进入新会话时 detail 为 null（无消息、无真实用量），此时圆环显示但点击无反应，体验断裂。
+    // 用空态兜底让点击始终生效：明细卡显示 0% 用量，用户能点开确认当前未占用。
+    val effectiveDetail = detail ?: ContextUsageDetail(
+        usedTokens = 0,
+        budgetTokens = 0,
+        fileTokens = 0,
+        mcpTokens = 0,
+        thinkingTokens = 0,
+        otherTokens = 0,
+        estimated = tokenEstimated
+    )
     Box(
         modifier = Modifier.onGloballyPositioned { coords ->
             ringCenterX = coords.positionInRoot().x + coords.size.width / 2f
@@ -577,30 +603,45 @@ private fun HeaderContextUsageButton(
         ContextUsageRing(
             progress = progress,
             tokenEstimated = tokenEstimated,
-            onToggle = { if (detail != null) bubbleExpanded = !bubbleExpanded }
+            onToggle = { bubbleExpanded.targetState = !bubbleExpanded.targetState }
         )
-        if (detail != null) {
-            val dropOffset = with(density) { 40.dp.roundToPx() }
+        if (effectiveDetail != null) {
+            val dropOffset = with(density) { t.scale(32).roundToPx() }
+            // 横向：浮窗水平居中到屏幕（不随圆环位置偏移，观感最稳定），并钳制在屏幕左右边距内。
+            // Popup 的 Alignment.TopCenter 使浮窗中心对齐圆环中心，offset.x 在此基准上平移到屏幕居中。
+            val horizontalOffset = run {
+                val bubbleWidth = bubbleWidthPx
+                val screenCenterX = screenWidthPx / 2
+                // 浮窗水平居中到屏幕时其左边缘的屏幕坐标。
+                val centeredLeft = screenCenterX - bubbleWidth / 2
+                // 钳制到屏幕内（左右各留一点边距，避免贴边）。
+                val clampedLeft = centeredLeft.coerceIn(0, (screenWidthPx - bubbleWidth).coerceAtLeast(0))
+                // 从「圆环中心对齐」基准平移到屏幕居中的左边缘。
+                val ringCenter = ringCenterX.roundToInt()
+                clampedLeft - (ringCenter - bubbleWidth / 2)
+            }
             Popup(
                 alignment = Alignment.TopCenter,
-                offset = IntOffset(screenCenterX - ringCenterX.roundToInt(), dropOffset),
-                onDismissRequest = { bubbleExpanded = false },
+                offset = IntOffset(horizontalOffset, dropOffset),
+                onDismissRequest = { bubbleExpanded.targetState = false },
                 // 仅展开期间可拦截外部点击/返回；收起后不再捕获，避免空弹层挡滚动。
-                properties = PopupProperties(focusable = bubbleExpanded)
+                properties = PopupProperties(focusable = bubbleExpanded.targetState)
             ) {
                 // 展开/收起带淡入淡出 + 高度过渡，不再硬切弹出消失。
                 // 浮窗位于圆环下方（圆环在浮窗顶部一侧），故开合统一锚定顶部：
                 // 展开时自顶部向下生长，收起时向上收缩回圆环，两个方向一致。
                 AnimatedVisibility(
-                    visible = bubbleExpanded,
+                    visibleState = bubbleExpanded,
                     enter = fadeIn(tween(200)) + expandVertically(tween(200), expandFrom = Alignment.Top),
                     exit = fadeOut(tween(200)) + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
                 ) {
                     ComicUsageBubble(
-                        detail = detail,
+                        detail = effectiveDetail,
                         onCompact = onCompact,
-                        onClose = { bubbleExpanded = false },
-                        thresholdPercent = thresholdPercent
+                        onClose = { bubbleExpanded.targetState = false },
+                        thresholdPercent = thresholdPercent,
+                        modelName = modelName,
+                        onSizeChanged = { bubbleWidthPx = it.width }
                     )
                 }
             }
@@ -616,10 +657,14 @@ private fun ComicUsageBubble(
     detail: ContextUsageDetail,
     onCompact: () -> Unit,
     onClose: () -> Unit,
-    thresholdPercent: Int
+    thresholdPercent: Int,
+    modelName: String? = null,
+    onSizeChanged: (androidx.compose.ui.unit.IntSize) -> Unit = {}
 ) {
     Surface(
-        modifier = Modifier.widthIn(max = 340.dp),
+        modifier = Modifier
+            .widthIn(max = 340.dp)
+            .onGloballyPositioned { onSizeChanged(it.size) },
         shape = RoundedCornerShape(LocalUIDensityTokens.current.cardCorner),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
@@ -630,15 +675,16 @@ private fun ComicUsageBubble(
             detail = detail,
             onCompact = onCompact,
             onClose = onClose,
-            thresholdPercent = thresholdPercent
+            thresholdPercent = thresholdPercent,
+            modelName = modelName.orEmpty()
         )
     }
 }
 
 /**
- * 上下文用量环（顶栏常驻）：环内居中显示占用百分比；
+ * 上下文用量环（顶栏常驻）：26dp 迷你仪表盘，270° 弧从左下顺时针到右下、底部留 90° 缺口；
  * 颜色按占用程度：无占用白色、≤50% 绿色、≤75% 黄色、>75% 红色。
- * 点击触发 onToggle（弹出漫画气泡）。
+ * 无占用时只留淡轨道，弧与端帽均不画。点击触发 onToggle（弹出漫画气泡）。
  */
 @Composable
 private fun ContextUsageRing(
@@ -646,7 +692,7 @@ private fun ContextUsageRing(
     tokenEstimated: Boolean,
     onToggle: () -> Unit
 ) {
-    val ringColor = contextRingColor(progress)
+    val t = LocalUIDensityTokens.current
     val trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     val usageLabel = stringResource(
         if (tokenEstimated) R.string.chat_context_usage_estimated else R.string.chat_context_usage,
@@ -654,44 +700,55 @@ private fun ContextUsageRing(
     )
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(t.scale(26))
             .clip(CircleShape)
             .clickable(onClick = onToggle)
             .semantics { contentDescription = usageLabel },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val stroke = 3.dp.toPx()
+            val stroke = t.scale(3).toPx()
             val arcSize = size.minDimension - stroke
             val topLeft = androidx.compose.ui.geometry.Offset(stroke / 2f, stroke / 2f)
+            val arcStyle = Stroke(width = stroke, cap = StrokeCap.Round)
+            val capCenter = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+            val radius = arcSize / 2f
             // 无占用时轨道用灰色描边而非纯白：白色在浅色主题下不可见，会让圆环看起来"消失"。
             drawArc(
                 color = trackColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
+                startAngle = 135f,
+                sweepAngle = 270f,
                 useCenter = false,
                 topLeft = topLeft,
                 size = androidx.compose.ui.geometry.Size(arcSize, arcSize),
-                style = Stroke(width = stroke, cap = StrokeCap.Round)
+                style = arcStyle
             )
             if (progress > 0f) {
+                val ringColor = contextRingColor(progress)
+                val sweep = 270f * progress.coerceIn(0f, 1f)
                 drawArc(
                     color = ringColor,
-                    startAngle = -90f,
-                    sweepAngle = 360f * progress,
+                    startAngle = 135f,
+                    sweepAngle = sweep,
                     useCenter = false,
                     topLeft = topLeft,
                     size = androidx.compose.ui.geometry.Size(arcSize, arcSize),
-                    style = Stroke(width = stroke, cap = StrokeCap.Round)
+                    style = arcStyle
                 )
+                // 弧端圆点：起点固定画在仪表盘开口左侧（135°），终点随进度推进。
+                listOf(135f, 135f + sweep).forEach { angle ->
+                    val rad = Math.toRadians(angle.toDouble())
+                    drawCircle(
+                        color = ringColor,
+                        radius = stroke / 2f,
+                        center = androidx.compose.ui.geometry.Offset(
+                            capCenter.x + radius * cos(rad).toFloat(),
+                            capCenter.y + radius * sin(rad).toFloat()
+                        )
+                    )
+                }
             }
         }
-        // 环内居中百分比数字：颜色跟随占用程度（无占用时用可读的浅色，避免白字在浅色主题下不可见）。
-        Text(
-            text = stringResource(R.string.chat_context_usage_percent, (progress * 100).toInt()),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (progress > 0f) ringColor else MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -971,7 +1028,7 @@ internal fun WelcomeState(
     }
 }
 
-/** 快捷入口卡片：图标 + 标题 + 副标题（副标题可空，空则不占位）。disabled 时置灰且点击无动作。 */
+/** 快捷入口卡片：图标 + 标题 + 副标题。四张卡片固定等高（[UIDensityTokens.welcomeEntryCardHeight]），disabled 时置灰且点击无动作。 */
 @Composable
 private fun WelcomeEntryCard(
     entry: WelcomeEntry,
@@ -979,21 +1036,28 @@ private fun WelcomeEntryCard(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val t = LocalUIDensityTokens.current
+    val semantic = MaterialTheme.semanticColors
     val cardDesc = stringResource(R.string.welcome_entry_card_desc, entry.title)
+    // 卡片底色：玻璃档走磨砂玻璃面，其它档用入口卡片专属实色底（比通用 surfaceVariant 更贴近页面底色）；
+    // 描边只在玻璃档生效，实色档自动透明（与输入框一致）。
+    val cardShape = RoundedCornerShape(t.cardCorner)
     PressableSurface(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
+            .height(t.welcomeEntryCardHeight)
             .semantics { contentDescription = cardDesc }
-            .alpha(if (enabled) 1f else 0.45f),
-        shape = RoundedCornerShape(LocalUIDensityTokens.current.cardCorner),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        contentPadding = PaddingValues(Spacing.md)
+            .alpha(if (enabled) 1f else 0.45f)
+            .border(BorderStroke(t.scale(1), glassBorderOr(semantic.surfaceGlassBorder)), cardShape),
+        shape = cardShape,
+        color = glassOr(semantic.surfaceGlass, semantic.welcomeEntryCardSurface),
+        contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
-            // 撑满卡片内容区并让文本列占剩余宽度：各卡片图标列对齐、文本在剩余宽度内省略，避免内容居中导致参差。
+            // 固定卡高后内容居中：各卡片图标列对齐、文本在剩余宽度内省略，避免内容居中导致参差。
             modifier = Modifier.fillMaxWidth()
         ) {
             WelcomeEntryIcon(entry)
@@ -1005,13 +1069,12 @@ private fun WelcomeEntryCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // 副标题固定 2 行高度（不足用空白撑满）：各入口 subtitle 行数不同时卡片高度仍一致，四入口对齐。
+                // 副标题单行：卡片已固定等高，不再用 minLines 撑高；文案过长时单行省略。
                 Text(
                     text = entry.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    minLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -1022,47 +1085,57 @@ private fun WelcomeEntryCard(
 /**
  * 快捷入口图标：EMOJI/TEXT 用文本渲染，IMAGE 用 coil 异步图片加载（缩略圆角），
  * VECTOR 用 Feather 本地矢量图标（与项目其它页面的图标惯例一致）。
+ * 四类统一套 40dp 圆角托盘（8% 主色底）：图标本体 20dp 居中，设置页预览与空态观感一致。
  */
 @Composable
 private fun WelcomeEntryIcon(entry: WelcomeEntry) {
-    when (entry.iconKind) {
-        WelcomeIconKind.IMAGE -> {
-            if (entry.iconValue.isNotBlank()) {
-                AsyncImage(
-                    // iconValue 为应用私有目录图片绝对路径，用 File 作为 model 让 coil 可靠加载本地文件。
-                    model = java.io.File(entry.iconValue),
+    val t = LocalUIDensityTokens.current
+    Box(
+        modifier = Modifier
+            .size(t.scale(40))
+            .clip(RoundedCornerShape(t.buttonCorner))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+        contentAlignment = Alignment.Center
+    ) {
+        when (entry.iconKind) {
+            WelcomeIconKind.IMAGE -> {
+                if (entry.iconValue.isNotBlank()) {
+                    AsyncImage(
+                        // iconValue 为应用私有目录图片绝对路径，用 File 作为 model 让 coil 可靠加载本地文件。
+                        model = java.io.File(entry.iconValue),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(t.scale(20))
+                            .clip(RoundedCornerShape(t.buttonCorner))
+                    )
+                }
+            }
+            WelcomeIconKind.VECTOR -> {
+                Icon(
+                    imageVector = welcomeEntryVectorIcon(entry.iconValue),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(LocalUIDensityTokens.current.buttonCorner))
+                    modifier = Modifier.size(t.scale(20)),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
-        }
-        WelcomeIconKind.VECTOR -> {
-            Icon(
-                imageVector = welcomeEntryVectorIcon(entry.iconValue),
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-        // 文字图标：≤3 字，以文本渲染 iconValue。
-        WelcomeIconKind.TEXT -> {
-            Text(
-                text = entry.iconValue,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        // EMOJI：旧数据兼容兜底；加载时已迁移为 VECTOR，此处仅渲染默认矢量图标。
-        else -> {
-            Icon(
-                imageVector = welcomeEntryVectorIcon(entry.iconValue),
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            // 文字图标：≤3 字，以文本渲染 iconValue。
+            WelcomeIconKind.TEXT -> {
+                Text(
+                    text = entry.iconValue,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // EMOJI：旧数据兼容兜底；加载时已迁移为 VECTOR，此处仅渲染默认矢量图标。
+            else -> {
+                Icon(
+                    imageVector = welcomeEntryVectorIcon(entry.iconValue),
+                    contentDescription = null,
+                    modifier = Modifier.size(t.scale(20)),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

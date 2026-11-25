@@ -1148,7 +1148,12 @@ class StatefulAgentWorkflow @Inject constructor(
         private val emit: suspend (AgentEvent) -> Unit
     ) {
         private companion object {
-            const val DELTA_THROTTLE_MS = 60L
+            // 流式增量推送节流：上游每个 chunk 都携带完整累积文本，逐条推送会让 ViewModel 端每秒重建几十次状态。
+            // 按时间窗口合并，窗口内只保留最新累积文本，到窗口边界才发送。
+            // 60ms 在长表格/大段流式时会显得滞后（表格行快速到达但 UI 要等窗口边界才重绘，
+            // 且 MutableStateFlow 的 conflate 会进一步推迟重组，导致“等输出完/调用工具才渲染”的卡顿感）。
+            // 降到 30ms 提高渲染频率，让表格行到达后尽快渲染、其余内容保持边写边渲。
+            const val DELTA_THROTTLE_MS = 30L
         }
 
         /** 累积正文（节流推送与最终落库都用它）。 */

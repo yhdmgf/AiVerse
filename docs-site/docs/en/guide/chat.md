@@ -57,7 +57,7 @@ Favorites are for saving important message content to review later in one place.
 
 From left to right:
 
--   **Mode button**: cycles between BUILD, PLAN, and AUTO, see [The Four Modes](https://aivapp.cn/md/guide/modes.md).
+-   **Mode button**: shows the current mode name; tap it to pop the mode menu up and pick from auto, build, plan, and expert. See [The Four Modes](https://aivapp.cn/md/guide/modes.md).
 -   **Model button**: shows the current model; tap to pop up a selection dialog. There's a search box at the top for fuzzy filtering, models are grouped by provider, and tapping a group header collapses or expands it (the collapsed state is remembered and kept when you reopen the dialog or restart; matched groups expand automatically while searching). Each row is labeled with capability tags (`Image`, `Tools`, input/output length); tap to switch.
 -   **Workspace button**: shows the current workspace name; tap to pop up the workspace management panel (see below).
 -   **File button**: upload a file as an attachment that the AI can read the contents of.
