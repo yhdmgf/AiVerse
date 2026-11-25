@@ -125,6 +125,7 @@ import com.aiverse.feature.agent.presentation.component.chatImageLoader
 import com.aiverse.feature.agent.presentation.component.motionAwarePeek
 import com.aiverse.feature.agent.presentation.component.mediaFileResolver
 import com.aiverse.feature.agent.presentation.component.openSentAttachment
+import com.aiverse.feature.agent.presentation.component.loadDirectoryInfoSync
 import com.aiverse.feature.launch.presentation.LaunchGate
 import com.aiverse.feature.editor.presentation.CodeEditorScreen
 import com.aiverse.feature.editor.presentation.EditorLeaveGuard
@@ -886,6 +887,15 @@ fun AppNavigation(
                 agentViewModel.pasteBrowseEntry(targetDir, onResult)
             },
             onClearClipboard = { agentViewModel.clearBrowseClipboard() },
+            onLoadDirectoryInfo = { path, onResult ->
+                // 目录大小在 IO 后台递归统计（不侵入 FileAccessProvider 接口），完成后回主线程回填。
+                scope.launch {
+                    val info = withContext(Dispatchers.IO) {
+                        runCatching { loadDirectoryInfoSync(agentViewModel.fileAccess, path) }.getOrNull()
+                    }
+                    onResult(info)
+                }
+            },
             workspaceName = currentWorkspace?.name.orEmpty(),
             onAddLocalFolder = { uri ->
                 agentViewModel.addLocalFolder(uri) { ok ->

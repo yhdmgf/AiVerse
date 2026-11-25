@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +71,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import com.aiverse.core.ui.AppTextField
 import com.aiverse.core.ui.BatchDeleteConfirmDialog
 import com.aiverse.core.ui.dialogTextFieldColors
+import com.aiverse.core.util.TEXT_EXTS
+import com.aiverse.core.util.extToMimeType
 import com.aiverse.feature.onboarding.domain.OnboardingStep
 import com.aiverse.feature.onboarding.presentation.onboardingTarget
 import androidx.compose.runtime.Composable
@@ -142,6 +145,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.feature.agent.presentation.FileTreeRoot
+import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.core.ui.ChevronRotationStyle
@@ -278,6 +282,8 @@ fun ChatDrawerContent(
     onClearSearch: () -> Unit,
     onNewChat: () -> Unit,
     onOpenSearchHit: (ChatSearchHit) -> Unit,
+    // 文件树「属性」：目录大小由持有数据层的父层在 IO 后台统计后回填（path → 回调结果）。
+    onLoadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     // tab 与展开状态进 saveable：大屏下侧栏收起后整棵子树会离开组合（见 MainActivity 的
@@ -565,7 +571,8 @@ fun ChatDrawerContent(
                     pluginEntries = fileTreeMenuEntries,
                     pluginLanguageTag = pluginLanguageTag,
                     onPluginRunAction = runPluginFileTreeAction,
-                    onBatchDelete = onDeleteEntry
+                    onBatchDelete = onDeleteEntry,
+                    onLoadDirectoryInfo = onLoadDirectoryInfo
                 )
             }
         }
@@ -1204,7 +1211,8 @@ private fun FileBrowserTab(
     pluginEntries: List<PluginUiEntry>,
     pluginLanguageTag: String,
     onPluginRunAction: (PluginUiEntry, String, Boolean) -> Unit,
-    onBatchDelete: (String) -> Unit
+    onBatchDelete: (String) -> Unit,
+    onLoadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit
 ) {
     // 编辑模式：点击编辑按钮进入，行前置复选框可勾选；选中后可批量分享/导出/移动/删除
     var editMode by remember { mutableStateOf(false) }
@@ -1269,6 +1277,8 @@ private fun FileBrowserTab(
     var menuNode by remember { mutableStateOf<FileTreeNode?>(null) }
     var pendingRename by remember { mutableStateOf<FileTreeNode?>(null) }
     var pendingDelete by remember { mutableStateOf<FileTreeNode?>(null) }
+    // 「属性」抽屉待展示节点：菜单先收再弹，复用 onRename/onDelete 的过渡模式。
+    var pendingProps by remember { mutableStateOf<FileTreeNode?>(null) }
     // 多选批量删除二次确认弹窗可见性（复用设置页 BatchDeleteConfirmDialog 模式）
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     val hScroll = rememberScrollState()
@@ -1892,6 +1902,10 @@ private fun FileBrowserTab(
                 menuNode = null
                 onSendSelectionToChat(setOf(node.path))
             },
+            onProps = {
+                menuNode = null
+                pendingProps = node
+            },
             onDismiss = { menuNode = null }
         )
     }
@@ -1934,6 +1948,14 @@ private fun FileBrowserTab(
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             }
+        )
+    }
+
+    pendingProps?.let { node ->
+        FilePropertiesSheet(
+            node = node,
+            onDismiss = { pendingProps = null },
+            onLoadDirectoryInfo = onLoadDirectoryInfo
         )
     }
 }
@@ -2085,6 +2107,7 @@ private fun FileTreeActionSheet(
     onShare: () -> Unit,
     onExport: () -> Unit,
     onSendToChat: () -> Unit,
+    onProps: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AdaptiveModalBottomSheet(
@@ -2198,6 +2221,13 @@ private fun FileTreeActionSheet(
                     onClick = onDelete
                 )
             }
+            // 「属性」：常规操作末尾（删除项之后、插件入口之前），根节点也显示。
+            SheetActionRow(
+                icon = Icons.Outlined.Info,
+                label = stringResource(R.string.file_browser_properties),
+                tint = MaterialTheme.colorScheme.onSurface,
+                onClick = onProps
+            )
             onRemoveLocalFolder?.let { action ->
                 SheetActionRow(
                     icon = FeatherIcons.X,
@@ -2276,7 +2306,7 @@ private fun FileTreeRow(
         modifier = modifier
             .width(rowWidth)
             .background(if (selectionState > 0) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Radius.md))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = Spacing.xs + 2.dp)
             .padding(start = Spacing.sm, end = Spacing.md),
@@ -2587,6 +2617,163 @@ private fun SheetActionRow(
         }
     }
 }
+
+/** 文件树「属性」抽屉：类型 / 大小 / 位置 / 修改时间 / 权限。文件夹大小由父层在 IO 后台递归统计后回填。 */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun FilePropertiesSheet(
+    node: FileTreeNode,
+    onDismiss: () -> Unit,
+    onLoadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit
+) {
+    var dirInfo by remember(node.path) { mutableStateOf<DirectoryInfo?>(null) }
+    var dirLoaded by remember(node.path) { mutableStateOf(false) }
+    LaunchedEffect(node.path) {
+        if (node.entry.isDirectory) {
+            onLoadDirectoryInfo(node.path) { info ->
+                dirInfo = info
+                dirLoaded = true
+            }
+        }
+    }
+    val sizeText = if (node.entry.isDirectory) {
+        val info = dirInfo
+        when {
+            info != null -> stringResource(
+                R.string.file_properties_folder_size,
+                info.fileCount,
+                formatFileSize(info.totalSize)
+            )
+            dirLoaded -> stringResource(R.string.file_properties_unknown)
+            else -> stringResource(R.string.file_properties_size_calculating)
+        }
+    } else {
+        formatFileSize(node.entry.size)
+    }
+    val typeText = if (node.entry.isDirectory) {
+        stringResource(R.string.file_properties_type_directory)
+    } else {
+        val name = node.entry.name
+        // 纯文本类扩展名刻意不收进 EXT_MIME_TYPES，这里按属性「类型」语义归成 text/plain。
+        if (name.substringAfterLast('.') in TEXT_EXTS) "text/plain"
+        else extToMimeType(name) ?: "application/octet-stream"
+    }
+    AdaptiveModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = Spacing.xl)
+        ) {
+            Text(
+                text = node.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(horizontal = Spacing.lg)
+                    .padding(bottom = Spacing.md)
+            )
+            PropertyRow(
+                label = stringResource(R.string.file_properties_type),
+                value = typeText
+            )
+            PropertyRow(
+                label = stringResource(R.string.file_properties_size),
+                value = sizeText
+            )
+            PropertyRow(
+                label = stringResource(R.string.file_properties_location),
+                value = node.path
+            )
+            val modifiedPattern = stringResource(R.string.file_properties_modified_format)
+            // 格式化器只依赖 lastModified 与格式字符串，重组不重复 new SimpleDateFormat。
+            val modifiedText = remember(node.entry.lastModified, modifiedPattern) {
+                SimpleDateFormat(modifiedPattern, Locale.getDefault()).format(Date(node.entry.lastModified))
+            }
+            PropertyRow(
+                label = stringResource(R.string.file_properties_modified),
+                value = modifiedText
+            )
+            if (node.entry.permissions.isNotBlank()) {
+                PropertyRow(
+                    label = stringResource(R.string.file_properties_permissions),
+                    value = node.entry.permissions
+                )
+            }
+        }
+    }
+}
+
+/** 属性抽屉的一行：label 左侧弱化色、value 右侧常规色；label 列宽为密度缩放的基准 96dp（结构性最小宽度）。 */
+@Composable
+private fun PropertyRow(label: String, value: String) {
+    val t = LocalUIDensityTokens.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(t.scale(96))
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/** 文件大小展示：GB/MB/KB 统一保留 1 位小数，B 原样。属性抽屉专用口径（不与附件/镜像下载的 formatBytes 合并）。 */
+private fun formatFileSize(bytes: Long): String {
+    val kb = 1024.0
+    val mb = kb * 1024.0
+    val gb = mb * 1024.0
+    return when {
+        bytes >= gb -> String.format(Locale.US, "%.1f GB", bytes / gb)
+        bytes >= mb -> String.format(Locale.US, "%.1f MB", bytes / mb)
+        bytes >= kb -> String.format(Locale.US, "%.1f KB", bytes / kb)
+        else -> "$bytes B"
+    }
+}
+
+/** 目录属性统计：总大小（字节）与文件个数。文件夹「大小」由持有数据层的父层在 IO 后台统计后回填。 */
+data class DirectoryInfo(val totalSize: Long, val fileCount: Int)
+
+/** 递归统计目录总大小与文件个数（含全部子目录）。[FileAccessProvider.listFiles] 同步阻塞，调用方须在 IO 线程执行。
+ * 深度上限 [MAX_DIRECTORY_INFO_DEPTH] 防符号链接成环导致无限递归；失败返回 null（展示层回退「未知」）。 */
+internal fun loadDirectoryInfoSync(fileAccess: FileAccessProvider, path: String): DirectoryInfo? =
+    runCatching {
+        var totalSize = 0L
+        var fileCount = 0
+        fun walk(dir: String, depth: Int) {
+            if (depth >= MAX_DIRECTORY_INFO_DEPTH) return
+            for (entry in fileAccess.listFiles(dir)) {
+                val child = if (dir.endsWith("/")) dir + entry.name else "$dir/${entry.name}"
+                if (entry.isDirectory) walk(child, depth + 1) else {
+                    totalSize += entry.size
+                    fileCount++
+                }
+            }
+        }
+        walk(path, 0)
+        DirectoryInfo(totalSize, fileCount)
+    }.getOrNull()
+
+/** 目录属性递归统计的深度上限：足够覆盖实际工程深度，同时防止符号链接成环导致的无限递归。 */
+private const val MAX_DIRECTORY_INFO_DEPTH = 64
 
 /** 侧边栏会话分组：同一时间组（今天 / 昨天 / 7天内 / 30天内 / 月份）内的会话，按最后回复时间降序。 */
 internal data class SessionGroup(

@@ -1738,26 +1738,50 @@ class AIAgentViewModel @Inject constructor(
     }
 
     /**
+     * 一次已处理的失败记录（去重 + 清理用）。
+     * @param messageId 关联到的「触发失败消息」id；null 表示无关联（走会话末尾兜底）。
+     * @param message 失败文案。
+     */
+    private data class HandledAgentError(val messageId: String?, val message: String)
+
+    private val handledAgentErrors = mutableMapOf<String, HandledAgentError>()
+
+    /**
      * 收集 AgentRunManager 的会话错误状态（LLM 调用失败、工具批处理异常等），
      * 把错误文本填充到 [unattachedErrors]，供 AIChatPanel 的 ErrorBubble 展示。
      * （B2a 运行器重构后填充点缺失，导致模型调用失败等错误一直不显示。）
      */
-    private val handledAgentErrors = mutableMapOf<String, String>()
-
     init {
         viewModelScope.launch {
             agentRunManager.agentStates.collect { states ->
-                // 会话已脱离 Error（重新运行 / 恢复）时清除记录，使下一次相同错误能重新提示。
+                // 会话已脱离 Error（重新运行 / 恢复）时清除记录与对应气泡，使下一次相同错误能重新提示。
                 handledAgentErrors.keys.removeAll { sid ->
-                    states[sid] !is AgentUIState.Error
+                    if (states[sid] !is AgentUIState.Error) {
+                        handledAgentErrors[sid]?.messageId?.let { mid ->
+                            _messageErrors.value = _messageErrors.value - mid
+                        }
+                        _unattachedErrors.value = _unattachedErrors.value - sid
+                        true
+                    } else {
+                        false
+                    }
                 }
                 states.forEach { (sid, state) ->
                     if (state is AgentUIState.Error && state.message.isNotBlank()) {
-                        if (handledAgentErrors[sid] == state.message) return@forEach
-                        handledAgentErrors[sid] = state.message
-                        // 统一走「会话末尾错误气泡」：失败消息可能未落库，按消息 id 关联渲染不可靠，
-                        // 按 sessionId 关联（尾部 ErrorBubble）能稳定显示。
-                        _unattachedErrors.value = _unattachedErrors.value + (sid to state.message)
+                        val mid = state.messageId
+                        val existing = handledAgentErrors[sid]
+                        // 同一轮失败（同关联消息 id、同文案）重复上报时只记一次。
+                        if (existing != null && existing.messageId == mid && existing.message == state.message) return@forEach
+                        handledAgentErrors[sid] = HandledAgentError(mid, state.message)
+                        if (mid != null) {
+                            // 可关联到触发失败的用户消息（Issue #237）：错误气泡挂在该消息下方随消息流滚动，
+                            // 并清掉同会话的尾部兜底气泡（若有）。
+                            _messageErrors.value = _messageErrors.value + (mid to state.message)
+                            _unattachedErrors.value = _unattachedErrors.value - sid
+                        } else {
+                            // 连用户消息都关联不到（如内部续跑轮失败）：走会话末尾兜底气泡。
+                            _unattachedErrors.value = _unattachedErrors.value + (sid to state.message)
+                        }
                     }
                 }
             }

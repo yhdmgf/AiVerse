@@ -78,6 +78,7 @@ import com.aiverse.core.tts.ReadProgress
 import com.aiverse.core.ui.ChevronRotationStyle
 import com.aiverse.core.ui.ContentWidth
 import com.aiverse.core.ui.ExpandableChevronIcon
+import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.AgentUIMessage
 import com.aiverse.feature.agent.presentation.hasVisibleContent
 import com.aiverse.feature.agent.presentation.MessageRole
@@ -262,6 +263,8 @@ internal fun AgentMessageItem(
     /** 整轮回复仍在进行中（AI 多步工具调用尚未全部完成）：整轮期间隐藏所有消息的朗读按钮，
      *  待整轮结束才显示，避免中间步骤消息被误判为已完成而提前挂出喇叭。 */
     turnBusy: Boolean = false,
+    /** 消息气泡里图片大卡的「插入聊天」动作回调；工具卡片 / 非图片附件不传即不展示该动作。 */
+    onInsertAttachment: ((AgentAttachment) -> Unit)? = null,
 ) {
     if (message.isCompactionMarker) {
         // 压缩内部锚点不再渲染分隔线：摘要卡片已提供压缩反馈，避免与卡片重复。
@@ -498,7 +501,11 @@ internal fun AgentMessageItem(
                     }
                 }
                 if ((isUser || message.role == MessageRole.ASSISTANT) && hasAttachments) {
-                    MessageAttachmentList(attachments = message.attachments)
+                    MessageAttachmentList(
+                        attachments = message.attachments,
+                        compact = false,
+                        onInsertAttachment = onInsertAttachment
+                    )
                 }
                 // 气泡下方的元信息行（工具消息不显示）：用户消息每条都常驻「时间 + 复制/回退/更多」，
                 // 助手消息只挂整段会话最新的一条，避免每条回复下面都吊一排按钮把聊天记录割碎。

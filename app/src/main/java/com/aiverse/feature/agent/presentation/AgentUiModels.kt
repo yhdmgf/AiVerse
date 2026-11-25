@@ -84,7 +84,13 @@ sealed class AgentUIState {
     object Loading : AgentUIState()
     object Streaming : AgentUIState()
     data class Result(val status: WorkflowStatus) : AgentUIState()
-    data class Error(val message: String) : AgentUIState()
+    /**
+     * 失败状态。
+     * @param message 本地化失败文案（已由 [AgentUIState] 消费方直接展示）。
+     * @param messageId 可关联到「触发失败的消息」时携带该消息 id（Issue #237）：错误气泡挂在对应
+     *   消息下方随消息流滚动；为 null（默认）表示无法关联（如内部续跑轮失败），走会话末尾兜底气泡。
+     */
+    data class Error(val message: String, val messageId: String? = null) : AgentUIState()
 }
 
 /** 文件树同级目录条目的排序方式（树内同级排序，目录始终在前）。 */

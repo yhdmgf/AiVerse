@@ -90,6 +90,17 @@ private fun decodeBounds(what: String, decode: (BitmapFactory.Options) -> Bitmap
 }
 
 /**
+ * 只读图片宽高（像素），不真正分配像素内存。
+ *
+ * 供内联大图卡计算宽高比（横图封顶 4:3、竖图自然比例）使用：只读 [BitmapFactory.Options.inJustDecodeBounds]
+ * 不申请像素内存，长截图 / 超大图也不会 OOM。非图片、文件不存在或解码失败返回 null。
+ */
+fun readImageSize(path: String): Pair<Int, Int>? {
+    if (path.isBlank()) return null
+    return decodeBounds(path) { BitmapFactory.decodeFile(path, it) }
+}
+
+/**
  * 按采样档位解码，OOM 时降一档重试。
  *
  * [OutOfMemoryError] 是 `Error` 不是 `Exception`，`runCatching {}` 与 `catch (e: Exception)` 都
