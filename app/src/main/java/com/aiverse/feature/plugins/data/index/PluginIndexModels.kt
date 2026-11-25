@@ -35,16 +35,15 @@ data class PluginIndexPlugin(
     val author: String,
     val repository: String,
     val logo: String? = null,
+    /** 清单里的内置图标名（如 `zap`、`users`）；没有图片 logo 时用它选内置图标。 */
+    val icon: String? = null,
     val homepage: String? = null,
     val license: String? = null,
     val tags: List<String> = emptyList(),
     val version: String? = null,
     @SerialName("min_app_version") val minAppVersion: String? = null,
-    /**
-     * 旧格式（用户仓库 index.json 顶层数组）携带的更新时间戳，新格式无此字段。
-     * 仅用于旧格式兼容读取；新格式解析时保持默认 [null]。
-     */
-    val lastUpdate: Long? = null
+    /** 直链托管的包地址；有值时不再查作者仓库的 Release。 */
+    @SerialName("package_url") val packageUrl: String? = null
 )
 
 /**

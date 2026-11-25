@@ -71,9 +71,10 @@ class PluginIndexClient @Inject constructor(
     suspend fun fetchIndex(source: PluginIndexSource, forceRefresh: Boolean = false): PluginIndexSnapshot =
         withContext(Dispatchers.IO) {
             val cached = cacheFile(source)
-            // 镜像优先（gh.aivapp.cn），失败自动回退直连 GitHub 原始地址。
+            // 索引与元数据是几 KB 的 raw 文件，直连本来就快；走代理反而常被换成 HTML 错误页，
+            // 表现为「index.json 解析失败」。因此索引直连，不套镜像（镜像仅用于包下载）。
             val bytes = try {
-                getBytes(listOf(mirrorUrl(source.indexUrl), source.indexUrl), MAX_INDEX_BYTES, noCache = forceRefresh)
+                getBytes(source.indexUrl, MAX_INDEX_BYTES, noCache = forceRefresh)
             } catch (e: IOException) {
                 if (forceRefresh) throw e
                 val fallback = readCache(cached) ?: throw e
@@ -104,6 +105,16 @@ class PluginIndexClient @Inject constructor(
      * 不再回退 GitHub Release：`packages/` 目录不存在或没有目标文件时直接报错。
      */
     suspend fun resolveRelease(plugin: PluginIndexPlugin): PluginReleaseAsset = withContext(Dispatchers.IO) {
+        // 商店直接托管包时按直链下载，跳过 Release 查找（不依赖作者仓库/改名跳转）。
+        plugin.packageUrl?.takeIf { it.isNotBlank() }?.let { direct ->
+            return@withContext PluginReleaseAsset(
+                version = plugin.version.orEmpty(),
+                name = "${plugin.id}_${plugin.version ?: "latest"}.zip",
+                url = direct,
+                // 直链在索引里不带大小，下载时按上限约束
+                size = 0L
+            )
+        }
         val (owner, repo) = parseGitHubRepo(plugin.repository)
             ?: throw NoMatchingReleaseException("不是 GitHub 仓库: ${plugin.repository}")
         val expectedName = plugin.version?.let { assetName(plugin.id, it) }
@@ -134,14 +145,16 @@ class PluginIndexClient @Inject constructor(
     }
 
     suspend fun download(asset: PluginReleaseAsset): DownloadedPluginPackage = withContext(Dispatchers.IO) {
-        if (asset.size <= 0 || asset.size > MAX_ARCHIVE_BYTES) {
-            throw PluginIndexException("资产大小非法: ${asset.size}")
+        if (asset.size > MAX_ARCHIVE_BYTES) {
+            throw PluginIndexException("资产超过上限: ${asset.size}")
         }
+        // 直链包（package_url）不带大小，size=0 时按上限约束；常规包按声明大小精确校验。
+        val maxBytes = if (asset.size > 0) asset.size else MAX_ARCHIVE_BYTES
         val bytes = getBytes(
             listOf(mirrorUrl(asset.url), asset.url),
-            asset.size,
+            maxBytes,
             noCache = true,
-            expectedSize = asset.size
+            expectedSize = asset.size.takeIf { it > 0 }
         )
         val file = File(context.cacheDir, "plugin-${sha256(bytes).take(16)}.zip")
         file.writeBytes(bytes)
