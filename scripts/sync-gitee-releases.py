@@ -7,7 +7,7 @@
 
 可选环境变量：
   GH_REPO         GitHub 仓库，默认 yhdmgf/AiVerse
-  GITEE_OWNER     Gitee 用户名，默认 aiverse
+  GITEE_OWNER     Gitee 用户名/owner path，默认 aiverse-app
   GITEE_REPO      Gitee 仓库名，默认 aiverse
   GITHUB_TOKEN    GitHub 令牌（可选，提高 API 限额）
   RELEASE_FILTER  Python 正则，覆盖自动推导，仅同步匹配 tag_name 的 Release
@@ -36,7 +36,7 @@ import uuid
 UA = "aiverse-gitee-sync"
 
 GH_REPO = os.environ.get("GH_REPO", "yhdmgf/AiVerse")
-GITEE_OWNER = os.environ.get("GITEE_OWNER", "aiverse")
+GITEE_OWNER = os.environ.get("GITEE_OWNER", "aiverse-app")
 GITEE_REPO = os.environ.get("GITEE_REPO", "aiverse")
 GITEE_TOKEN = os.environ.get("GITEE_TOKEN", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
