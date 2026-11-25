@@ -22,9 +22,10 @@ jobs:
 
       - name: 检查哈希并推送代码与 Tag
         env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITEE_OWNER: aiverse
+          GITEE_TOKEN: d8a5eb5fe4d532f4437d23d58a5774da
+          GITEE_OWNER: aiverse-app
           GITEE_REPO: aiverse
+          GITEE_USER: aiverse-app   # HTTPS 推送用户名 = Gitee 账号名（非 owner path）
         run: |
           GITHUB_SHA=$(git rev-parse HEAD)
           echo "GitHub main HEAD: $GITHUB_SHA"
@@ -39,7 +40,7 @@ jobs:
           if [ -n "$GITEE_SHA" ] && [ "$GITHUB_SHA" = "$GITEE_SHA" ]; then
             echo "哈希相同（$GITHUB_SHA），跳过推送"
           else
-            git remote add gitee https://${GITEE_OWNER}:${GITEE_TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_REPO}.git
+            git remote add gitee https://${GITEE_USER}:${GITEE_TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_REPO}.git
             git push gitee main --force --tags 2>&1
             git remote remove gitee
             echo "推送完成: $GITHUB_SHA → Gitee"
@@ -47,10 +48,10 @@ jobs:
 
       - name: 同步 Release 公告与附件到 Gitee
         env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_TOKEN: d8a5eb5fe4d532f4437d23d58a5774da
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: yhdmgf/AiVerse
-          GITEE_OWNER: aiverse
+          GITEE_OWNER: aiverse-app
           GITEE_REPO: aiverse
         run: |
           python3 scripts/sync-gitee-releases.py --all
