@@ -3302,6 +3302,9 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="roles_field_status">Status</string>
     <string name="roles_field_type">Type</string>
     <string name="roles_avatar_none">None</string>
+    <string name="roles_field_workspace">Bound Workspace</string>
+    <string name="roles_field_workspace_none">None</string>
+    <string name="roles_field_workspace_placeholder">Select workspace</string>
     <string name="roles_avatar_emoji">Emoji</string>
     <string name="roles_avatar_image">Image</string>
     <string name="roles_avatar_preview_name_placeholder">No name entered</string>

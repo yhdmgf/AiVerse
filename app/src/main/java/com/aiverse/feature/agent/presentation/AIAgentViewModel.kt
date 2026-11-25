@@ -185,6 +185,7 @@ import com.aiverse.feature.agent.domain.permission.ToolPermissionPolicyEngine
 import com.aiverse.feature.agent.domain.subagent.SubAgentEvent
 import com.aiverse.feature.agent.domain.subagent.SubAgentDigest
 import com.aiverse.feature.agent.domain.subagent.SubAgentEventType
+import com.aiverse.feature.agent.domain.session.WorkspacePathResolver
 import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.feature.agent.domain.workflow.AgentEvent
@@ -267,6 +268,7 @@ class AIAgentViewModel @Inject constructor(
     val ttsController: TtsController,
     val installedAppRepository: InstalledAppRepository,
     private val roleDao: RoleDao,
+    private val workspacePathResolver: WorkspacePathResolver,
     private val pluginSessionSourceService: PluginSessionSourceService,
     private val pluginSessionRegistry: PluginSessionRegistry,
     private val pluginEventBus: PluginEventBus,
@@ -3851,8 +3853,11 @@ class AIAgentViewModel @Inject constructor(
             ReasoningEffort.MEDIUM.name
         }
         val roleId = defaultRoleSettingsRepository.getDefaultRoleId()
+        // 角色绑定了工作区时，将会话归入该工作区（issue #240）；未绑定或工作区不可用则回退传入的 workspacePath。
+        // 解析逻辑（含未加载时序与悬挂引用处理）统一收口到 WorkspacePathResolver，与 Web API 等多端共用。
+        val resolvedPath = workspacePathResolver.resolveForRole(roleId, workspacePath)
         return sessionUseCase.newSessionEntity(
-            workspacePath = workspacePath,
+            workspacePath = resolvedPath,
             providerId = providerId,
             model = model,
             reasoningEffort = effort,

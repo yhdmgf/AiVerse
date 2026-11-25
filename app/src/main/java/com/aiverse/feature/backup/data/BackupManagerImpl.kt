@@ -1449,13 +1449,13 @@ class BackupManagerImpl @Inject constructor(
     private fun RoleEntity.toDto() = RoleDto(
         id = id, name = name, description = description, identityPrompt = identityPrompt, tags = tags,
         avatarKind = avatarKind, avatarValue = avatarValue, enabled = enabled, isBuiltin = isBuiltin,
-        sortOrder = sortOrder, createdAt = createdAt, updatedAt = updatedAt
+        sortOrder = sortOrder, createdAt = createdAt, updatedAt = updatedAt, workspaceId = workspaceId
     )
 
     private fun RoleDto.toEntity() = RoleEntity(
         id = id, name = name, description = description, identityPrompt = identityPrompt, tags = tags,
         avatarKind = avatarKind, avatarValue = avatarValue, enabled = enabled, isBuiltin = isBuiltin,
-        sortOrder = sortOrder, createdAt = createdAt, updatedAt = updatedAt
+        sortOrder = sortOrder, createdAt = createdAt, updatedAt = updatedAt, workspaceId = workspaceId
     )
 
     private fun AgentMessageEntity.toDto() = AgentMessageDto(

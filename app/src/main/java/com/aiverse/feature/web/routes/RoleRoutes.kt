@@ -18,7 +18,8 @@ fun Route.roleRoutes(roleDao: RoleDao) {
                     name = r.name,
                     description = r.description,
                     avatarKind = r.avatarKind,
-                    avatarValue = r.avatarValue
+                    avatarValue = r.avatarValue,
+                    workspaceId = r.workspaceId
                 )
             })
         }

@@ -177,7 +177,9 @@ data class RoleDto(
     val isBuiltin: Boolean,
     val sortOrder: Int,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /** 绑定的工作区名；null 表示不绑定。 */
+    val workspaceId: String? = null
 )
 
 /** 备份中的输入框快捷栏偏好（JSON 编码用）。 */

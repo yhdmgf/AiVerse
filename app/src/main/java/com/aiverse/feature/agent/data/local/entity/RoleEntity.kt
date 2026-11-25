@@ -1,12 +1,13 @@
 package com.aiverse.feature.agent.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.aiverse.feature.agent.domain.model.AvatarKind
 import com.aiverse.feature.agent.domain.model.Role
 
 /** 角色表：见 [Role]。 */
-@Entity(tableName = "roles")
+@Entity(tableName = "roles", indices = [Index(value = ["workspaceId"])])
 data class RoleEntity(
     @PrimaryKey val id: String,
     val name: String,
@@ -21,7 +22,9 @@ data class RoleEntity(
     val isBuiltin: Boolean,
     val sortOrder: Int,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /** 绑定的工作区名；null 表示不绑定。 */
+    val workspaceId: String? = null
 ) {
     fun toDomain(): Role = Role(
         id = id,
@@ -35,7 +38,8 @@ data class RoleEntity(
         isBuiltin = isBuiltin,
         sortOrder = sortOrder,
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        workspaceId = workspaceId
     )
 
     companion object {
@@ -51,7 +55,8 @@ data class RoleEntity(
             isBuiltin = role.isBuiltin,
             sortOrder = role.sortOrder,
             createdAt = role.createdAt,
-            updatedAt = role.updatedAt
+            updatedAt = role.updatedAt,
+            workspaceId = role.workspaceId
         )
     }
 }

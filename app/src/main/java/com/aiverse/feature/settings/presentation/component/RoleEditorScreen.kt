@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -58,6 +61,7 @@ import com.aiverse.feature.settings.presentation.RoleEditorViewModel
 import com.aiverse.feature.settings.presentation.RoleSaveState
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ArrowLeft
+import compose.icons.feathericons.ChevronDown
 import compose.icons.feathericons.UploadCloud
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -88,6 +92,10 @@ internal fun RoleEditorScreen(
     var tagsText by rememberSaveable { mutableStateOf(initial?.tags?.joinToString(", ") ?: "") }
     var avatarKindName by rememberSaveable { mutableStateOf(initial?.avatarKind?.name ?: AvatarKind.NONE.name) }
     var avatarValue by rememberSaveable { mutableStateOf(initial?.avatarValue ?: "") }
+    var selectedWorkspaceId by rememberSaveable { mutableStateOf(initial?.workspaceId ?: "") }
+    var workspaceDropdownExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
 
     val avatarKind = runCatching { AvatarKind.valueOf(avatarKindName) }.getOrDefault(AvatarKind.NONE)
 
@@ -164,7 +172,7 @@ internal fun RoleEditorScreen(
                     }
                 },
                 actions = {
-                    TextButton(
+                        TextButton(
                         enabled = canSave && !saving,
                         onClick = {
                             viewModel.save(
@@ -175,7 +183,8 @@ internal fun RoleEditorScreen(
                                 identityPrompt = identityPrompt,
                                 tags = tagsText.split(',').map { it.trim() }.filter { it.isNotEmpty() },
                                 avatarKind = avatarKind,
-                                avatarValue = avatarValue.trim()
+                                avatarValue = avatarValue.trim(),
+                                workspaceId = selectedWorkspaceId.takeIf { it.isNotBlank() }
                             )
                         }
                     ) {
@@ -316,6 +325,59 @@ internal fun RoleEditorScreen(
                             onSaveImage = { uri, onResult -> viewModel.saveAvatarImage(uri, onResult) },
                             saveErrorRes = R.string.common_image_picker_save_failed
                         )
+                    }
+                }
+            }
+
+            SettingsGroupHeader(text = stringResource(R.string.roles_field_workspace))
+            SettingsGroup {
+                Column(
+                    modifier = Modifier.padding(horizontal = t.lg, vertical = t.md),
+                    verticalArrangement = Arrangement.spacedBy(t.sm)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { workspaceDropdownExpanded = true },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val selectedWs = workspaces.find { it.name == selectedWorkspaceId }
+                        Text(
+                            text = selectedWs?.displayLabel
+                                ?: selectedWorkspaceId.takeIf { it.isNotBlank() }
+                                ?: stringResource(R.string.roles_field_workspace_none),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selectedWorkspaceId.isBlank())
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        Icon(
+                            imageVector = FeatherIcons.ChevronDown,
+                            contentDescription = stringResource(R.string.roles_field_workspace_placeholder),
+                            modifier = Modifier.size(t.scale(18))
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = workspaceDropdownExpanded,
+                        onDismissRequest = { workspaceDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.roles_field_workspace_none)) },
+                            onClick = {
+                                selectedWorkspaceId = ""
+                                workspaceDropdownExpanded = false
+                            }
+                        )
+                        workspaces.forEach { ws ->
+                            DropdownMenuItem(
+                                text = { Text(ws.displayLabel) },
+                                onClick = {
+                                    selectedWorkspaceId = ws.name
+                                    workspaceDropdownExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }

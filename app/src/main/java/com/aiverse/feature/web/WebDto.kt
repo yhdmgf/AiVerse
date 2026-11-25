@@ -224,7 +224,8 @@ data class RoleDto(
     val name: String,
     val description: String = "",
     val avatarKind: String = "NONE",
-    val avatarValue: String = ""
+    val avatarValue: String = "",
+    val workspaceId: String? = null
 )
 
 /** 网页端 API 返回的 MCP server 状态。 */

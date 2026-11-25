@@ -9,6 +9,8 @@ import com.aiverse.feature.agent.data.local.dao.RoleDao
 import com.aiverse.feature.agent.data.local.entity.RoleEntity
 import com.aiverse.feature.agent.domain.model.AvatarKind
 import com.aiverse.feature.agent.domain.model.Role
+import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
+import com.aiverse.feature.workspace.domain.model.Workspace
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
@@ -36,11 +38,15 @@ sealed interface RoleSaveState {
 @HiltViewModel
 class RoleEditorViewModel @Inject constructor(
     private val roleDao: RoleDao,
+    private val workspaceRepository: WorkspaceRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _saveState = MutableStateFlow<RoleSaveState>(RoleSaveState.Idle)
     val saveState: StateFlow<RoleSaveState> = _saveState.asStateFlow()
+
+    /** 可选工作区列表，供编辑页下拉选择器使用。 */
+    val workspaces: StateFlow<List<Workspace>> = workspaceRepository.workspaces
 
     /**
      * 保存角色。
@@ -56,7 +62,8 @@ class RoleEditorViewModel @Inject constructor(
         identityPrompt: String,
         tags: List<String>,
         avatarKind: AvatarKind,
-        avatarValue: String
+        avatarValue: String,
+        workspaceId: String? = null
     ) {
         if (_saveState.value is RoleSaveState.Saving) return
         _saveState.value = RoleSaveState.Saving
@@ -76,7 +83,8 @@ class RoleEditorViewModel @Inject constructor(
                         isBuiltin = existing?.isBuiltin ?: false,
                         sortOrder = existing?.sortOrder ?: nextSortOrder(),
                         createdAt = existing?.createdAt ?: now,
-                        updatedAt = now
+                        updatedAt = now,
+                        workspaceId = workspaceId?.takeIf { it.isNotBlank() }
                     )
                     roleDao.upsert(RoleEntity.fromDomain(role))
                 }
