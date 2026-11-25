@@ -59,7 +59,8 @@ A single tap on the "Optimize input" button hands the content already written in
 
 -   **Sort by usage frequency** (**since 1.0.0**): enabled buttons are arranged from most to least frequently used, so commonly used buttons come first.
 -   **Overflow containment** (**since 1.0.0**): buttons that don't fit are tucked into the "···" menu on the right; tap to expand and view.
--   **Usage ring shows percentage** (**since 1.0.0**): the center of the context usage ring directly shows the percentage in use.
+-   **Two-row layout** (**since 1.0.5**): the first row is the input box and the second row is the tool bar — the current mode shows its name only (tap to pop the mode menu up and pick from auto/build/plan/expert), followed by a thin vertical divider, then the model, workspace, MCP, thinking and other quick entries to its right.
+-   **Send button color** (**since 1.0.5**): the sendable state uses the brand color; running is red (stop), queued messages are orange; in auto mode the mode name stays red, which is the safety-hint semantics.
 
 ## Interface Density
 

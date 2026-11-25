@@ -578,7 +578,8 @@ internal fun ChatInputBar(
                         inputShape
                     )
                     .padding(
-                        horizontal = if (hyperOS) 10.dp else Spacing.sm,
+                        // 第一行内容统一 16dp 左内距；右侧对称。
+                        horizontal = Spacing.lg,
                         vertical = if (hyperOS) 6.dp else Spacing.xs / 2
                     )
             ) {
@@ -674,46 +675,31 @@ internal fun ChatInputBar(
                             .weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val modeColor = when (currentMode) {
-                            AgentMode.PLAN -> MaterialTheme.colorScheme.primaryContainer
-                            AgentMode.AUTO -> MaterialTheme.colorScheme.error
-                            AgentMode.BUILD -> MaterialTheme.semanticColors.success
-                            AgentMode.EXPERT -> MaterialTheme.colorScheme.tertiaryContainer
-                        }
+                        // 模式名纯文字：底色容器已去掉，只保留文字色（AUTO 保留 error 安全语义）。
                         val modeTextColor = when (currentMode) {
-                            AgentMode.PLAN -> MaterialTheme.colorScheme.onPrimaryContainer
-                            AgentMode.AUTO -> MaterialTheme.colorScheme.onError
-                            AgentMode.BUILD -> MaterialTheme.semanticColors.onSuccess
-                            AgentMode.EXPERT -> MaterialTheme.colorScheme.onTertiaryContainer
+                            AgentMode.AUTO -> MaterialTheme.colorScheme.error
+                            AgentMode.BUILD,
+                            AgentMode.PLAN,
+                            AgentMode.EXPERT -> MaterialTheme.colorScheme.onSurface
                         }
                         val modeContext = LocalContext.current
                         // 模式选择菜单：点击按钮向上展开四个选项（自动/构建/计划/专家），选后才切换，不再循环切换。
                         var modeMenuExpanded by remember { mutableStateOf(false) }
                         Box {
-                            Surface(
-                                shape = RoundedCornerShape(densityTokens.buttonCorner),
-                                color = modeColor
+                            // 点击高亮裁剪进按钮圆角，不再方块溢出容器。
+                            // 色块去掉后文字热区会缩小，用 touchTarget 保底，避免触控目标低于推荐值。
+                            PressableSurface(
+                                onClick = { modeMenuExpanded = !modeMenuExpanded },
+                                shape = RoundedCornerShape(Radius.xs),
+                                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                                modifier = Modifier.heightIn(min = densityTokens.touchTarget)
                             ) {
-                                // 点击高亮裁剪进按钮圆角，不再方块溢出容器。
-                                PressableSurface(
-                                    onClick = { modeMenuExpanded = !modeMenuExpanded },
-                                    shape = RoundedCornerShape(densityTokens.buttonCorner)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(densityTokens.scale(42))
-                                            .height(densityTokens.scale(36)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = stringResource(currentMode.labelRes),
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                color = modeTextColor
-                                            )
-                                        )
-                                    }
-                                }
+                                Text(
+                                    text = stringResource(currentMode.labelRes),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        color = modeTextColor
+                                    )
+                                )
                             }
                             if (modeMenuExpanded) {
                                 Popup(
@@ -786,7 +772,14 @@ internal fun ChatInputBar(
                                 }
                             }
                         }
-                        Spacer(Modifier.width(Spacing.xs / 2))
+                        // 模式名与右侧工具条之间的竖直分割线，替代原纯色块间隔。
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = Spacing.xs)
+                                .width(densityTokens.scale(1))
+                                .height(densityTokens.scale(14))
+                                .background(MaterialTheme.colorScheme.outlineVariant)
+                        )
 
                         val capability = reasoningCapabilityOf(activeProvider, activeProvider?.effectiveModel.orEmpty(), modelMetadata)
                         val hasReasoningControl = !capability.isKnown ||
@@ -1220,20 +1213,15 @@ internal fun SendButton(
     onStop: () -> Unit
 ) {
     val densityTokens = LocalUIDensityTokens.current
-    // AI 工作中：输入框为空显示停止按钮；有内容显示橙色发送（消息排队发送）；空闲时按常规发送按钮
+    // AI 工作中：输入框为空显示停止按钮；有内容显示橙色发送（消息排队发送）；空闲时按常规发送按钮。
+    // 可发送态用主题 primary 而非固定色，自定义主题包下随之推导变化；前景色按态取语义 on* 色。
     val showStop = isBusy && !hasContent
     val clickable = showStop || canSend
-    val buttonColor = when {
-        showStop -> MaterialTheme.colorScheme.error
-        isBusy -> Brand.Orange
-        canSend -> MaterialTheme.semanticColors.success
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    // 前景色相对按钮底色而非主题：深色主题下的亮绿底用主题 onSurface（近白）会看不清。
-    val iconTint = when {
-        !clickable -> MaterialTheme.colorScheme.onSurfaceVariant
-        buttonColor.luminance() > 0.5f -> Color(0xFF1C1C1E)
-        else -> Color.White
+    val (buttonColor, iconTint) = when {
+        showStop -> MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.onError
+        isBusy -> Brand.Orange to MaterialTheme.semanticColors.onWarning
+        canSend -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Box(
         modifier = Modifier
