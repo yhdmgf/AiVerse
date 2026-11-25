@@ -72,6 +72,8 @@ data class UIDensityTokens(
     val listCellPaddingVertical: Dp,
     /** 设置页列表 cell 卡片间距（基准 8dp）。 */
     val listCellGap: Dp,
+    /** 新对话快捷入口卡片固定高度（基准 76dp）：四张卡片等高，与图标 40dp 托盘、标题/副标题两行文字对齐。 */
+    val welcomeEntryCardHeight: Dp,
     /** 阴影档（按密度缩放）：小（胶囊/卡片浮起）、中（主要悬浮栏/抽屉）。 */
     val elevationSm: Dp,
     val elevationMd: Dp,
@@ -147,6 +149,7 @@ data class UIDensityTokens(
                 pluginTabBarReserve = (74 * s).dp,
                 listCellPaddingVertical = 8.dp,
                 listCellGap = (8 * s).dp,
+                welcomeEntryCardHeight = (76 * s).dp,
                 elevationSm = (3 * s).dp,
                 elevationMd = (8 * s).dp,
                 ambientAlpha = 0.08f,

@@ -109,7 +109,9 @@ data class AppSemanticColors(
     /** 半透明玻璃表面色：磨砂铺开的卡片/顶栏/输入框统一底色，非 HyperOS 预设的半透明渐变基准。 */
     val surfaceGlass: Color,
     /** 玻璃表面描边色：与 [surfaceGlass] 配套的 1dp 描边。 */
-    val surfaceGlassBorder: Color
+    val surfaceGlassBorder: Color,
+    /** 新对话快捷入口卡片底色。 */
+    val welcomeEntryCardSurface: Color
 )
 
 val LightSemanticColors = AppSemanticColors(
@@ -137,7 +139,8 @@ val LightSemanticColors = AppSemanticColors(
     capsuleSurface = Color(0xFFE9E9EB),
     buttonMutedBg = Color(0xFFF0F2F5),
     surfaceGlass = Color(0xFFFFFFFF).copy(alpha = 0.85f),
-    surfaceGlassBorder = Color(0xFFE5E5EA).copy(alpha = 0.60f)
+    surfaceGlassBorder = Color(0xFFE5E5EA).copy(alpha = 0.60f),
+    welcomeEntryCardSurface = Color(0xFFF5F6FA)
 )
 
 val DarkSemanticColors = AppSemanticColors(
@@ -165,7 +168,8 @@ val DarkSemanticColors = AppSemanticColors(
     capsuleSurface = Color(0xFF1E293B),
     buttonMutedBg = Color(0xFF1E293B),
     surfaceGlass = Color(0xFF0D1B2E).copy(alpha = 0.86f),
-    surfaceGlassBorder = Color(0xFF2A3F56).copy(alpha = 0.45f)
+    surfaceGlassBorder = Color(0xFF2A3F56).copy(alpha = 0.45f),
+    welcomeEntryCardSurface = Color(0xFF13273F)
 )
 
 val LocalAppSemanticColors = staticCompositionLocalOf { LightSemanticColors }

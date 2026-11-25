@@ -387,7 +387,9 @@ private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean, glass: Boole
             glass && dark -> seed.onSurface.copy(alpha = glassBorderAlpha)
             // 浅色玻璃：改浅描边色（outlineVariant），消除深灰细线；非玻璃档同样走 outlineVariant。
             else -> seed.outlineVariant.copy(alpha = glassBorderAlpha)
-        }
+        },
+        // 新对话快捷入口卡片底色：自定义主题包同样给一张比背景略深的浅色/深色卡片底，跟随主题色温。
+        welcomeEntryCardSurface = lerp(seed.surface, seed.surfaceVariant, if (dark) 0.55f else 0.50f)
     )
 }
 

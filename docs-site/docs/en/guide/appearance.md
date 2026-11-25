@@ -96,7 +96,7 @@ The code font size and the three toggles are all exported / imported with the th
 
 ## New Conversation Entries
 
-When you start a new blank conversation, a row of clickable **quick entry cards** appears below the welcome message (**since 1.0.3**), for example to open the terminal, view Git changes, or fill a frequently used prompt into the input box in one tap. Four entries are preset by default: Open terminal, View Git changes, Write code for me, and Troubleshoot errors.
+When you start a new blank conversation, a row of clickable **quick entry cards** appears below the welcome message (**since 1.0.3**), for example to open the terminal, view Git changes, or fill a frequently used prompt into the input box in one tap. Four entries are preset by default: Open terminal, View Git changes, Write code for me, and Troubleshoot errors. Each card has the same height and wraps its icon in a rounded tray with a faint brand-colored backing (**since 1.0.5**), with the title and the subtitle each on one line.
 
 In "Appearance → New conversation entries" you can add, remove, reorder, enable/disable, and customize icons, **up to 6**:
 
