@@ -301,6 +301,8 @@ data class ProviderDto(
     val dashboardRefreshInterval: Int? = null,
     /** 提供商列表排序序号；null 表示旧备份无此字段，导入时回退默认 0。 */
     val sortOrder: Int? = null,
+    /** 是否置顶到「常用」专区；null 表示旧备份无此字段，导入时回退默认 false。 */
+    val pinned: Boolean? = null,
     /** 多 Key 模式相关字段；null 表示旧备份无此字段，导入时回退默认值。 */
     val multiKeyEnabled: Boolean? = null,
     val apiKeys: String? = null,

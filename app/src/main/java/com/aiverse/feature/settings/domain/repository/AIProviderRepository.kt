@@ -16,6 +16,9 @@ interface AIProviderRepository {
     suspend fun updateModels(id: String, models: List<String>)
     suspend fun setProviderEnabled(id: String, isEnabled: Boolean)
 
+    /** 置顶 / 取消置顶（常用专区）。 */
+    suspend fun setPinned(id: String, pinned: Boolean)
+
     /** 批量启用 / 停用（列表多选批量操作）。 */
     suspend fun setProvidersEnabled(ids: Collection<String>, isEnabled: Boolean)
 

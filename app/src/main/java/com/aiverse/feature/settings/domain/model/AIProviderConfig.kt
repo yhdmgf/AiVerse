@@ -42,6 +42,8 @@ data class AIProviderConfig(
     val customHeaders: Map<String, String> = emptyMap(),
     /** 提供商列表排序序号，越小越靠前；-1 表示未分配（保存时取 max+1 排到末尾）。 */
     val sortOrder: Int = -1,
+    /** 是否置顶到「常用」专区；置顶的提供商在列表中优先展示。 */
+    val pinned: Boolean = false,
     /** 单独为该提供商配置代理（关闭时跟随全局代理设置）。 */
     val proxyEnabled: Boolean = false,
     val proxyType: ProxyType = ProxyType.HTTP,

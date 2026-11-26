@@ -131,6 +131,11 @@ class AIProviderRepositoryImpl @Inject constructor(
         aiProviderDao.setProviderEnabled(id, isEnabled)
     }
 
+    override suspend fun setPinned(id: String, pinned: Boolean) {
+        FileLogger.i(TAG, "置顶提供商 provider=$id pinned=$pinned")
+        aiProviderDao.setPinned(id, pinned)
+    }
+
     private fun AIProviderEntity.toDomainModel(): AIProviderConfig {
         val modelList = models.split("\n").map { it.substringBefore('|').trim() }.filter { it.isNotEmpty() }
         return AIProviderConfig(
@@ -158,6 +163,7 @@ class AIProviderRepositoryImpl @Inject constructor(
             dashboardScriptPath = dashboardScriptPath,
             dashboardRefreshInterval = dashboardRefreshInterval,
             sortOrder = sortOrder,
+            pinned = pinned,
             proxyEnabled = proxyEnabled,
             proxyType = runCatching { ProxyType.valueOf(proxyType) }.getOrDefault(ProxyType.HTTP),
             proxyHost = proxyHost,
@@ -193,6 +199,7 @@ class AIProviderRepositoryImpl @Inject constructor(
             dashboardScriptPath = dashboardScriptPath,
             dashboardRefreshInterval = dashboardRefreshInterval,
             sortOrder = sortOrder,
+            pinned = pinned,
             proxyEnabled = proxyEnabled,
             proxyType = proxyType.name,
             proxyHost = proxyHost,
