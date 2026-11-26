@@ -1009,7 +1009,9 @@
     <string name="chat_optimize_input">Optimize Input</string>
     <string name="chat_optimize_stop">Stop optimizing</string>
     <string name="chat_optimize_success">Optimized</string>
-    <string name="chat_optimize_undo">Undo</string>
+    <string name="chat_optimize_undo">Restore</string>
+    <string name="chat_optimize_restore_original">Restore original</string>
+    <string name="chat_optimize_continue">Continue optimizing</string>
     <string name="chat_optimize_failed">Optimize failed</string>
     <string name="chat_web_search_toggle">Web search</string>
     <string name="chat_more_tools">More tools</string>

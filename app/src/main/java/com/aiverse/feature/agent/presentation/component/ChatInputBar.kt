@@ -647,20 +647,6 @@ internal fun ChatInputBar(
                                 modifier = Modifier.size(densityTokens.scale(18))
                             )
                         }
-                        // 撤销「优化输入」回填：常驻小按钮，位于全屏按钮正下方，仅存在可撤销回填时显示。
-                        if (canUndoOptimize) {
-                            IconButton(
-                                onClick = onUndoOptimize,
-                                modifier = Modifier.size(densityTokens.scale(32))
-                            ) {
-                                Icon(
-                                    FeatherIcons.RotateCcw,
-                                    contentDescription = stringResource(R.string.chat_optimize_undo),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(densityTokens.scale(18))
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -1004,11 +990,29 @@ internal fun ChatInputBar(
                     if (inputBarPrefs.showOptimize) {
                         // 优化输入：单击把输入框内容交给模型润色后填回（空文本无反应）；长按跳默认模型配置页。
                         // 优化中：显示进度环，点击停止；非优化中显示 ✨，点击触发优化。
-                        val optimizeLabel = if (isOptimizing) {
-                            stringResource(R.string.chat_optimize_stop)
-                        } else {
-                            stringResource(R.string.chat_optimize_input)
+                        // 可撤销回填：按钮原地变成 ↺（还原态），单击直接还原原文，长按弹出还原/继续优化选项。
+                        val isRestoreState = canUndoOptimize && !isOptimizing
+                        val optimizeLabel = when {
+                            isOptimizing -> stringResource(R.string.chat_optimize_stop)
+                            isRestoreState -> stringResource(R.string.chat_optimize_undo)
+                            else -> stringResource(R.string.chat_optimize_input)
                         }
+                        var restoreMenuExpanded by remember { mutableStateOf(false) }
+                        val progressAlpha by animateFloatAsState(
+                            targetValue = if (isOptimizing) 1f else 0f,
+                            animationSpec = tween(80),
+                            label = "optimizeProgressAlpha"
+                        )
+                        val restoreRotation by animateFloatAsState(
+                            targetValue = if (isRestoreState) 0f else -90f,
+                            animationSpec = tween(160),
+                            label = "optimizeRestoreRotation"
+                        )
+                        val restoreAlpha by animateFloatAsState(
+                            targetValue = if (isRestoreState) 1f else 0f,
+                            animationSpec = tween(160),
+                            label = "optimizeRestoreAlpha"
+                        )
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -1016,26 +1020,124 @@ internal fun ChatInputBar(
                                 .semantics { contentDescription = optimizeLabel }
                                 .combinedClickable(
                                     onClick = {
-                                        if (isOptimizing) onCancelOptimize()
-                                        else if (value.isNotBlank()) onOptimizeInput()
+                                        when {
+                                            isOptimizing -> onCancelOptimize()
+                                            isRestoreState -> onUndoOptimize()
+                                            value.isNotBlank() -> onOptimizeInput()
+                                        }
                                     },
-                                    onLongClick = onOpenOptimizeModelSettings
+                                    onLongClick = {
+                                        if (isRestoreState) {
+                                            restoreMenuExpanded = true
+                                        } else {
+                                            onOpenOptimizeModelSettings()
+                                        }
+                                    }
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (isOptimizing) {
+                            if (progressAlpha > 0f) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer { alpha = progressAlpha },
                                     strokeWidth = 2.dp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            } else {
+                            }
+                            if (restoreAlpha > 0f) {
+                                Icon(
+                                    FeatherIcons.RotateCcw,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer {
+                                            alpha = restoreAlpha
+                                            rotationZ = restoreRotation
+                                        }
+                                )
+                            }
+                            if (restoreAlpha < 1f) {
                                 Icon(
                                     Icons.Default.AutoAwesome,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer { alpha = 1f - restoreAlpha }
                                 )
+                            }
+                        }
+                        if (restoreMenuExpanded) {
+                            Popup(
+                                alignment = Alignment.BottomCenter, // 锚定在按钮上方展开
+                                onDismissRequest = { restoreMenuExpanded = false },
+                                properties = PopupProperties(focusable = true, dismissOnBackPress = true)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shadowElevation = 8.dp,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .width(IntrinsicSize.Min)
+                                            .padding(vertical = 4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    restoreMenuExpanded = false
+                                                    onUndoOptimize()
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                FeatherIcons.RotateCcw,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(Modifier.width(Spacing.xs))
+                                            Text(
+                                                text = stringResource(R.string.chat_optimize_restore_original),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable(enabled = value.isNotBlank()) {
+                                                    restoreMenuExpanded = false
+                                                    onOptimizeInput()
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(Modifier.width(Spacing.xs))
+                                            Text(
+                                                text = stringResource(R.string.chat_optimize_continue),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = if (value.isNotBlank()) {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
