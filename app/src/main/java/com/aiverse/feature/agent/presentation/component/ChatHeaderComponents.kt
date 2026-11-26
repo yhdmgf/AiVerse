@@ -43,7 +43,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -118,7 +117,6 @@ import com.aiverse.feature.settings.domain.model.ModelMetadata
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.MoreHorizontal
 import compose.icons.feathericons.GitBranch
-import compose.icons.feathericons.Menu
 import compose.icons.feathericons.MessageCircle
 import compose.icons.feathericons.Plus
 import coil.compose.AsyncImage
@@ -203,19 +201,16 @@ internal fun ChatHeader(
             ) {
                 // 大屏常驻侧栏时隐掉汉堡键：侧栏已经摆在左边，再给个开关反而困惑。
                 if (showMenuButton) {
-                    IconButton(
+                    HeaderMenuBarsButton(
                         onClick = onOpenDrawer,
+                        contentDescription = stringResource(R.string.chat_open_sidebar),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.onboardingTarget(OnboardingStep.OPEN_SIDEBAR)
-                    ) {
-                        Icon(
-                            FeatherIcons.Menu,
-                            contentDescription = stringResource(R.string.chat_open_sidebar),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    )
                 } else {
                     Spacer(modifier = Modifier.width(Spacing.sm))
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f).padding(start = -LocalUIDensityTokens.current.scale(4))) {
                     val hyperOS = LocalHyperOSStyle.current
                     val glass = LocalSurfaceGlassStyle.current
                     val t = LocalUIDensityTokens.current
@@ -266,12 +261,12 @@ internal fun ChatHeader(
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = t.sm, vertical = t.xs),
+                                    modifier = Modifier.padding(horizontal = t.scale(10), vertical = t.scale(5)),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(t.xs)
                                 ) {
                                     if (!modelName.isNullOrBlank()) {
-                                        ModelLogoIcon(modelName = modelName, size = t.scale(12))
+                                        ModelLogoIcon(modelName = modelName, size = t.scale(14))
                                     }
                                     Text(
                                         text = modelName?.takeIf { it.isNotBlank() }
@@ -425,11 +420,11 @@ private fun RoleSwitcherPill(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = t.sm, vertical = t.xs),
+                    modifier = Modifier.padding(horizontal = t.scale(10), vertical = t.scale(5)),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    RoleAvatar(role = currentRole, size = t.scale(14), fallbackIconScale = 0.75f)
+                    RoleAvatar(role = currentRole, size = t.scale(18), fallbackIconScale = 0.75f)
                     Text(
                         text = roleName,
                         style = MaterialTheme.typography.labelMedium,
@@ -451,7 +446,7 @@ private fun RoleSwitcherPill(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                RoleAvatar(role = currentRole, size = t.scale(16), fallbackIconScale = 0.75f)
+                RoleAvatar(role = currentRole, size = t.scale(18), fallbackIconScale = 0.75f)
                 Text(
                     text = roleName,
                     style = MaterialTheme.typography.bodySmall,
@@ -461,6 +456,47 @@ private fun RoleSwitcherPill(
                     modifier = Modifier.widthIn(max = t.scale(96))
                 )
             }
+        }
+    }
+}
+
+/** 顶栏侧栏开关：两条错位横杠（一长一短错开）自绘图形，替代三横线汉堡，图形约 20dp、触摸区 40dp。 */
+@Composable
+private fun HeaderMenuBarsButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    val t = LocalUIDensityTokens.current
+    Box(
+        modifier = modifier
+            .size(t.scale(40))
+            .clip(RoundedCornerShape(t.buttonCorner))
+            .clickable(onClick = onClick)
+            .semantics { this.contentDescription = contentDescription }
+            .offset(x = -t.scale(4)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(t.scale(20))) {
+            val stroke = t.scale(2).toPx()
+            val cap = StrokeCap.Round
+            // 长横杠：居中偏左，靠上。
+            drawLine(
+                color = tint,
+                start = androidx.compose.ui.geometry.Offset(size.width * 0.12f, size.height * 0.32f),
+                end = androidx.compose.ui.geometry.Offset(size.width * 0.88f, size.height * 0.32f),
+                strokeWidth = stroke,
+                cap = cap
+            )
+            // 短横杠：左端内收、靠下，与长杠错位。
+            drawLine(
+                color = tint,
+                start = androidx.compose.ui.geometry.Offset(size.width * 0.30f, size.height * 0.68f),
+                end = androidx.compose.ui.geometry.Offset(size.width * 0.82f, size.height * 0.68f),
+                strokeWidth = stroke,
+                cap = cap
+            )
         }
     }
 }
