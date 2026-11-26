@@ -64,6 +64,7 @@ import com.aiverse.feature.terminal.domain.TerminalKeepaliveService
 import com.aiverse.feature.terminal.domain.TerminalSessionManager
 import com.aiverse.feature.terminal.domain.TerminalSessionProvider
 import com.aiverse.feature.terminal.domain.takeTailLines
+import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import com.aiverse.feature.workspace.domain.UriPathResolver
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
@@ -269,6 +270,7 @@ class AIAgentViewModel @Inject constructor(
     val installedAppRepository: InstalledAppRepository,
     private val roleDao: RoleDao,
     private val workspacePathResolver: WorkspacePathResolver,
+    private val workspaceRepository: WorkspaceRepository,
     private val pluginSessionSourceService: PluginSessionSourceService,
     private val pluginSessionRegistry: PluginSessionRegistry,
     private val pluginEventBus: PluginEventBus,
@@ -3305,8 +3307,7 @@ class AIAgentViewModel @Inject constructor(
         // 新会话时异步重连未连接的 MCP server，让 manageMcp 新增的配置真正生效；
         // 不阻塞会话创建——MCP 环境未就绪/超时时不能卡住「新建会话」。
         mcpManager.reconnectUnconnectedAsync()
-        val sid = createAndUpsertSession(ws)
-        updateSelectedSessionId(sid)
+        createAndSelectSession(ws)
     }
 
     fun setCurrentSessionId(id: String) {
@@ -3847,6 +3848,27 @@ class AIAgentViewModel @Inject constructor(
         val s = createSession(workspacePath)
         sessionUseCase.upsertSession(s)
         return s.id
+    }
+
+    /**
+     * 新建会话并选中，返回 id。仅 [newSession] 走这里：角色绑定工作区时，会话可能落到非当前工作区，
+     * 故同步切换 repository 侧（工作区选择器/文件树，持久化）与 agent 侧（侧边栏过滤）两套当前工作区真相源。
+     * 先切工作区再选中，避免 combine 保存器短暂写入 (sid, 旧区) 的错误中间态。
+     */
+    private suspend fun createAndSelectSession(workspacePath: String): String {
+        val id = createAndUpsertSession(workspacePath)
+        // 以落库 entity 为单一事实源，拿到会话实际归属路径（可能已被 resolveForRole 改写）。
+        val actual = sessionUseCase.getSessionById(id)?.workspacePath
+        if (!actual.isNullOrBlank() && actual != _currentWorkspace.value) {
+            // 反查工作区名，命中且可用则切 repository 侧，让选择器/文件树一并跟过去。
+            workspaceRepository.workspaces.value
+                .firstOrNull { it.path == actual && it.available }
+                ?.let { runCatching { workspaceRepository.selectWorkspace(it.name) } }
+            // agent 侧无条件切，保证侧边栏过滤一致（name 反查失败时也兜底）。
+            setWorkspace(actual)
+        }
+        updateSelectedSessionId(id)
+        return id
     }
 
     /**
