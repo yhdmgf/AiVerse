@@ -1824,13 +1824,13 @@ class AIAgentViewModel @Inject constructor(
      * 最近一次成功回填前的旧草稿，按会话区分（sessionId → 优化前原文），键为优化发生时的会话。
      * 按会话 key 天然隔离：切换会话无需额外清理（Issue #118 跨会话撤销串扰修复）。
      */
-    private val _optimizedOriginals = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _optimizedOriginals = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     /** 当前会话是否存在可撤销的「优化输入」回填：为 true 时输入栏常驻显示撤销小按钮（不再用成功 Snackbar）。 */
 
     /** 当前会话是否存在可撤销的「优化输入」回填：为 true 时输入栏常驻显示撤销小按钮（不再用成功 Snackbar）。 */
     val canUndoOptimize: StateFlow<Boolean> = _currentSessionId
         .flatMapLatest { id ->
-            if (id == null) flowOf(false) else _optimizedOriginals.map { it.containsKey(id) }
+            if (id == null) flowOf(false) else _optimizedOriginals.map { it[id]?.isNotEmpty() == true }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -1882,7 +1882,8 @@ class AIAgentViewModel @Inject constructor(
                 when (val result = agentWorkflow.optimizeInput(id, text, onDelta)) {
                     is OptimizeResult.Success -> {
                         // 以权威全文兜底回填一次：节流窗口内可能还压着最新增量，确保最终与模型输出一致。
-                        _optimizedOriginals.value = _optimizedOriginals.value + (id to text)
+                        _optimizedOriginals.value = _optimizedOriginals.value +
+                            (id to ((_optimizedOriginals.value[id] ?: emptyList()) + text))
                         updateInputDraft(result.text)
                         // 成功不再弹「已优化」Snackbar：撤销改为输入栏常驻小按钮（见 canUndoOptimize）。
                     }
@@ -1914,8 +1915,16 @@ class AIAgentViewModel @Inject constructor(
     /** 撤销当前会话最近一次「优化输入」回填，恢复被覆盖的旧草稿。 */
     fun undoOptimize() {
         val id = _currentSessionId.value ?: return
-        val original = _optimizedOriginals.value[id] ?: return
-        _optimizedOriginals.value = _optimizedOriginals.value - id
+        val stack = _optimizedOriginals.value[id] ?: return
+        if (stack.isEmpty()) return
+        // 弹出最近一层快照（栈顶）恢复，剩余层保留：连续点 ↺ 可逐步退回更早版本，直到退回未优化前。
+        val original = stack.last()
+        val remaining = stack.dropLast(1)
+        _optimizedOriginals.value = if (remaining.isEmpty()) {
+            _optimizedOriginals.value - id
+        } else {
+            _optimizedOriginals.value + (id to remaining)
+        }
         updateInputDraft(original)
     }
 

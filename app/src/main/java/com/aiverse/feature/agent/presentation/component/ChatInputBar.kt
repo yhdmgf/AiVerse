@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -1081,26 +1083,26 @@ internal fun ChatInputBar(
                                     shadowElevation = 8.dp,
                                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                 ) {
-                                    Column(
+                                    Row(
                                         modifier = Modifier
-                                            .width(IntrinsicSize.Min)
-                                            .padding(vertical = 4.dp)
+                                            .height(IntrinsicSize.Min)
+                                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Row(
                                             modifier = Modifier
-                                                .fillMaxWidth()
                                                 .clickable {
                                                     restoreMenuExpanded = false
                                                     onUndoOptimize()
                                                 }
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
                                                 FeatherIcons.RotateCcw,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
+                                                modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(Modifier.width(Spacing.xs))
                                             Text(
@@ -1109,21 +1111,25 @@ internal fun ChatInputBar(
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
+                                        VerticalDivider(
+                                            modifier = Modifier.fillMaxHeight(),
+                                            thickness = 1.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
                                         Row(
                                             modifier = Modifier
-                                                .fillMaxWidth()
                                                 .clickable(enabled = value.isNotBlank()) {
                                                     restoreMenuExpanded = false
                                                     onOptimizeInput()
                                                 }
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
                                                 Icons.Default.AutoAwesome,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
+                                                modifier = Modifier.size(18.dp)
                                             )
                                             Spacer(Modifier.width(Spacing.xs))
                                             Text(
