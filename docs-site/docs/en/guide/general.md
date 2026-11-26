@@ -18,12 +18,20 @@ When the next request is expected to use this proportion of the model's availabl
 
 ## Sessions
 
-**Session on startup** (default "New session")
+**Session on startup** (default "Open recent session")
 
 -   **New session**: every time you open the App you start from a new session. If the current workspace still has an empty session with no messages sent, it is reused directly instead of creating another one.
 -   **Open recent session**: you go straight into the most recently updated session in the current workspace and continue where you left off. If the workspace has no session yet, a new one is created. Pinned sessions are not given priority — even if there is a pinned session, you still enter the most recently updated one.
 
 Switching workspaces follows the same preference.
+
+**Max concurrent subagents** (default 6, integers no less than 1)
+
+Caps how many subagents can run at the same time; beyond the limit you need to wait for running tasks to finish or pause some manually. Raising it lets more subagents run in parallel but consumes more resources.
+
+**Expand reasoning by default** (disabled by default)
+
+When enabled, the reasoning card in an AI reply is expanded by default; when disabled it's collapsed by default and you can expand it manually as needed.
 
 **Delete chat history of external workspaces** (disabled by default)
 
