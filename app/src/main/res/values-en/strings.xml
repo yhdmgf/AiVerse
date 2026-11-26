@@ -2411,6 +2411,11 @@
     <string name="overlay_ball_size_value">%1$ddp</string>
     <string name="overlay_ball_alpha_label">Hide opacity</string>
     <string name="overlay_ball_alpha_value">%1$d%%</string>
+    <string name="overlay_ball_status_running">AI is operating your phone</string>
+    <string name="overlay_ball_status_running_with_action">AI is operating your phone: %1$s</string>
+    <string name="overlay_ball_status_done">Operation completed</string>
+    <string name="overlay_ball_status_failed">Operation failed</string>
+    <string name="overlay_ball_tap_to_review">Tap to view control status</string>
     <string name="perm_global_auto_confirm_title">Enable allow-all tools?</string>
     <string name="perm_global_auto_confirm_message">After enabling, AI tool calls (terminal, server, MCP, files, etc.) run directly without asking. Only catastrophic deletes and Shizuku host operations are still intercepted. Please proceed with caution.</string>
 
