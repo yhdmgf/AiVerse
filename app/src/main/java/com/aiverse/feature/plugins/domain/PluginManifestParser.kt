@@ -187,7 +187,7 @@ object PluginManifestParser {
                     description = requireNotNull(description),
                     license = requireNotNull(license),
                     pluginApi = requireNotNull(engines),
-                    skills = requireNotNull(contributes).skills,
+                    skills = contributes?.skills ?: emptyList(),
                     agents = contributes.agents,
                     workspaceTools = contributes.workspaceTools,
                     uiEntries = contributes.uiEntries,
