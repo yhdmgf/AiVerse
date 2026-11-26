@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.HapticFeedback
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
@@ -59,7 +60,6 @@ import com.aiverse.feature.settings.domain.model.AIProviderConfig
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Star
-import compose.icons.feathericons.StarOutline
 import compose.icons.feathericons.Trash2
 import androidx.compose.ui.res.stringResource
 import com.aiverse.R
@@ -291,7 +291,7 @@ private fun ProviderCard(
     onTogglePin: (String, Boolean) -> Unit,
     reorderableState: ReorderableLazyListState,
     enableDrag: Boolean,
-    hapticFeedback: androidx.compose.ui.platform.HapticFeedback,
+    hapticFeedback: HapticFeedback,
     restElevation: androidx.compose.ui.unit.Dp
 ) {
     val t = LocalUIDensityTokens.current
@@ -448,7 +448,7 @@ fun ProviderItem(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = if (provider.pinned) FeatherIcons.Star else FeatherIcons.StarOutline,
+                    imageVector = FeatherIcons.Star,
                     contentDescription = stringResource(if (provider.pinned) R.string.provider_unpin else R.string.provider_pin),
                     tint = if (provider.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.semanticColors.subtleText,
                     modifier = Modifier.size(18.dp)
