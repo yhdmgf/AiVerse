@@ -186,4 +186,169 @@ class PluginManifestParserTest {
         val manifest = success(json)
         assertNull(manifest.ssh)
     }
+
+    // ── contributes.styleTokens 声明 ──
+
+    /** 只含 styleTokens 声明的最小清单（无其它贡献）。 */
+    private fun styleTokensManifest(styleTokensJson: String) = """
+        {
+          "manifestVersion": 1,
+          "id": "demo.style",
+          "name": "Style",
+          "version": "1.0.0",
+          "publisher": "demo",
+          "repository": "https://example.com/demo/style",
+          "description": "Style demo",
+          "license": "MIT",
+          "engines": {"pluginApi": "^1.0.0"},
+          "contributes": { "styleTokens": $styleTokensJson }
+        }
+    """.trimIndent()
+
+    @Test
+    fun styleTokens_isParsed() {
+        val manifest = success(
+            styleTokensManifest(
+                """{
+                    "cardRadius": 20,
+                    "userBubbleOpacity": 80,
+                    "bubbleUserColor": "primary",
+                    "topBarTextColor": "#FF8800",
+                    "chatInputMinHeight": 56,
+                    "chatInputShadow": 12
+                }"""
+            )
+        )
+        val tokens = manifest.styleTokens
+        assertTrue(tokens != null)
+        assertEquals(20, tokens?.cardRadius)
+        assertEquals(80, tokens?.userBubbleOpacity)
+        assertEquals("primary", tokens?.bubbleUserColor)
+        assertEquals("#FF8800", tokens?.topBarTextColor)
+        assertEquals(56, tokens?.chatInputMinHeight)
+        assertEquals(12, tokens?.chatInputShadow)
+        assertEquals(1, manifest.contributionCount)
+    }
+
+    @Test
+    fun styleTokens_boundaryValues_areAccepted() {
+        val manifest = success(
+            styleTokensManifest(
+                """{
+                    "cardRadius": 0,
+                    "imageRadius": 48,
+                    "userBubbleOpacity": 10,
+                    "chatPanelOpacity": 100,
+                    "chatInputMinHeight": 160,
+                    "chatInputShadow": 40
+                }"""
+            )
+        )
+        val tokens = manifest.styleTokens
+        assertEquals(0, tokens?.cardRadius)
+        assertEquals(48, tokens?.imageRadius)
+        assertEquals(10, tokens?.userBubbleOpacity)
+        assertEquals(100, tokens?.chatPanelOpacity)
+        assertEquals(160, tokens?.chatInputMinHeight)
+        assertEquals(40, tokens?.chatInputShadow)
+    }
+
+    @Test
+    fun styleTokens_outOfRange_isRejected() {
+        val result = parse(styleTokensManifest("""{ "cardRadius": 49 }"""))
+        assertTrue(result is ManifestParseResult.Failure)
+        assertTrue(
+            result is ManifestParseResult.Failure &&
+                result.errors.any { it.detail == "contributes.styleTokens.cardRadius" }
+        )
+    }
+
+    @Test
+    fun styleTokens_opacityBelowMinimum_isRejected() {
+        val result = parse(styleTokensManifest("""{ "userBubbleOpacity": 9 }"""))
+        assertTrue(result is ManifestParseResult.Failure)
+        assertTrue(
+            result is ManifestParseResult.Failure &&
+                result.errors.any { it.detail == "contributes.styleTokens.userBubbleOpacity" }
+        )
+    }
+
+    @Test
+    fun styleTokens_invalidColor_isRejected() {
+        val result = parse(styleTokensManifest("""{ "topBarColor": "#12345" }"""))
+        assertTrue(result is ManifestParseResult.Failure)
+        assertTrue(
+            result is ManifestParseResult.Failure &&
+                result.errors.any { it.detail == "contributes.styleTokens.topBarColor" }
+        )
+    }
+
+    @Test
+    fun styleTokens_unknownSemanticColor_isRejected() {
+        val result = parse(styleTokensManifest("""{ "iconColor": "neon" }"""))
+        assertTrue(result is ManifestParseResult.Failure)
+        assertTrue(
+            result is ManifestParseResult.Failure &&
+                result.errors.any { it.detail == "contributes.styleTokens.iconColor" }
+        )
+    }
+
+    @Test
+    fun styleTokens_unsupportedField_isRejected() {
+        val result = parse(styleTokensManifest("""{ "cardRadius": 16, "fontSize": 20 }"""))
+        assertTrue(result is ManifestParseResult.Failure)
+        assertTrue(
+            result is ManifestParseResult.Failure &&
+                result.errors.any {
+                    it.code == PluginErrorCode.UNSUPPORTED_FIELD && it.detail == "contributes.styleTokens.fontSize"
+                }
+        )
+    }
+
+    /** 未声明 styleTokens 时清单仍合法，字段为 null，不计入贡献数。 */
+    @Test
+    fun styleTokens_absent_isNull() {
+        val json = """
+            {
+              "manifestVersion": 1,
+              "id": "demo.plain",
+              "name": "Plain",
+              "version": "1.0.0",
+              "publisher": "demo",
+              "repository": "https://example.com/demo/plain",
+              "description": "No style",
+              "license": "MIT",
+              "engines": {"pluginApi": "^1.0.0"},
+              "contributes": { "agents": [ {"id": "agent-remote", "file": "agent.md"} ] }
+            }
+        """.trimIndent()
+        val manifest = success(json)
+        assertNull(manifest.styleTokens)
+        assertEquals(1, manifest.contributionCount)
+    }
+
+    @Test
+    fun mergeStyleTokens_takesFirstNonNullPerField() {
+        val first = PluginStyleTokensRef(cardRadius = 20, bubbleUserColor = "primary")
+        val second = PluginStyleTokensRef(cardRadius = 32, buttonRadius = 12, bubbleUserColor = "#FF8800")
+        val third = PluginStyleTokensRef(buttonRadius = 24, iconColor = "onSurface")
+
+        val merged = PluginStyleTokensRef.mergeStyleTokens(listOf(first, second, third))
+
+        assertEquals(20, merged.cardRadius)
+        assertEquals(12, merged.buttonRadius)
+        assertEquals("primary", merged.bubbleUserColor)
+        assertEquals("onSurface", merged.iconColor)
+    }
+
+    @Test
+    fun mergeStyleTokens_skipsNullEntriesAndEmptyList() {
+        val later = PluginStyleTokensRef(cardRadius = 24)
+        val merged = PluginStyleTokensRef.mergeStyleTokens(listOf(null, later, null))
+        assertEquals(24, merged.cardRadius)
+
+        val empty = PluginStyleTokensRef.mergeStyleTokens(emptyList())
+        assertNull(empty.cardRadius)
+        assertNull(empty.bubbleUserColor)
+    }
 }

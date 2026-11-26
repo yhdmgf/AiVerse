@@ -1,19 +1,15 @@
 package com.aiverse.feature.settings.presentation.component
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,12 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -55,11 +49,8 @@ import com.aiverse.feature.settings.data.repository.DEFAULT_QUICK_ACTION_ORDER
 import com.aiverse.feature.settings.data.repository.InputBarQuickAction
 import com.aiverse.feature.settings.data.repository.BackgroundMode
 import com.aiverse.feature.settings.data.repository.BackgroundSettingsRepository
-import com.aiverse.feature.agent.presentation.component.chatBubbleColorFor
-import com.aiverse.feature.agent.presentation.component.chatBubbleTextColorFor
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Box
-import compose.icons.feathericons.ChevronUp
 import compose.icons.feathericons.Code
 import compose.icons.feathericons.Cpu
 import compose.icons.feathericons.Download
@@ -73,7 +64,6 @@ import compose.icons.feathericons.Moon
 import compose.icons.feathericons.RotateCcw
 import compose.icons.feathericons.Share
 import compose.icons.feathericons.Sliders
-import compose.icons.feathericons.Trash
 import compose.icons.feathericons.Type
 import compose.icons.feathericons.Zap
 import compose.icons.feathericons.Plus
@@ -121,7 +111,7 @@ internal fun AppearanceSettingsSection(
     onSetUiFontScale: (Float) -> Unit,
     onSetUiDensity: (UIDensity) -> Unit,
     onOpenDensity: () -> Unit,
-    onOpenCorner: () -> Unit,
+    onSetCornerStyle: (Int) -> Unit,
     onOpenUiFont: () -> Unit,
     onRestoreDefaults: () -> Unit,
     onExportRequest: () -> Unit,
@@ -133,16 +123,11 @@ internal fun AppearanceSettingsSection(
     codeWrapEnabled: Boolean,
     codeAutoFoldEnabled: Boolean,
     codeShowLineNumber: Boolean,
-    userBubbleOpacity: Int,
-    assistantBubbleOpacity: Int,
-    chatPanelOpacity: Int,
+    cornerStyleIndex: Int,
     onSetCodeFontSizeSp: (Int) -> Unit,
     onSetCodeWrapEnabled: (Boolean) -> Unit,
     onSetCodeAutoFoldEnabled: (Boolean) -> Unit,
-    onSetCodeShowLineNumber: (Boolean) -> Unit,
-    onSetUserBubbleOpacity: (Int) -> Unit,
-    onSetAssistantBubbleOpacity: (Int) -> Unit,
-    onSetChatPanelOpacity: (Int) -> Unit
+    onSetCodeShowLineNumber: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -227,34 +212,6 @@ internal fun AppearanceSettingsSection(
                 onClick = onOpenUserBubbleStyleSheet
             )
             SettingsDivider()
-            BubbleOpacityRow(
-                title = stringResource(R.string.settings_appearance_user_bubble_opacity),
-                style = userBubbleStyle,
-                value = userBubbleOpacity,
-                onSet = onSetUserBubbleOpacity
-            )
-            SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.MessageSquare,
-                title = stringResource(R.string.bubble_assistant),
-                subtitle = stringResource(assistantBubbleStyle.labelRes),
-                onClick = onOpenAssistantBubbleStyleSheet
-            )
-            SettingsDivider()
-            BubbleOpacityRow(
-                title = stringResource(R.string.settings_appearance_assistant_bubble_opacity),
-                style = assistantBubbleStyle,
-                value = assistantBubbleOpacity,
-                onSet = onSetAssistantBubbleOpacity
-            )
-            SettingsDivider()
-            PanelOpacityRow(
-                title = stringResource(R.string.settings_appearance_chat_panel_opacity),
-                subtitle = stringResource(R.string.settings_appearance_chat_panel_opacity_desc),
-                value = chatPanelOpacity,
-                onSet = onSetChatPanelOpacity
-            )
-            SettingsDivider()
             SettingsRow(
                 icon = FeatherIcons.Image,
                 title = stringResource(R.string.settings_background_image),
@@ -325,10 +282,9 @@ internal fun AppearanceSettingsSection(
                 }
             )
             SettingsDivider()
-            SettingsRow(
-                icon = FeatherIcons.Box,
-                title = stringResource(R.string.settings_appearance_corner),
-                onClick = onOpenCorner
+            CornerStyleRow(
+                selected = cornerStyleIndex,
+                onSelect = onSetCornerStyle
             )
             SettingsDivider()
             SettingsRow(
@@ -445,8 +401,6 @@ private object AppearanceFontRanges {
     const val INPUT_MAX = 22
     const val CODE_MIN = 10
     const val CODE_MAX = 22
-    const val OPACITY_MIN = 10
-    const val OPACITY_MAX = 100
 }
 
 /** 聊天 / 输入框字号滑块行：拖动实时预览，松手才落盘。 */
@@ -580,117 +534,39 @@ private fun ScaleSliderRow(
 }
 
 /**
- * 聊天外壳透明度滑块行：只调顶栏/输入框/悬浮面板的 alpha，不显示气泡预览。
+ * 圆角风格三档选择行：紧凑 / 标准 / 舒适，一键套用到卡片、按钮、输入框、气泡、图片。
+ * 分项圆角滑块已折叠为基础档；更细的分项圆角交给外观插件深度自定义。
  */
 @Composable
-private fun PanelOpacityRow(
-    title: String,
-    subtitle: String,
-    value: Int,
-    onSet: (Int) -> Unit
+private fun CornerStyleRow(
+    selected: Int,
+    onSelect: (Int) -> Unit
 ) {
-    var local by remember(value) { mutableStateOf(value) }
+    val labels = listOf(
+        stringResource(R.string.corner_style_compact),
+        stringResource(R.string.corner_style_standard),
+        stringResource(R.string.corner_style_comfortable)
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${local}%",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.semanticColors.subtleText
-            )
-        }
         Text(
-            text = subtitle,
+            text = stringResource(R.string.settings_appearance_corner),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(bottom = Spacing.xs)
+        )
+        Text(
+            text = stringResource(R.string.settings_appearance_corner_plugin_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.semanticColors.subtleText,
-            modifier = Modifier.padding(top = Spacing.xs)
+            modifier = Modifier.padding(bottom = Spacing.sm)
         )
-        Slider(
-            value = local.toFloat(),
-            onValueChange = { local = it.roundToInt() },
-            onValueChangeFinished = { onSet(local) },
-            valueRange = AppearanceFontRanges.OPACITY_MIN.toFloat()..AppearanceFontRanges.OPACITY_MAX.toFloat()
-        )
-    }
-}
-
-/**
- * 气泡透明度滑块行 + 常驻预览块：拖动时预览实时跟随变化，松手才落盘。
- * 预览块在滑块下方常驻，随所选样式与透明度实时更新（需求：选完样式后在该行下面常驻预览）。
- */
-@Composable
-private fun BubbleOpacityRow(
-    title: String,
-    style: ChatBubbleStyle,
-    value: Int,
-    onSet: (Int) -> Unit
-) {
-    var local by remember(value) { mutableStateOf(value) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "${local}%",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.semanticColors.subtleText
-            )
-        }
-        // 不设 steps：连续轨道与「蒙版强度」等其它百分比滑块保持同一套样式（末端单圆点、无密排刻度）。
-        Slider(
-            value = local.toFloat(),
-            onValueChange = { local = it.roundToInt() },
-            onValueChangeFinished = { onSet(local) },
-            valueRange = AppearanceFontRanges.OPACITY_MIN.toFloat()..AppearanceFontRanges.OPACITY_MAX.toFloat()
-        )
-        BubblePreviewBlock(style = style, opacity = local)
-    }
-}
-
-/** 固定高度的气泡预览块：按所选样式取底色/文字色/描边/圆角，叠加透明度实时预览。 */
-@Composable
-private fun BubblePreviewBlock(style: ChatBubbleStyle, opacity: Int) {
-    val color = chatBubbleColorFor(style).copy(alpha = opacity / 100f)
-    val textColor = chatBubbleTextColorFor(style)
-    val t = LocalUIDensityTokens.current
-    val shape = if (style == ChatBubbleStyle.FRESH_GREEN) RoundedCornerShape(24.dp) else RoundedCornerShape(t.rMd)
-    val border = when (style) {
-        ChatBubbleStyle.CLASSIC_OUTLINE -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.onSurface)
-        ChatBubbleStyle.COMIC -> BorderStroke(2.dp, Color.Black)
-        ChatBubbleStyle.HEARTBEAT -> BorderStroke(1.5.dp, Color(0xFFBDBDBD))
-        ChatBubbleStyle.MINIMAL_WHITE -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ChatBubbleStyle.NO_BUBBLE -> null
-        else -> null
-    }
-    Surface(
-        shape = shape,
-        color = color,
-        border = border,
-        shadowElevation = if (style == ChatBubbleStyle.SOFT_SHADOW) 4.dp else 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.bubble_preview_text),
-            color = textColor,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(horizontal = t.md, vertical = t.sm)
+        SegmentedTabs(
+            selected = selected.coerceIn(0, labels.lastIndex),
+            labels = labels,
+            onSelect = onSelect
         )
     }
 }

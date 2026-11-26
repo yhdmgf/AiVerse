@@ -104,6 +104,7 @@ import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.glassBorderOr
 import com.aiverse.core.theme.chatPanelGlassOr
 import com.aiverse.core.theme.LocalChatPanelOpacity
+import com.aiverse.core.theme.LocalChatInputStyle
 import com.aiverse.core.theme.chatPanelSurface
 import com.aiverse.core.ui.rememberImeBottomInset
 import com.aiverse.core.ui.PressableSurface
@@ -319,9 +320,11 @@ internal fun ChatInputBar(
         modifier = modifier.fillMaxWidth()
     ) {
         val densityTokens = LocalUIDensityTokens.current
-        // 蒙版高度与输入框高度上下限按密度缩放：compact 收拢、comfortable 放宽，标准档等于原固定值。
+        // 插件覆盖层：声明了 chatInputMinHeight 时以插件值为准（按密度缩放后再叠加），否则回退标准档基准。
         val inputBarMaskHeight = densityTokens.scale(INPUT_BAR_MASK_HEIGHT_BASE_DP)
-        val inputFieldMinHeight = densityTokens.scale(INPUT_FIELD_MIN_HEIGHT_BASE_DP)
+        val chatInputOverride = LocalChatInputStyle.current
+        val inputFieldMinHeight = chatInputOverride?.minHeight?.let(densityTokens::scale)
+            ?: densityTokens.scale(INPUT_FIELD_MIN_HEIGHT_BASE_DP)
         val inputFieldMaxHeight = densityTokens.scale(INPUT_FIELD_MAX_HEIGHT_BASE_DP)
         val imeInset = rememberImeBottomInset()
         // 滚动弱化：内容区（slash 菜单/排队面板/数据面板/输入框本体）整体淡出到 40%，蒙版渐变保持不透明。
@@ -554,15 +557,21 @@ internal fun ChatInputBar(
             }
 
             val hyperOS = LocalHyperOSStyle.current
-            val inputShape = RoundedCornerShape(densityTokens.fieldCorner)
+            // 插件覆盖：声明了 chatInput.cornerRadius / chatInput.shadow 时以插件值为准，
+            // 否则回退现状（HyperOS 阴影档走 elevationMd，圆角走密度令牌 fieldCorner）。
+            val inputCorner = chatInputOverride?.cornerRadius?.let(densityTokens::scale)
+                ?: densityTokens.fieldCorner
+            val inputShadow = chatInputOverride?.shadow?.let(densityTokens::scale)
+                ?: if (hyperOS) densityTokens.elevationMd else 0.dp
+            val inputShape = RoundedCornerShape(inputCorner)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (hyperOS) {
+                        if (inputShadow > 0.dp) {
                             Modifier.shadow(
-                                elevation = densityTokens.elevationMd,
-                                shape = RoundedCornerShape(densityTokens.fieldCorner),
+                                elevation = inputShadow,
+                                shape = inputShape,
                                 clip = false,
                                 ambientColor = Color.Black.copy(alpha = densityTokens.ambientAlpha),
                                 spotColor = Color.Black.copy(alpha = densityTokens.spotAlpha)

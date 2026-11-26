@@ -402,6 +402,34 @@ private fun padTrend(
     }
 }
 
+/** 圆角风格预设档位（卡片 / 按钮 / 输入框 / 气泡 / 图片，单位 dp），标准档与仓库默认值一致。 */
+private fun cornerStylePresets(): List<IntArray> = listOf(
+    intArrayOf(6, 4, 6, 6, 6),
+    intArrayOf(
+        AppearanceSettingsRepository.DEFAULT_CARD_CORNER,
+        AppearanceSettingsRepository.DEFAULT_BUTTON_CORNER,
+        AppearanceSettingsRepository.DEFAULT_FIELD_CORNER,
+        AppearanceSettingsRepository.DEFAULT_BUBBLE_CORNER,
+        AppearanceSettingsRepository.DEFAULT_IMAGE_CORNER
+    ),
+    intArrayOf(18, 14, 18, 16, 18)
+)
+
+/** 以卡片圆角为基准反推当前圆角风格档位；命中不了预设时取最接近的一档。 */
+private fun cornerStyleIndexForCardCorner(cardCorner: Int): Int {
+    val presets = cornerStylePresets()
+    var bestIndex = 0
+    var bestDelta = Int.MAX_VALUE
+    presets.forEachIndexed { index, preset ->
+        val delta = Math.abs(preset[0] - cardCorner)
+        if (delta < bestDelta) {
+            bestDelta = delta
+            bestIndex = index
+        }
+    }
+    return bestIndex
+}
+
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -475,6 +503,9 @@ class SettingsViewModel @Inject constructor(
         const val STATS_PAGE_SIZE = 5
         /** 背景透明度停止拖动后的落盘延迟。 */
         const val BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS = 80L
+
+        /** 圆角风格默认档位（标准档）。 */
+        const val DEFAULT_CORNER_STYLE_INDEX = 1
 
         /** 技能文件导入接受的扩展名（小写，不含点）。 */
         val MARKDOWN_EXTENSIONS = setOf("md", "markdown", "txt")
@@ -810,25 +841,12 @@ class SettingsViewModel @Inject constructor(
     private val _uiFontPath = MutableStateFlow("")
     val uiFontPath: StateFlow<String> = _uiFontPath.asStateFlow()
 
-    /** 卡片圆角（dp），默认 12。 */
-    private val _cardCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CARD_CORNER)
-    val cardCorner: StateFlow<Int> = _cardCorner.asStateFlow()
-
-    /** 按钮圆角（dp），默认 10。 */
-    private val _buttonCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUTTON_CORNER)
-    val buttonCorner: StateFlow<Int> = _buttonCorner.asStateFlow()
-
-    /** 输入框圆角（dp），默认 12。 */
-    private val _fieldCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_FIELD_CORNER)
-    val fieldCorner: StateFlow<Int> = _fieldCorner.asStateFlow()
-
-    /** 聊天气泡圆角（dp），默认 10。 */
-    private val _bubbleCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_CORNER)
-    val bubbleCorner: StateFlow<Int> = _bubbleCorner.asStateFlow()
-
-    /** 图片/附件圆角（dp），默认 12。 */
-    private val _imageCorner = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_IMAGE_CORNER)
-    val imageCorner: StateFlow<Int> = _imageCorner.asStateFlow()
+    /**
+     * 圆角风格档位（0 紧凑 / 1 标准 / 2 舒适），作用于卡片、按钮、输入框、气泡、图片五处。
+     * 设置页只暴露这三档基础档，分项圆角交给外观插件深度自定义。
+     */
+    private val _cornerStyleIndex = MutableStateFlow(DEFAULT_CORNER_STYLE_INDEX)
+    val cornerStyleIndex: StateFlow<Int> = _cornerStyleIndex.asStateFlow()
 
     /** 侧边栏文件树显示偏好（文件名显示/隐藏文件/缩进密度/弱化着色），默认与历史行为一致。 */
     private val _fileTreeDisplayPrefs = MutableStateFlow(FileTreeDisplayPrefs.Default)
@@ -850,23 +868,8 @@ class SettingsViewModel @Inject constructor(
     private val _codeShowLineNumber = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_CODE_SHOW_LINE_NUMBER)
     val codeShowLineNumber: StateFlow<Boolean> = _codeShowLineNumber.asStateFlow()
 
-    /** 用户气泡底色透明度（10~100%），默认 100。 */
-    private val _userBubbleOpacity = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
-    val userBubbleOpacity: StateFlow<Int> = _userBubbleOpacity.asStateFlow()
-
-    /** AI 回复气泡底色透明度（10~100%），默认 100。 */
-    private val _assistantBubbleOpacity = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_BUBBLE_OPACITY)
-    val assistantBubbleOpacity: StateFlow<Int> = _assistantBubbleOpacity.asStateFlow()
-
-    /** 聊天外壳（顶栏/输入框/悬浮面板）透明度系数（10~100%），默认 100。 */
-    private val _chatPanelOpacity = MutableStateFlow(AppearanceSettingsRepository.DEFAULT_PANEL_OPACITY)
-    val chatPanelOpacity: StateFlow<Int> = _chatPanelOpacity.asStateFlow()
-
     /** 三档字号落盘的节流 job（滑块拖动防积压），见 [setChatFontSizeSp] 等。 */
     private var fontWriteJob: Job? = null
-
-    /** 气泡透明度落盘的节流 job（与字号 job 解耦，避免被字号/缩放写入 cancel 导致透明度不落库）。 */
-    private var bubbleOpacityWriteJob: Job? = null
 
     /** 技能默认安装作用域（默认项目级），由系统提示词注入指引 AI。 */
     private val _defaultSkillInstallScope = MutableStateFlow(SkillInstallSettingsRepository.DEFAULT_SCOPE)
@@ -1421,32 +1424,9 @@ class SettingsViewModel @Inject constructor(
             }
 
             launch {
+                // 设置页只暴露三档圆角风格，以卡片圆角为基准反推当前档位。
                 appearanceSettingsRepository.cardCornerFlow.collectLatest {
-                    _cardCorner.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.buttonCornerFlow.collectLatest {
-                    _buttonCorner.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.fieldCornerFlow.collectLatest {
-                    _fieldCorner.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.bubbleCornerFlow.collectLatest {
-                    _bubbleCorner.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.imageCornerFlow.collectLatest {
-                    _imageCorner.value = it
+                    _cornerStyleIndex.value = cornerStyleIndexForCardCorner(it)
                 }
             }
 
@@ -1477,24 +1457,6 @@ class SettingsViewModel @Inject constructor(
             launch {
                 appearanceSettingsRepository.codeShowLineNumberFlow.collectLatest {
                     _codeShowLineNumber.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.userBubbleOpacityFlow.collectLatest {
-                    _userBubbleOpacity.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.assistantBubbleOpacityFlow.collectLatest {
-                    _assistantBubbleOpacity.value = it
-                }
-            }
-
-            launch {
-                appearanceSettingsRepository.chatPanelOpacityFlow.collectLatest {
-                    _chatPanelOpacity.value = it
                 }
             }
 
@@ -2909,38 +2871,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** 设置卡片圆角（dp）。 */
-    fun setCardCorner(corner: Int) {
+    /** 设置圆角风格档位（0 紧凑 / 1 标准 / 2 舒适），一键套用到五处圆角。 */
+    fun setCornerStyle(index: Int) {
+        val preset = cornerStylePresets()[index.coerceIn(0, cornerStylePresets().lastIndex)]
         viewModelScope.launch {
-            appearanceSettingsRepository.setCardCorner(corner)
-        }
-    }
-
-    /** 设置按钮圆角（dp）。 */
-    fun setButtonCorner(corner: Int) {
-        viewModelScope.launch {
-            appearanceSettingsRepository.setButtonCorner(corner)
-        }
-    }
-
-    /** 设置输入框圆角（dp）。 */
-    fun setFieldCorner(corner: Int) {
-        viewModelScope.launch {
-            appearanceSettingsRepository.setFieldCorner(corner)
-        }
-    }
-
-    /** 设置聊天气泡圆角（dp）。 */
-    fun setBubbleCorner(corner: Int) {
-        viewModelScope.launch {
-            appearanceSettingsRepository.setBubbleCorner(corner)
-        }
-    }
-
-    /** 设置图片/附件圆角（dp）。 */
-    fun setImageCorner(corner: Int) {
-        viewModelScope.launch {
-            appearanceSettingsRepository.setImageCorner(corner)
+            appearanceSettingsRepository.setCardCorner(preset[0])
+            appearanceSettingsRepository.setButtonCorner(preset[1])
+            appearanceSettingsRepository.setFieldCorner(preset[2])
+            appearanceSettingsRepository.setBubbleCorner(preset[3])
+            appearanceSettingsRepository.setImageCorner(preset[4])
         }
     }
 
@@ -2999,33 +2938,6 @@ class SettingsViewModel @Inject constructor(
     fun setCodeShowLineNumber(enabled: Boolean) {
         viewModelScope.launch {
             appearanceSettingsRepository.setCodeShowLineNumber(enabled)
-        }
-    }
-
-    /** 设置用户气泡透明度（10~100%）。 */
-    fun setUserBubbleOpacity(opacity: Int) {
-        bubbleOpacityWriteJob?.cancel()
-        bubbleOpacityWriteJob = viewModelScope.launch {
-            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
-            appearanceSettingsRepository.setUserBubbleOpacity(opacity)
-        }
-    }
-
-    /** 设置 AI 回复气泡透明度（10~100%）。 */
-    fun setAssistantBubbleOpacity(opacity: Int) {
-        bubbleOpacityWriteJob?.cancel()
-        bubbleOpacityWriteJob = viewModelScope.launch {
-            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
-            appearanceSettingsRepository.setAssistantBubbleOpacity(opacity)
-        }
-    }
-
-    /** 设置聊天外壳透明度系数（10~100%）。 */
-    fun setChatPanelOpacity(opacity: Int) {
-        bubbleOpacityWriteJob?.cancel()
-        bubbleOpacityWriteJob = viewModelScope.launch {
-            delay(BACKGROUND_ALPHA_WRITE_DEBOUNCE_MS)
-            appearanceSettingsRepository.setChatPanelOpacity(opacity)
         }
     }
 

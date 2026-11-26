@@ -1,5 +1,6 @@
 package com.aiverse.feature.plugins.domain
 
+import com.aiverse.core.theme.PluginStyleColorTokens
 import java.net.URI
 import java.net.URISyntaxException
 import kotlinx.serialization.json.Json
@@ -65,6 +66,13 @@ object PluginManifestParser {
     private val MODEL_ACCESS_KEYS = setOf("purpose")
     private val OVERLAY_KEYS = setOf("purpose", "surfaces")
     private val OVERLAY_SURFACE_KEYS = setOf("id", "page", "width", "height", "draggable", "snap")
+    private val STYLE_TOKEN_KEYS = setOf(
+        "chatInputRadius", "cardRadius", "buttonRadius", "fieldRadius", "bubbleRadius", "imageRadius",
+        "userBubbleOpacity", "assistantBubbleOpacity", "chatPanelOpacity",
+        "bubbleUserColor", "bubbleUserTextColor", "topBarColor", "topBarTextColor",
+        "drawerColor", "drawerTextColor", "iconColor",
+        "chatInputMinHeight", "chatInputShadow"
+    )
 
     private val PLUGIN_ID = Regex("^[\\p{L}][\\p{L}\\p{N}_-]{0,31}\\.[\\p{L}][\\p{L}\\p{N}_-]{0,31}$")
     private val PUBLISHER = Regex("^[a-z][a-z0-9-]{0,31}$")
@@ -93,6 +101,29 @@ object PluginManifestParser {
     private const val MIN_OVERLAY_EDGE = 48
     private const val MAX_OVERLAY_WIDTH = 720
     private const val MAX_OVERLAY_HEIGHT = 1200
+    private val STYLE_TOKEN_RADIUS_RANGE = 0..48
+    private val STYLE_TOKEN_OPACITY_RANGE = 10..100
+    private val STYLE_TOKEN_SIZE_RANGE = 0..160
+    private val STYLE_TOKEN_SHADOW_RANGE = 0..40
+
+    /** 各样式令牌的取值范围；颜色令牌不在其中，单独校验。 */
+    private val STYLE_TOKEN_RANGES = mapOf(
+        "chatInputRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "cardRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "buttonRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "fieldRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "bubbleRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "imageRadius" to STYLE_TOKEN_RADIUS_RANGE,
+        "userBubbleOpacity" to STYLE_TOKEN_OPACITY_RANGE,
+        "assistantBubbleOpacity" to STYLE_TOKEN_OPACITY_RANGE,
+        "chatPanelOpacity" to STYLE_TOKEN_OPACITY_RANGE,
+        "chatInputMinHeight" to STYLE_TOKEN_SIZE_RANGE,
+        "chatInputShadow" to STYLE_TOKEN_SHADOW_RANGE
+    )
+    private val STYLE_TOKEN_COLOR_KEYS = setOf(
+        "bubbleUserColor", "bubbleUserTextColor", "topBarColor", "topBarTextColor",
+        "drawerColor", "drawerTextColor", "iconColor"
+    )
     const val MAX_PATH_LENGTH = 200
     const val MAX_PATH_DEPTH = 8
 
@@ -172,6 +203,7 @@ object PluginManifestParser {
                     backup = contributes.backup,
                     modelAccess = contributes.modelAccess,
                     configPage = contributes.configPage ?: readConfigPage(obj["configPage"], "configPage"),
+                    styleTokens = contributes.styleTokens,
                     icon = icon
                 )
             )
@@ -412,7 +444,8 @@ object PluginManifestParser {
             val overlay: PluginOverlayRef?,
             val backup: PluginBackupRef?,
             val modelAccess: PluginModelAccessRef?,
-            val configPage: String?
+            val configPage: String?,
+            val styleTokens: PluginStyleTokensRef?
         )
 
         private fun readContributes(obj: JsonObject): Contributes? {
@@ -423,7 +456,7 @@ object PluginManifestParser {
                 it != "skills" && it != "agents" && it != "workspaceTools" && it != "uiEntries" &&
                     it != "tools" && it != "hooks" && it != "mcp" && it != "providers" &&
                     it != "sessionSources" && it != "shizuku" && it != "ssh" && it != "overlay" && it != "backup" &&
-                    it != "modelAccess" && it != "configPage"
+                    it != "modelAccess" && it != "configPage" && it != "styleTokens"
             }.forEach {
                 err(PluginErrorCode.UNSUPPORTED_CONTRIBUTION, it)
                 ok = false
@@ -482,17 +515,22 @@ object PluginManifestParser {
                 }
             }
             val configPage = readConfigPage(contributes["configPage"], "contributes.configPage")
+            val styleTokens = readStyleTokens(contributes["styleTokens"], "contributes.styleTokens")
+                ?: run {
+                    if (contributes["styleTokens"] != null) ok = false
+                    null
+                }
             if (ok && skills.isEmpty() && agents.isEmpty() && workspaceTools.isEmpty() && uiEntries.isEmpty() &&
                 tools.isEmpty() && hooks.isEmpty() && mcp.isEmpty() && providers.isEmpty() && sessionSources.isEmpty() &&
                 shizuku == null && ssh == null && overlay == null && backup == null && modelAccess == null &&
-                configPage == null
+                configPage == null && styleTokens == null
             ) {
                 invalid("contributes")
                 ok = false
             }
             return if (ok) Contributes(
                 skills, agents, workspaceTools, uiEntries, tools, hooks, mcp, providers, sessionSources,
-                shizuku, ssh, overlay, backup, modelAccess, configPage
+                shizuku, ssh, overlay, backup, modelAccess, configPage, styleTokens
             ) else null
         }
 
@@ -908,6 +946,98 @@ object PluginManifestParser {
                 ok = false
             }
             return if (ok && purpose != null) PluginOverlayRef(purpose, surfaces) else null
+        }
+
+        /** 缺省表示不改外观；每个字段独立可选，越界数值与非法颜色均拒绝。 */
+        private fun readStyleTokens(raw: JsonElement?, path: String): PluginStyleTokensRef? {
+            if (raw == null) return null
+            val obj = raw as? JsonObject ?: return null.also { invalid(path) }
+            var ok = true
+            obj.keys.filter { it !in STYLE_TOKEN_KEYS }.forEach {
+                err(PluginErrorCode.UNSUPPORTED_FIELD, "$path.$it")
+                ok = false
+            }
+            var radius: Int? = null
+            var card: Int? = null
+            var button: Int? = null
+            var field: Int? = null
+            var bubble: Int? = null
+            var image: Int? = null
+            var userOpacity: Int? = null
+            var assistantOpacity: Int? = null
+            var panelOpacity: Int? = null
+            var bubbleUser: String? = null
+            var bubbleUserText: String? = null
+            var topBar: String? = null
+            var topBarText: String? = null
+            var drawer: String? = null
+            var drawerText: String? = null
+            var icon: String? = null
+            var inputMinHeight: Int? = null
+            var inputShadow: Int? = null
+            for ((key, element) in obj) {
+                val fieldPath = "$path.$key"
+                when {
+                    key in STYLE_TOKEN_RANGES -> {
+                        val value = (element as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+                        if (value == null || value !in STYLE_TOKEN_RANGES.getValue(key)) {
+                            invalid(fieldPath)
+                            ok = false
+                        } else {
+                            when (key) {
+                                "chatInputRadius" -> radius = value
+                                "cardRadius" -> card = value
+                                "buttonRadius" -> button = value
+                                "fieldRadius" -> field = value
+                                "bubbleRadius" -> bubble = value
+                                "imageRadius" -> image = value
+                                "userBubbleOpacity" -> userOpacity = value
+                                "assistantBubbleOpacity" -> assistantOpacity = value
+                                "chatPanelOpacity" -> panelOpacity = value
+                                "chatInputMinHeight" -> inputMinHeight = value
+                                "chatInputShadow" -> inputShadow = value
+                            }
+                        }
+                    }
+                    key in STYLE_TOKEN_COLOR_KEYS -> {
+                        val value = element.stringOrNull()?.trim()
+                        if (value.isNullOrEmpty() || !PluginStyleColorTokens.isValidColor(value)) {
+                            invalid(fieldPath)
+                            ok = false
+                        } else {
+                            when (key) {
+                                "bubbleUserColor" -> bubbleUser = value
+                                "bubbleUserTextColor" -> bubbleUserText = value
+                                "topBarColor" -> topBar = value
+                                "topBarTextColor" -> topBarText = value
+                                "drawerColor" -> drawer = value
+                                "drawerTextColor" -> drawerText = value
+                                "iconColor" -> icon = value
+                            }
+                        }
+                    }
+                }
+            }
+            return if (ok) PluginStyleTokensRef(
+                chatInputRadius = radius,
+                cardRadius = card,
+                buttonRadius = button,
+                fieldRadius = field,
+                bubbleRadius = bubble,
+                imageRadius = image,
+                userBubbleOpacity = userOpacity,
+                assistantBubbleOpacity = assistantOpacity,
+                chatPanelOpacity = panelOpacity,
+                bubbleUserColor = bubbleUser,
+                bubbleUserTextColor = bubbleUserText,
+                topBarColor = topBar,
+                topBarTextColor = topBarText,
+                drawerColor = drawer,
+                drawerTextColor = drawerText,
+                iconColor = icon,
+                chatInputMinHeight = inputMinHeight,
+                chatInputShadow = inputShadow
+            ) else null
         }
 
         private fun readWorkspaceTools(raw: JsonElement?, path: String): List<PluginWorkspaceToolRef>? {

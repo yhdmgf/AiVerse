@@ -12,7 +12,7 @@ AiVerse 的插件系统基于 **`plugin.json` 清单 + JSON-RPC 进程协议**�
 
 1. [包结构](#包结构)
 2. [plugin.json 全字段](#pluginjson-全字段)
-3. [contributes 十三种贡献](#contributes-十三种贡献)
+3. [contributes 十四种贡献](#contributes-十四种贡献)
 4. [runtime JSON-RPC 协议](#runtime-jsonrpc-协议)
 5. [页面桥](#页面桥)
 6. [打包、安装与调试](#打包安装与调试)
@@ -184,9 +184,9 @@ demo-kit/
 
 ---
 
-## contributes 十三种贡献
+## contributes 十四种贡献
 
-`contributes` 是一个对象，可用键恰好是下面 13 种。出现其它键以 `UNSUPPORTED_CONTRIBUTION` 拒绝；每类最多 64 项（`uiEntries` 另有每槽位上限），`contributes` 全空也无效。
+`contributes` 是一个对象，可用键恰好是下面 14 种。出现其它键以 `UNSUPPORTED_CONTRIBUTION` 拒绝；数组类每类最多 64 项（`uiEntries` 另有每槽位上限），`contributes` 全空也无效。
 
 | 键 | 类型 | 作用 |
 | --- | --- | --- |
@@ -202,6 +202,7 @@ demo-kit/
 | `overlay` | 对象 | 声明系统浮层 |
 | `backup` | 对象 | 声明接收备份与还原事件 |
 | `modelAccess` | 对象 | 声明调用使用者已配置的 AI 供应商 |
+| `styleTokens` | 对象 | 改宿主组件的纯装饰外观（样式令牌） |
 | `configPage` | 字符串 | 插件详情中的配置页 |
 
 ### tools
@@ -507,6 +508,63 @@ definePlugin({ handlers: {
 ```
 
 也可写在 `contributes.configPage`。必须是包内 `.html` / `.htm` 文件，最大 512 KiB。配置页只出现在「设置 → 插件」的插件详情中，不会混入设置主菜单。配置页适用于填写 API Key、开关和选项，仅在插件启用且首次切到配置标签时加载；停留在原生管理标签时不会提前执行页面脚本。停用、卸载或替换安装会使旧页面桥失效并取消该桥的在途任务、文件订阅和模型流；重新启用后需要重新打开页面，旧桥不会恢复授权。
+
+### styleTokens
+
+`styleTokens` 让插件改写宿主组件的**纯装饰外观**（样式令牌）：聊天气泡、输入框、顶栏、侧栏、卡片、按钮、图标等的圆角、透明度、底色与文字颜色。它只改「长什么样」，不改变任何功能、布局或内容，也不能读取或修改使用者的数据。
+
+```json
+{
+  "styleTokens": {
+    "bubbleRadius": 22,
+    "bubbleUserColor": "cardSurface",
+    "userBubbleOpacity": 85,
+    "chatInputRadius": 28
+  }
+}
+```
+
+字段全部可选，按字段单独生效；只声明想改的那几项，其余沿用使用者现有设置。每个字段只取**第一个声明它的已启用插件**的值，后续插件对同一字段的声明不再生效。
+
+优先级为**插件 > 使用者设置 > 默认值**：某字段一旦被插件声明，就以插件为准；没有任何插件声明时，回退到使用者在「外观」里的设置，仍未设置则用内置默认。因此插件适合做整体美化主题，而使用者仍保有最终控制权——停用或卸载插件即恢复原样。
+
+**字段与取值范围**（越界或非法值会使整个清单无效、拒绝安装）：
+
+| 字段 | 类型 | 范围 | 作用 |
+| --- | --- | --- | --- |
+| `chatInputRadius` | 圆角 | 0–48 dp | 聊天输入框圆角 |
+| `cardRadius` | 圆角 | 0–48 dp | 卡片圆角 |
+| `buttonRadius` | 圆角 | 0–48 dp | 按钮圆角 |
+| `fieldRadius` | 圆角 | 0–48 dp | 输入框/文本域圆角 |
+| `bubbleRadius` | 圆角 | 0–48 dp | 聊天气泡圆角 |
+| `imageRadius` | 圆角 | 0–48 dp | 图片圆角 |
+| `chatInputMinHeight` | 尺寸 | 0–160 dp | 聊天输入框最小高度 |
+| `chatInputShadow` | 阴影 | 0–40 dp | 聊天输入框阴影强度 |
+| `userBubbleOpacity` | 透明度 | 10–100（%） | 使用者气泡不透明度 |
+| `assistantBubbleOpacity` | 透明度 | 10–100（%） | AI 回复气泡不透明度 |
+| `chatPanelOpacity` | 透明度 | 10–100（%） | 聊天面板（顶栏、输入框等）不透明度 |
+| `bubbleUserColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡底色 |
+| `bubbleUserTextColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡文字颜色 |
+| `topBarColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏底色 |
+| `topBarTextColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏标题颜色 |
+| `drawerColor` | 颜色 | 语义令牌名 / 十六进制 | 侧栏底色 |
+| `drawerTextColor` | 颜色 | 语义令牌名 / 十六进制 | 侧栏条目文字颜色 |
+| `iconColor` | 颜色 | 语义令牌名 / 十六进制 | 图标颜色 |
+
+圆角、尺寸与阴影字段填整数（dp），透明度填 10–100 的整数百分比，非法类型或超出范围都会拒绝安装。
+
+声明 `chatInputShadow` 时会以插件值为准，覆盖宿主原有的输入框阴影（含 HyperOS 风格档的默认阴影）。只声明这一项时其它圆角、颜色等保持不变；想让输入框恢复无阴影，填 `0` 即可。
+
+颜色字段接受两种写法：
+
+- **语义令牌名**（推荐）：自动跟随 App 的亮/暗主题与配色方案，主题切换时同步变化。代码实际接受以下 16 个语义色名：`primary`、`onPrimary`、`secondary`、`tertiary`、`surface`、`surfaceVariant`、`background`、`onSurface`、`onSurfaceVariant`、`outline`、`error`、`success`、`warning`、`info`、`cardSurface`、`pageBackground`；
+- **十六进制色值**：`#RRGGBB` 或带透明通道的 `#AARRGGBB`。
+
+写法非法（拼错、超出范围、不在上表内的令牌名、不存在的令牌名）会使整个清单无效、拒绝安装。
+
+::: tip 纯声明式贡献
+`styleTokens` 是声明型贡献，**不需要声明 `runtime`**，安装启用后即生效；禁用或卸载插件，外观立即恢复到使用者此前的设置。
+:::
 
 ---
 
