@@ -2411,6 +2411,11 @@
     <string name="overlay_ball_size_value">%1$ddp</string>
     <string name="overlay_ball_alpha_label">隐藏透明度</string>
     <string name="overlay_ball_alpha_value">%1$d%%</string>
+    <string name="overlay_ball_status_running">AI 正在操作手机</string>
+    <string name="overlay_ball_status_running_with_action">AI 正在操作手机：%1$s</string>
+    <string name="overlay_ball_status_done">操作已完成</string>
+    <string name="overlay_ball_status_failed">操作失败</string>
+    <string name="overlay_ball_tap_to_review">点按查看操控状态</string>
     <string name="perm_global_auto_confirm_title">确认一键允许所有工具？</string>
     <string name="perm_global_auto_confirm_message">开启后，AI 调用工具（终端、服务器、MCP、文件等）不再逐次向你确认，直接执行。仅灾难性删除与 Shizuku 宿主系统操作仍会拦截。请谨慎操作。</string>
 

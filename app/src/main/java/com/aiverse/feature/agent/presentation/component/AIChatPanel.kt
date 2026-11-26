@@ -1212,7 +1212,7 @@ fun AIChatPanel(
     val activeModel = activeProvider?.effectiveModel.orEmpty()
     val activeModelMetadata = activeProvider?.let { modelMetadata[modelMetadataKey(it.id, activeModel)] }
     // 上下文用量明细：点击快捷栏圆环弹出；分类按当前会话消息快照估算。
-    val contextUsageDetail = remember(currentSessionId, contextUsages, messages, sessionInputTokens, sessionLastInputTokens) {
+    val contextUsageDetail = remember(currentSessionId, activeModelMetadata, contextUsages, messages, sessionInputTokens, sessionLastInputTokens) {
         val contextLimit = activeModelMetadata?.let {
             com.aiverse.feature.settings.domain.model.ModelContextPolicy.effectiveInputBudget(it)
         } ?: 0
