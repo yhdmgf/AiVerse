@@ -55,7 +55,7 @@ Settings page icons pick their color by icon name by default (each icon type has
 
 **By default only three are enabled — switch folder, switch model, and thinking intensity**; MCP, web search, optimize input, and plus are off by default and can be enabled yourself. Changes sync to the chat page immediately.
 
-A single tap on the "Optimize input" button hands the content already written in the input box to the model to polish and fills it back (tapping does nothing when the input box is empty); long-pressing the button enters the "Optimize input dedicated model" setting (following the current chat model by default), see [Default Models](https://aivapp.cn/md/guide/default-models.md).
+A single tap on the "Optimize input" button hands the content already written in the input box to the model to polish and fills it back (tapping does nothing when the input box is empty); long-pressing the button enters the "Optimize input dedicated model" setting (following the current chat model by default), see [Default Models](https://aivapp.cn/md/guide/default-models.md). Once the polished text is filled back, the button turns into a ↺ restore state in place: a single tap restores the text from before polishing, and a long press pops up "Restore original / Continue optimizing"; the restore state disappears once the message is sent.
 
 -   **Sort by usage frequency** (**since 1.0.0**): enabled buttons are arranged from most to least frequently used, so commonly used buttons come first.
 -   **Overflow containment** (**since 1.0.0**): buttons that don't fit are tucked into the "···" menu on the right; tap to expand and view.
