@@ -626,6 +626,11 @@ const siteData = {
             "activeMatch": "/en/guide/"
           },
           {
+            "text": "Advanced",
+            "link": "/en/advanced/build-android-app",
+            "activeMatch": "/en/advanced/"
+          },
+          {
             "text": "Download",
             "link": "https://aivapp.cn/en/download"
           },
