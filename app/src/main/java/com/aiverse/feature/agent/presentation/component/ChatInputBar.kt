@@ -66,7 +66,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -103,7 +102,6 @@ import com.aiverse.core.theme.LocalInputFontSizeSp
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.glassBorderOr
 import com.aiverse.core.theme.chatPanelGlassOr
-import com.aiverse.core.theme.LocalChatPanelOpacity
 import com.aiverse.core.theme.LocalChatInputStyle
 import com.aiverse.core.theme.chatPanelSurface
 import com.aiverse.core.ui.rememberImeBottomInset
@@ -158,10 +156,6 @@ import compose.icons.feathericons.Square
 import compose.icons.feathericons.Shield
 import compose.icons.feathericons.Zap
 import kotlinx.coroutines.launch
-
-/** 输入框区域蒙版标准档基准高度（裸 dp）：盖住圆角容器，滚动内容滑入时被渐变遮罩；随键盘（IME）上移。
- *  实际高度在 [ChatInputBar] 内按密度令牌缩放。 */
-private const val INPUT_BAR_MASK_HEIGHT_BASE_DP = 110
 
 /** 输入框高度标准档基准上下限（裸 dp）：超过上限后文本在框内滚动。与 TextField 的 heightIn 一致。
  *  实际值在 [ChatInputBar] 内按密度令牌缩放。 */
@@ -265,8 +259,6 @@ internal fun ChatInputBar(
     onToggleWebSearch: () -> Unit = {},
     /** 联网搜索工具当前是否启用。 */
     webSearchEnabled: Boolean = true,
-    /** 聊天页底图是否开启：开启时输入区渐变蒙版改用背景色且终点更透，保留渐变避免背景在输入框边缘出现直线。 */
-    backgroundEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val hasContent = value.isNotBlank() || pendingAttachments.isNotEmpty()
@@ -321,7 +313,6 @@ internal fun ChatInputBar(
     ) {
         val densityTokens = LocalUIDensityTokens.current
         // 插件覆盖层：声明了 chatInputMinHeight 时以插件值为准（按密度缩放后再叠加），否则回退标准档基准。
-        val inputBarMaskHeight = densityTokens.scale(INPUT_BAR_MASK_HEIGHT_BASE_DP)
         val chatInputOverride = LocalChatInputStyle.current
         val inputFieldMinHeight = chatInputOverride?.minHeight?.let(densityTokens::scale)
             ?: densityTokens.scale(INPUT_FIELD_MIN_HEIGHT_BASE_DP)
@@ -333,42 +324,13 @@ internal fun ChatInputBar(
             animationSpec = tween(200),
             label = "inputbar-content-alpha"
         )
-        // 渐变终点固定在蒙版可视高度内：若跟随整个 Box（含 imeInset 被键盘拉长的部分），
-        // 键盘弹起时可见区域只占渐变前段，alpha 被摊薄到几乎透明——看起来像没有蒙版。
-        val maskGradientEndY = with(LocalDensity.current) { inputBarMaskHeight.toPx() }
-        val panelFactor = LocalChatPanelOpacity.current
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth()
         ) {
             val dashboardBodyMaxHeight = (maxHeight - imeInset - Spacing.md).coerceAtLeast(0.dp) * 0.4f
-            // 半透明渐变蒙版：盖住输入框区域 + 导航栏（手势小白条）区域，滚动内容滑入时被遮罩
-            // （能看见但看不清）；高度含 IME inset 随键盘上移，渐变在 inputBarMaskHeight 内完成，
-            // 之下为纯色。注意 IME padding 不能加在外层 Box 上——align(BottomCenter) 的子项
-            // 对齐在 padding 内部，会漏掉导航栏那条区域。
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(inputBarMaskHeight + imeInset)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                if (backgroundEnabled) {
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0f)
-                                } else {
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0f)
-                                },
-                                if (backgroundEnabled) {
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.8f * panelFactor)
-                                } else {
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.98f * panelFactor)
-                                }
-                            ),
-                            startY = 0f,
-                            endY = maskGradientEndY
-                        )
-                    )
-            )
+            // issue #269：原来的底部半透明渐变颜色蒙版已删除，改由 AIChatPanel 内容层的底部渐隐
+            // （BlendMode.DstIn 擦除内容本身）负责防止内容压在输入框/导航栏上，不再往输入区铺色；
+            // 该渐隐随 inputBarReservePx 上移，键盘弹起整块跟着上移。输入框自身的玻璃底保留。
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

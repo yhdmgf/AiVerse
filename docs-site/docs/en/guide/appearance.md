@@ -41,6 +41,8 @@ Settings page icons pick their color by icon name by default (each icon type has
 
 **Bubble transparency** (**since 1.0.3**): user bubbles and AI bubbles each have their own slider, adjustable from 10% to 100%, defaulting to 100% (fully opaque). While dragging, a preview stays below, rendering live according to the currently selected style and transparency, and only commits on release. Bubble transparency is exported / imported together with the theme pack.
 
+**Chat panel opacity**: the input box, floating panels, and bubble materials share this coefficient, adjustable from 10% to 100%, defaulting to 100%. At 100% it looks identical to before; lowering it makes them fade proportionally to reveal the background image while keeping text and outlines clear. The top bar and scroll fade protection don't use this coefficient — the top bar no longer paints a surface, and the top/bottom content fade protection always runs at full strength regardless of this slider. Permission confirmation, plan approval, follow-up, and goal panels keep a 35% readability floor. This setting is independent of bubble transparency and is exported / imported with backups.
+
 ## Input Box Quick Bar
 
 "Appearance → Input box quick bar" controls showing and hiding each button on the quick bar above the input box (**Mode switch is always kept** and isn't in this list). The button order matches the settings page:
