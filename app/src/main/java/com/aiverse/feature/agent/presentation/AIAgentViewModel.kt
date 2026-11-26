@@ -3295,9 +3295,13 @@ class AIAgentViewModel @Inject constructor(
         val ws = _currentWorkspace.value
         if (ws.isBlank()) return@launch
         val curId = _currentSessionId.value
-        val reusableId = if (curId != null && sessionUseCase.isSessionEmpty(curId)) {
-            curId
+        // 复用前先校验归属工作区：当前会话为空但已被改绑到别的工作区（或角色绑定落点≠当前区）时不能复用，
+        // 否则新会话停在旧工作区、侧边栏看不到（与 createAndSelectSession 的切区逻辑保持一致）。
+        val cur = curId?.let { sessionUseCase.getSessionById(it) }
+        val reusableId = if (cur != null && cur.workspacePath == ws && sessionUseCase.isSessionEmpty(cur.id)) {
+            cur.id
         } else {
+            // getEmptySessionOfWorkspace 已按 ws 过滤，天然只返回当前工作区的空会话。
             sessionUseCase.getEmptySessionOfWorkspace(ws)?.id
         }
         if (reusableId != null) {
