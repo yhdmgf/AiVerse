@@ -275,7 +275,7 @@ Closes #73
 - issue 编号放行尾，**必须用井号加数字并套括号 `(#N)`**，例如 `- 修复远端图片 (#173)`；不要把 `#N` 写在行首，不要漏括号。
 - 默认不写 `> [!NOTE]`；只有确实需要升级提醒（迁移、签名、兼容性、必须手动安装）才加，保持一两行。
 - 本轮关闭的 issue 全部写进公告，一个不漏。
-- **时机（硬规则，卡在推送之前、用户真机确认之后才合并）**：① 改完代码先写好本轮更新公告；② **公告与代码一起推分支开 PR**（CI 会自动构建并上传 debug APK 产物）；③ 从 PR 页面下载产物交用户真机验证；④ **用户确认没问题后**才合并 PR。顺序不得颠倒：**公告必须随代码一起进 PR，未拿到用户「没问题」之前不合并**；也不要在开发中途提前推。
+- **时机（硬规则，一次推送，不二次推）**：① 改完功能直接写好本轮更新公告；② 核对提交人署名（见 5.7，提交作者 = 受理人）；③ **公告与代码一起 `git push` 开 PR，这一步就结束本地动作**（云端 PR CI 会自动构建冒烟、跑单测/迁移/插件/镜像对账，并把 debug APK 作为 artifact 上传）；④ 从 PR 页面 Artifacts 下载 `app-universal-debug` 交用户真机验证；⑤ **用户确认没问题后由用户手动合并**。顺序不得颠倒：**公告必须随代码一起进 PR**，不要开发中途提前推，也不要本地冒烟验证完才回头写公告。
 - **推送前闸门（硬规则，不可跳过）**：**任何带用户可见改动（功能 / UI / 交互 / 工具行为）的代码，推送开 PR 时本轮关闭的 issue 对应的更新公告必须已经写好并随代码一起提交推送。** 没有 `docs-site/release-notes/<版本号>.md` 就不得 `git push`、不得开 PR。只改文档 / 纯 typo / CI 配置等无用户可见变化的推送，可豁免本闸门。验收时把「公告已存在且覆盖本轮全部 issue」当作与「CI 绿」同级的必过项；漏写即视为审核不通过，补齐后再推。
 - 覆盖范围：上一个正式版本到现在；发版流程按 `<版本号>.md` 读取。
 
@@ -386,9 +386,9 @@ Room：`feature/agent/data/local/database/AgentDatabase.kt` + 各 DAO。迁移�
 2. **拉到本地**：`git fetch origin pull/<N>/head:pr-<N>`。勿用 `gh pr checkout`。
 3. **审查**：`gh pr diff <N> > /tmp/pr<N>.diff` 通读。PR 描述与 CodeRabbit 结论都不算证据，逐项落地核实：新依赖、`R.string` 双语存在、组件签名与调用点、是否复用既有实现、安全面、资产同步、迁移对账、每个 dp 是否统一走 token、超范围改动。
 4. **预演冲突**：`git merge-tree --write-tree --name-only main pr-<N>`。
-5. **临时分支合并**：`git switch -c merge/pr-<N> main` → `git merge --no-ff pr-<N> -m "Merge pull request #<N> from <owner>/<head-branch>" -m "<PR 标题>"`。
+5. **推送开 PR（本地到此为止，一次推完）**：公告（见 5.8）已随代码写好、提交人署名核对无误（见 5.7）后，`git push origin <功能分支>` 开 PR。**云端 PR CI 自动构建冒烟 + 跑单测/迁移/插件/镜像对账，并把 debug APK 作为 artifact 上传。本地不再临时分支 merge、不冒烟出包、不推 main。**
 6. **云端出包 + 真机验证**：推 PR 后云端 CI 自动构建 universal debug APK 并上传 artifact。动了 UI 或交互的 PR，从 PR 页面 CI run 的 Artifacts 下载 `app-universal-debug`，交给用户真机验证，**用户确认无误后才合并**，不要跳过真机直接合。内存紧张时不要本地冒烟出包，直接用云端产物。
-7. **合并（默认手动，本地无闸门）**：单测、迁移对账、编译冒烟全部交给云端 PR CI（推 PR 即自动触发）。CI 绿且用户真机通过后，**默认由用户在 GitHub 页面手动合并 PR**（远端为合并后的真源，不再本地 `git merge` 推 `main`）。若用户明确要求本地合并，才用：审核 / 补充修正 → `git push origin <该 PR 的 head 分支>` 追加到同一 PR；确认 CI 绿 + 真机通过后 `git switch main && git merge --ff-only merge/pr-<N> && git push origin main`。
+7. **CI 结果回传 + 合并（默认用户手动）**：CI 失败时把失败日志回传主会话，定位修复后 `git push origin <该 PR 的 head 分支>` 追加到同一 PR 重跑；**CI 全绿且用户真机通过即结束本轮，由用户在 GitHub 页面手动合并 PR**（远端为合并后的真源，本地不再 `git merge` 推 `main`）。
 8. **收尾**：确认 PR 已合并（远端）后，`git pull origin main` 同步本地；如走了本地临时分支 `merge/pr-<N>` / `pr-<N>` 则 `git branch -d` 清理。不动 stash 与未跟踪文件。
 
 **CI 结果回传**：PR CI 跑完会自动通知。**失败时把失败日志 / 报错发给主会话，定位后修复并追加推到同一 PR 重跑；CI 全绿且用户真机验证通过即结束本轮，等用户手动合并。**
