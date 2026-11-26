@@ -1,27 +1,56 @@
 name: PR 检查
 
+# PR 合入前的兜底门禁：快检查（迁移/插件/镜像脚本）→ universal debug 编译冒烟 → 单元测试。
+# 目的是在合入阶段就拦住编译错误与回归，而不是推迟到打 tag 发版当天才暴露。
+# 打 v* tag 的发版构建走 android-release.yml，不在这里。
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
+      # 纯文档 / 前端 / 静态资源改动不影响 Android 构建产物，跳过 CI 省时间。
+      # 注意：只要本次 push 含任一非忽略路径的改动，CI 仍会触发。
       - '**.md'
+      - '**.mdx'
       - '.gitignore'
+      - 'docs/**'
       - 'docs-site/**'
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
+      # 前端 / 静态资源类后缀（web-ui、docs-site 等以文件类型兜底，防新增目录漏配）。
+      - '**.html'
+      - '**.css'
+      - '**.js'
+      - '**.mjs'
+      - '**.ts'
+      - '**.json'
+      - '**.png'
+      - '**.jpg'
+      - '**.jpeg'
+      - '**.svg'
+      - '**.webp'
+      - '**.gif'
   workflow_dispatch:
+
+# 同 PR 新提交到来时取消正在跑的旧 run，省 CI 额度。
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # 手动触发一律跑；PR 仅在非草稿时跑，草稿不白烧一轮构建。
     if: ${{ github.event_name == 'workflow_dispatch' || ! github.event.pull_request.draft }}
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # versionCode 由 build.gradle.kts 的 gitCommitCount() 在配置阶段取
+          # git rev-list --count HEAD，浅克隆（默认 depth=1）会得到 1，必须拉完整历史。
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -30,11 +59,64 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: 运行单元测试
-        run: >
-          sh gradlew :app:testUniversalDebugUnitTest
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # 仅 PR 用只读缓存，避免被 PR 改动污染；写回留给 main 上的 push 流程。
+          cache-read-only: true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 迁移版本号对账：编号连续、SCHEMA_VERSION 一致、已发布迁移未被篡改/复用
+      # （hotfix 合流后 main 未把未发布迁移后移会在这里被拦）。秒级失败，放最前。
+      - name: Check migration versions
+        run: python3 scripts/check_migrations.py
+
+      # 插件 host 方法表对账：宿主 PluginRuntimeManager 的 host.* 分支与
+      # plugins/sdk/types/host.d.ts 的 HostMethodMap 必须一一对应，改宿主忘改 SDK 会在这里被拦。
+      - name: Check plugin host methods
+        run: node scripts/check-host-methods.mjs
+
+      # 插件页面桥对账：PluginWebBridge / PluginOverlayBridge 的 dispatch 分支与
+      # assets/plugin-ui/aicode.js 的 call(...) 必须一一对应，否则运行期 METHOD_UNKNOWN。
+      - name: Check plugin page bridge
+        run: node scripts/check-page-bridge.mjs
+
+      # 插件清单校验：用 plugins/schema/plugin.schema.json 校验仓库内所有 plugin.json，
+      # 字段写错在 CI 就暴露，不用等装到设备上被 PluginManifestParser 拒绝。
+      - name: Check plugin manifests
+        run: node scripts/check-plugin-manifests.mjs
+
+      # 镜像目录同步脚本的离线自测：锁住 Alpine/Ubuntu/Debian 三套解析器对上游格式的假设，
+      # 上游改版式时在 PR 阶段就暴露，而不是等每日定时任务悄悄失败。
+      - name: Self-test container image sync script
+        run: python3 scripts/sync-container-images.py --self-test
+
+      # 单 flavor 编译冒烟：只构 universal debug（CLAUDE.md 规范：AI 改完编译型代码默认跑这个），
+      # 不构全量三 flavor，省三倍 Kotlin 编译。单测只编译 test+主源集，覆盖不到这里。
+      - name: Build universal debug (smoke)
+        run: >-
+          ./gradlew :app:assembleUniversalDebug
           -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC"
           --stacktrace
 
-      - name: 迁移对账
-        run: python3 scripts/check_migrations.py
+      # 单元测试（app/src/test 下的 Kotlin 单测）。
+      # 只跑 universal debug 变体：单测逻辑与 flavor 无关（flavor 仅影响 abiFilters/assets），
+      # 跑全 flavor 6 变体是重复编译，无额外覆盖。
+      - name: Run unit tests
+        run: >-
+          ./gradlew :app:testUniversalDebugUnitTest
+          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC"
+          --stacktrace
+
+      # 把 debug APK 作为产物上传，供 PR 页面下载、真机验证用。
+      # 本容器内存紧张、构建慢，统一用云端产物代替本地冒烟出包。
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-universal-debug
+          path: app/build/outputs/apk/universal/debug/app-universal-debug.apk
+          if-no-files-found: error
+          retention-days: 7

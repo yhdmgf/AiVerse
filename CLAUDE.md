@@ -126,7 +126,7 @@ com/aiverse/
    - 动了内置供应商 → 只改 `data/providers.json`（不碰 assets 快照）
    - 动了容器镜像 → 不手改生成结果，改脚本配置或 `sources` 表
    - 动了 UI 尺寸 → 检查每个 dp 是否统一走 token / UIDensity scale
-5. **验证**：编译型代码改完跑 `:app:assembleUniversalDebug` 冒烟；冒烟通过后直接推分支开 PR（PR CI 会自动跑单测 + 迁移对账）。
+5. **验证**：编译型代码改完先写好更新公告（见 5.8），公告与代码一起推分支开 PR；编译冒烟 / 单测 / 迁移对账交由 PR CI 自动跑，并上传 debug APK 产物供真机验证。本地不强制冒烟。
 6. **提交**：Conventional Commits（`fix(settings): …`），中文描述；修 issue 末尾每个 issue 单独一行 `Closes #N`。
 
 ---
@@ -204,8 +204,7 @@ com/aiverse/
 
 阶段四审核通过必须同时满足：
 
-- 对应 flavor 冒烟编译通过；
-- PR CI 检查通过（单测 + 迁移对账由 `.github/workflows/pr-check.yml` 自动触发，无需本地重复跑）；
+- PR CI 全绿（单测 + 迁移对账 + 各项对账 + 编译冒烟由 `.github/workflows/pr-check.yml` 自动跑，无需本地重复）；
 - `prompts/` 已同步（如动 Agent 工具/行为）；
 - `docs-site/docs/` 已同步（如动 UI/功能）；
 - 双语 `strings.xml` 已同步（如动用户可见文案）；
@@ -229,7 +228,7 @@ sh gradlew :app:assembleUniversalDebug \
 --stacktrace
 ```
 
-- **冒烟构建**用 `:app:assembleUniversalDebug`（勿用 `assembleDebug` / `build` 聚合任务，会跨 flavor 全跑）。单测与迁移对账由 PR CI（`.github/workflows/pr-check.yml`）自动触发，本地无需重复跑。
+- **冒烟构建**（本地可选，默认交云端 CI）用 `:app:assembleUniversalDebug`（勿用 `assembleDebug` / `build` 聚合任务，会跨 flavor 全跑）。单测与迁移对账由 PR CI（`.github/workflows/pr-check.yml`）自动触发，本地无需重复跑。
 - `gradlew` 无执行位（文件系统限制），容器内一律 `sh gradlew` 调用；`chmod +x` 无效。
 - 依赖 Gradle wrapper 8.14、AGP 8.9.3、android-36 已就绪；`local.properties` 的 `sdk.dir=/root/android/sdk`。
 
@@ -276,8 +275,8 @@ Closes #73
 - issue 编号放行尾，**必须用井号加数字并套括号 `(#N)`**，例如 `- 修复远端图片 (#173)`；不要把 `#N` 写在行首，不要漏括号。
 - 默认不写 `> [!NOTE]`；只有确实需要升级提醒（迁移、签名、兼容性、必须手动安装）才加，保持一两行。
 - 本轮关闭的 issue 全部写进公告，一个不漏。
-- **时机（硬规则，卡在用户真机确认之后、推送之前）**：① 先冒烟出 APK 交用户真机验证；② **用户确认没问题后**才动笔写公告；③ 写完公告再随代码一起推。顺序不得颠倒：**未拿到用户「没问题」之前不写公告，写了公告也未推**；也不要在开发中途提前写。
-- **推送前闸门（硬规则，不可跳过）**：**任何带用户可见改动（功能 / UI / 交互 / 工具行为）的代码推送之前，本轮关闭的 issue 对应的更新公告必须已经写好并随代码一起提交推送。** 没有 `docs-site/release-notes/<版本号>.md` 就不得 `git push`、不得开 PR。只改文档 / 纯 typo / CI 配置等无用户可见变化的推送，可豁免本闸门。验收时把「公告已存在且覆盖本轮全部 issue」当作与「冒烟通过」同级的必过项；漏写即视为审核不通过，补齐后再推。
+- **时机（硬规则，卡在推送之前、用户真机确认之后才合并）**：① 改完代码先写好本轮更新公告；② **公告与代码一起推分支开 PR**（CI 会自动构建并上传 debug APK 产物）；③ 从 PR 页面下载产物交用户真机验证；④ **用户确认没问题后**才合并 PR。顺序不得颠倒：**公告必须随代码一起进 PR，未拿到用户「没问题」之前不合并**；也不要在开发中途提前推。
+- **推送前闸门（硬规则，不可跳过）**：**任何带用户可见改动（功能 / UI / 交互 / 工具行为）的代码，推送开 PR 时本轮关闭的 issue 对应的更新公告必须已经写好并随代码一起提交推送。** 没有 `docs-site/release-notes/<版本号>.md` 就不得 `git push`、不得开 PR。只改文档 / 纯 typo / CI 配置等无用户可见变化的推送，可豁免本闸门。验收时把「公告已存在且覆盖本轮全部 issue」当作与「CI 绿」同级的必过项；漏写即视为审核不通过，补齐后再推。
 - 覆盖范围：上一个正式版本到现在；发版流程按 `<版本号>.md` 读取。
 
 ### 5.9 代码质量准则
@@ -345,14 +344,16 @@ Room：`feature/agent/data/local/database/AgentDatabase.kt` + 各 DAO。迁移�
 
 ### 8.1 构建与验证
 
-**改完编译型代码（`.kt` / `.gradle.kts` / `AndroidManifest.xml`）→ 提交前必跑冒烟编译；冒烟通过后推分支开 PR（或追加到既有 PR，见 8.3 第 0 条），单测与迁移对账由云端 PR CI 自动执行，本地不再跑推送前闸门。** 只改文档 / 资源文案 / 纯 `.md` 时冒烟也跳过。
+**改完编译型代码（`.kt` / `.gradle.kts` / `AndroidManifest.xml`）→ 写好本轮更新公告（见 5.8）→ 一起推分支开 PR（或追加到既有 PR，见 8.3 第 0 条）→ 云端 PR CI（`.github/workflows/pr-check.yml`）自动跑单测 + 迁移对账 + 各项对账 + universal debug 编译冒烟，并把 debug APK 作为 artifact 上传。本地不再强制冒烟，也不跑推送前闸门。** 本地 3GB 堆冒烟仅作可选的快速反馈，内存紧张时建议直接依赖云端产物。只改文档 / 资源文案 / 纯 `.md` 时 PR CI 会因 `paths-ignore` 自动跳过。
 
-| 用途 | 命令 |
+| 用途 | 命令 / 位置 |
 | --- | --- |
-| 冒烟编译（日常默认） | `./gradlew :app:assembleUniversalDebug`（容器内用 3GB 堆 + `sh gradlew`） |
-| PR CI 自动执行 | 单测 `:app:testUniversalDebugUnitTest` + 迁移对账 `check_migrations.py`（`.github/workflows/pr-check.yml`） |
-| 本地手动跑（仅调试，**推送前闸门已取消**） | `./gradlew :app:testUniversalDebugUnitTest` / `python3 scripts/check_migrations.py` |
-| 发版构建 APK / AAB | `./gradlew assembleRelease` / `./gradlew bundleRelease` |
+| **日常验证（默认）** | 推 PR，由云端 CI 构建：`.github/workflows/pr-check.yml` |
+| PR CI 自动执行 | 单测 `:app:testUniversalDebugUnitTest` + 编译冒烟 `:app:assembleUniversalDebug` + 迁移对账 + 插件 / 镜像脚本对账，并 `upload-artifact` 上传 debug APK |
+| 取真机验证包 | 在 PR 页面 CI run 的 Artifacts 下载 `app-universal-debug` |
+| 本地可选冒烟（仅快速反馈，非闸门） | `./gradlew :app:assembleUniversalDebug`（容器内务必 3GB 堆 + `sh gradlew`） |
+| 本地手动跑单测 / 迁移对账（仅调试） | `./gradlew :app:testUniversalDebugUnitTest`（建议也带 3GB 堆）/ `python3 scripts/check_migrations.py` |
+| 发版构建 APK / AAB | `./gradlew assembleRelease` / `./gradlew bundleRelease`（由 `android-release.yml` 在打 tag 后执行） |
 
 - **别用聚合任务做日常验证**：`assembleDebug` / `assembleRelease` / `test` / `build` 都会跨三个 flavor 全跑，耗时极长。
 - 容器内耗时构建必须用 `terminal` + `notify=true`，不要反复读输出、不要轮询。
@@ -378,17 +379,19 @@ Room：`feature/agent/data/local/database/AgentDatabase.kt` + 各 DAO。迁移�
 
 ### 8.3 PR 合并流程
 
-**在本地验证完再推送，不用 `gh pr merge` 在远端直接合。**
+**推 PR 前写好公告，验证与合并以云端 CI 为准，不用 `gh pr merge` 在本地强合。**
 
-0. **推送落点：追加到既有 PR，不要另开新 PR（硬规则）**。审核某个 PR 时发现问题、或对本次已推送改动做补充修正，一律 `git push origin <该 PR 的 head 分支>`，把修复追加到**同一个 PR**，不要单独新建 PR。判断口径：改动与该 PR 已有内容**相关**（同一批 issue / 同一主题 / 审核发现的回归或遗漏）→ 追加；改动是**新功能或与现有 PR 无关的新问题** → 才开新分支、新建 PR。**云端 PR CI 会在推送后自动跑单测 + 迁移对账，有问题会通知，本地不要再跑推送前闸门。**
+0. **推送落点：追加到既有 PR，不要另开新 PR（硬规则）**。审核某个 PR 时发现问题、或对本次已推送改动做补充修正，一律 `git push origin <该 PR 的 head 分支>`，把修复追加到**同一个 PR**，不要单独新建 PR。判断口径：改动与该 PR 已有内容**相关**（同一批 issue / 同一主题 / 审核发现的回归或遗漏）→ 追加；改动是**新功能或与现有 PR 无关的新问题** → 才开新分支、新建 PR。**云端 PR CI 会在推送后自动跑单测 + 迁移对账 + 编译冒烟并上传 APK 产物，有问题会通知，本地不要再跑推送前闸门。**
 1. **摸状态**：`git fetch origin` → `gh pr view <N> --json state,mergeable,mergeStateStatus,headRefName,changedFiles` + `gh pr checks <N>` → `git rev-list --left-right --count origin/main...main`。fork PR 的 Vercel 必报 `Authorization required to deploy` 属正常，只看 `Build & Test` 是否 pass。
 2. **拉到本地**：`git fetch origin pull/<N>/head:pr-<N>`。勿用 `gh pr checkout`。
 3. **审查**：`gh pr diff <N> > /tmp/pr<N>.diff` 通读。PR 描述与 CodeRabbit 结论都不算证据，逐项落地核实：新依赖、`R.string` 双语存在、组件签名与调用点、是否复用既有实现、安全面、资产同步、迁移对账、每个 dp 是否统一走 token、超范围改动。
 4. **预演冲突**：`git merge-tree --write-tree --name-only main pr-<N>`。
 5. **临时分支合并**：`git switch -c merge/pr-<N> main` → `git merge --no-ff pr-<N> -m "Merge pull request #<N> from <owner>/<head-branch>" -m "<PR 标题>"`。
-6. **冒烟 + 真机验证**：动了 UI 或交互的 PR 必须先冒烟出包、把 APK 发给用户真机验证，**用户确认无误后才继续**，不要跳过真机直接合。
-7. **推送（无本地闸门）**：单测与迁移对账交给云端 PR CI（推 PR 即自动触发，失败会通知，本地不重复跑）。审核/补充修正 → `git push origin <该 PR 的 head 分支>` 追加到同一 PR；确认 CI 绿 + 用户真机通过后，再 `git switch main && git merge --ff-only merge/pr-<N> && git push origin main`。
-8. **清理**：`git branch -d merge/pr-<N> pr-<N>`。不动 stash 与未跟踪文件。
+6. **云端出包 + 真机验证**：推 PR 后云端 CI 自动构建 universal debug APK 并上传 artifact。动了 UI 或交互的 PR，从 PR 页面 CI run 的 Artifacts 下载 `app-universal-debug`，交给用户真机验证，**用户确认无误后才合并**，不要跳过真机直接合。内存紧张时不要本地冒烟出包，直接用云端产物。
+7. **合并（默认手动，本地无闸门）**：单测、迁移对账、编译冒烟全部交给云端 PR CI（推 PR 即自动触发）。CI 绿且用户真机通过后，**默认由用户在 GitHub 页面手动合并 PR**（远端为合并后的真源，不再本地 `git merge` 推 `main`）。若用户明确要求本地合并，才用：审核 / 补充修正 → `git push origin <该 PR 的 head 分支>` 追加到同一 PR；确认 CI 绿 + 真机通过后 `git switch main && git merge --ff-only merge/pr-<N> && git push origin main`。
+8. **收尾**：确认 PR 已合并（远端）后，`git pull origin main` 同步本地；如走了本地临时分支 `merge/pr-<N>` / `pr-<N>` 则 `git branch -d` 清理。不动 stash 与未跟踪文件。
+
+**CI 结果回传**：PR CI 跑完会自动通知。**失败时把失败日志 / 报错发给主会话，定位后修复并追加推到同一 PR 重跑；CI 全绿且用户真机验证通过即结束本轮，等用户手动合并。**
 
 **必须停下来问用户**：本地 `main` 有未推提交／预演有冲突／PR 含数据库迁移或构建、CI、签名改动／审查发现超范围改动或质量问题／编译或单测失败。
 
