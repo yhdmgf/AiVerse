@@ -38,27 +38,39 @@ data class PluginStyleTokensRef(
          * 保证结果稳定可复现；列表为空时返回全空令牌。
          */
         fun mergeStyleTokens(tokens: List<PluginStyleTokensRef?>): PluginStyleTokensRef {
-            fun <T> first(selector: (PluginStyleTokensRef) -> T?): T? =
-                tokens.firstNotNullOfOrNull { selector(it) }
+            // 按字段取第一个非 null 声明者，列表顺序即优先级；调用方应先按插件 id 排序保证结果稳定。
+            // 先 filterNotNull 拿到非空元素，再用显式 for 循环取各字段首个非空值。刻意不用
+            // firstNotNullOfOrNull / mapNotNull：它们的类型参数带 R : Any 非空上界，而字段本身是
+            // Int? / String?，选择器返回可空值会让 R 推断成可空、违反上界并与字段类型不匹配。
+            // 这里返回类型直接写死具体类型，零泛型推断。
+            val declared = tokens.filterNotNull()
+            fun firstRadius(selector: (PluginStyleTokensRef) -> Int?): Int? {
+                for (token in declared) selector(token)?.let { return it }
+                return null
+            }
+            fun firstColor(selector: (PluginStyleTokensRef) -> String?): String? {
+                for (token in declared) selector(token)?.let { return it }
+                return null
+            }
             return PluginStyleTokensRef(
-                chatInputRadius = first { it.chatInputRadius },
-                cardRadius = first { it.cardRadius },
-                buttonRadius = first { it.buttonRadius },
-                fieldRadius = first { it.fieldRadius },
-                bubbleRadius = first { it.bubbleRadius },
-                imageRadius = first { it.imageRadius },
-                userBubbleOpacity = first { it.userBubbleOpacity },
-                assistantBubbleOpacity = first { it.assistantBubbleOpacity },
-                chatPanelOpacity = first { it.chatPanelOpacity },
-                bubbleUserColor = first { it.bubbleUserColor },
-                bubbleUserTextColor = first { it.bubbleUserTextColor },
-                topBarColor = first { it.topBarColor },
-                topBarTextColor = first { it.topBarTextColor },
-                drawerColor = first { it.drawerColor },
-                drawerTextColor = first { it.drawerTextColor },
-                iconColor = first { it.iconColor },
-                chatInputMinHeight = first { it.chatInputMinHeight },
-                chatInputShadow = first { it.chatInputShadow }
+                chatInputRadius = firstRadius { it.chatInputRadius },
+                cardRadius = firstRadius { it.cardRadius },
+                buttonRadius = firstRadius { it.buttonRadius },
+                fieldRadius = firstRadius { it.fieldRadius },
+                bubbleRadius = firstRadius { it.bubbleRadius },
+                imageRadius = firstRadius { it.imageRadius },
+                userBubbleOpacity = firstRadius { it.userBubbleOpacity },
+                assistantBubbleOpacity = firstRadius { it.assistantBubbleOpacity },
+                chatPanelOpacity = firstRadius { it.chatPanelOpacity },
+                bubbleUserColor = firstColor { it.bubbleUserColor },
+                bubbleUserTextColor = firstColor { it.bubbleUserTextColor },
+                topBarColor = firstColor { it.topBarColor },
+                topBarTextColor = firstColor { it.topBarTextColor },
+                drawerColor = firstColor { it.drawerColor },
+                drawerTextColor = firstColor { it.drawerTextColor },
+                iconColor = firstColor { it.iconColor },
+                chatInputMinHeight = firstRadius { it.chatInputMinHeight },
+                chatInputShadow = firstRadius { it.chatInputShadow }
             )
         }
     }
