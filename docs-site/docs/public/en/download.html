@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Download the AiVerse Android client — an AI coding and mobile workstation that completes the full development workflow on your phone. Offers stable, preview and test channels, supports direct GitHub and China mirror downloads, and covers common architectures such as ARM64, ARMv7 and x86_64.">
+<meta name="keywords" content="AiVerse,Android AI coding,mobile workstation,AI coding assistant,APK download">
+<link rel="canonical" href="https://www.aivapp.cn/en/download.html">
+<title>Download AiVerse for Android - AI Coding Mobile Workstation</title>
+<style>
+/* =====================================================================
+   设计基调：静谧编辑风 —— 暖纸色中性底、墨色主操作、衬线版本号做视觉锚点，
+   阴影克制、圆角偏小，状态靠明度/描边/细小图形区分，而非高饱和色。
+   ===================================================================== */
+
+/* ---------- 设计令牌 ---------- */
+:root{
+  /* spacing scale */
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:32px;
+
+  /* neutral roles（亮色） */
+  --bg:#efede7;            /* 页面背景 */
+  --surface:#fbfaf7;       /* 主表面 */
+  --surface-2:#f2efe8;     /* 次表面（左栏 / 分段控件底） */
+  --surface-3:#e9e5db;     /* 按下态表面 */
+  --border:#e2ded4;        /* 常规边框 */
+  --border-strong:#cdc8ba; /* 强边框（控件） */
+  --text:#1c1b19;          /* 主要文字 */
+  --text-2:#5b5850;        /* 次要文字 */
+  --text-disabled:#aaa598; /* 禁用文字 */
+  --ink:#1c1b19;           /* 主按钮底 / 聚焦环 */
+  --ink-hover:#38362f;
+  --ink-active:#0e0d0c;
+  --on-ink:#fbfaf7;
+  --accent:#3451b2;        /* 仅用于文字链接，不做光环/渐变 */
+
+  /* 语义色 */
+  --ok:#2c6a4d;   --ok-bg:#e3eee7;
+  --err:#a23b2e;  --err-bg:#f6e6e1;  --err-border:#dfb4aa;
+  --beta:#86571d; --beta-bg:#f2e7d3;
+  --test:#9b2955; --test-bg:#f7e4ec;
+
+  --focus:var(--ink);
+  --scrim:rgba(28,27,25,.46);
+  --shadow-panel:0 1px 0 rgba(255,255,255,.6) inset,0 24px 48px -16px rgba(28,27,25,.28),0 2px 6px rgba(28,27,25,.08);
+  --shadow-sm:0 1px 2px rgba(28,27,25,.08);
+
+  /* 圆角 / 字号 / 字体 */
+  --r-1:6px; --r-2:8px; --r-3:12px;
+  --fs-xs:12px; --fs-sm:13px; --fs-base:14px; --fs-md:16px; --fs-lg:20px; --fs-xl:40px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  --font-serif:"Iowan Old Style","Songti SC","Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --ctl-h:40px; --ctl-h-sm:32px;
+
+  /* 动效：状态 120–200ms */
+  --t-fast:120ms; --t:160ms; --t-slow:200ms;
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --spring:cubic-bezier(.3,1.3,.5,1);
+}
+html.dark{
+  --bg:#0f0f0e; --surface:#1d1c1a; --surface-2:#171614; --surface-3:#262521;
+  --border:#33312c; --border-strong:#4a4740;
+  --text:#ebe8e0; --text-2:#a9a498; --text-disabled:#6a665d;
+  --ink:#ebe8e0; --ink-hover:#fff; --ink-active:#cfcabd; --on-ink:#1d1c1a;
+  --accent:#8ea3ec;
+  --ok:#6fcf9f; --ok-bg:rgba(111,207,159,.13);
+  --err:#ef8f80; --err-bg:rgba(239,143,128,.12); --err-border:rgba(239,143,128,.38);
+  --beta:#e2a763; --beta-bg:rgba(226,167,99,.13);
+  --test:#e076a3; --test-bg:rgba(224,118,163,.13);
+  --scrim:rgba(0,0,0,.6);
+  --shadow-panel:0 1px 0 rgba(255,255,255,.05) inset,0 24px 56px -12px rgba(0,0,0,.7);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html.is-locked{overflow:hidden;padding-right:var(--sbw,0px)}
+body{
+  font-family:var(--font-sans);font-size:var(--fs-base);line-height:1.65;
+  color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;min-height:100vh;
+}
+.ic{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.ic-sm{width:14px;height:14px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[hidden]{display:none!important}
+
+/* ---------- 宿主页（模态关闭后可见） ---------- */
+.host{max-width:720px;padding:var(--s-6) var(--s-5)}
+.host-brand{display:inline-flex;align-items:center;gap:var(--s-2);font-weight:600;margin-bottom:var(--s-6)}
+.host h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.host p{color:var(--text-2);max-width:46ch;margin-bottom:var(--s-5)}
+
+/* =====================================================================
+   按钮 .btn
+   default      .btn-primary / .btn-secondary
+   hover        .btn:hover
+   focus-visible.btn:focus-visible
+   active       .btn:active
+   disabled     .btn[aria-disabled="true"], .btn:disabled
+   loading      .btn.is-loading
+   success      .btn.is-success
+   error        .btn.is-error
+   ===================================================================== */
+.btn{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);
+  height:var(--ctl-h);padding:0 var(--s-4);border-radius:var(--r-2);border:1px solid transparent;
+  font:inherit;font-size:var(--fs-base);font-weight:550;line-height:1;text-decoration:none;white-space:nowrap;cursor:pointer;
+  transition:background-color var(--t) var(--ease),border-color var(--t) var(--ease),color var(--t) var(--ease),
+             transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.btn-primary{background:var(--ink);color:var(--on-ink)}
+.btn-primary:hover{background:var(--ink-hover)}
+.btn-primary:active{background:var(--ink-active);transform:scale(.98)}
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover{background:var(--surface-2);border-color:var(--text-2)}
+.btn-secondary:active{background:var(--surface-3);transform:scale(.98)}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.btn[aria-disabled="true"],.btn:disabled{
+  background:var(--surface-2);color:var(--text-disabled);border-color:var(--border);
+  cursor:not-allowed;pointer-events:none;transform:none;
+}
+.btn .btn-ic{position:relative;display:inline-grid;place-items:center;width:18px;height:18px}
+.btn .btn-ic>*{grid-area:1/1;transition:opacity var(--t-fast) var(--ease),transform var(--t) var(--ease)}
+.btn .i-check,.btn .spin{opacity:0;transform:scale(.6)}
+/* loading */
+.btn.is-loading{pointer-events:none;cursor:progress}
+.btn.is-loading .i-dl{opacity:0;transform:scale(.6)}
+.btn.is-loading .spin{opacity:1;transform:none}
+/* success */
+.btn.is-success{background:var(--ok-bg);color:var(--ok);border-color:transparent;pointer-events:none}
+.btn.is-success .i-dl,.btn.is-success .spin{opacity:0}
+.btn.is-success .i-check{opacity:1;transform:none}
+/* error（Retry失败时短暂提示） */
+.btn.is-error{background:var(--err-bg);color:var(--err);border-color:var(--err-border)}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* =====================================================================
+   图标按钮 .icon-btn（关闭 / 主题）
+   default / hover / focus-visible / active 如下
+   ===================================================================== */
+.icon-btn{
+  display:inline-grid;place-items:center;width:var(--ctl-h-sm);height:var(--ctl-h-sm);border-radius:var(--r-2);
+  border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer;
+  transition:background-color var(--t) var(--ease),color var(--t) var(--ease),border-color var(--t) var(--ease),transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+}
+.icon-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+.icon-btn:active{background:var(--surface-3);transform:scale(.94)}
+.icon-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.icon-btn:disabled{color:var(--text-disabled);cursor:not-allowed;background:transparent;border-color:transparent}
+.icon-btn .i-sun{display:none}
+html.dark .icon-btn .i-sun{display:block}
+html.dark .icon-btn .i-moon{display:none}
+
+/* =====================================================================
+   模态骨架 + 遮罩
+   进入：scrim 透明度 200ms；panel 轻微 scale + translateY + 透明度（spring）
+   退出：更快（160ms）ease-out。仅使用 transform/opacity，布局不跳动。
+   ===================================================================== */
+.dl{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:var(--s-5);visibility:hidden;transition:visibility 0s linear 160ms}
+.dl[data-open="true"]{visibility:visible;transition-delay:0s}
+.dl-scrim{position:absolute;inset:0;background:var(--scrim);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity 160ms var(--ease)}
+.dl[data-open="true"] .dl-scrim{opacity:1;transition-duration:var(--t-slow)}
+.dl-panel{
+  position:relative;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);
+  width:min(900px,100%);height:min(640px,calc(100dvh - var(--s-6)*2));
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-3);box-shadow:var(--shadow-panel);overflow:hidden;
+  opacity:0;transform:translateY(var(--s-2)) scale(.97);transform-origin:50% 60%;
+  transition:opacity 160ms var(--ease),transform 160ms var(--ease);
+}
+.dl[data-open="true"] .dl-panel{opacity:1;transform:none;transition:opacity var(--t-slow) var(--ease),transform 240ms var(--spring)}
+.dl-panel:focus{outline:none}
+
+/* ---------- 左栏：上下文层（版本 / Changelog） ---------- */
+.rail{display:flex;flex-direction:column;min-height:0;padding:var(--s-6) var(--s-5) var(--s-5) var(--s-6);background:var(--surface-2);border-right:1px solid var(--border)}
+.rail-brand{display:flex;align-items:center;gap:var(--s-2);font-weight:600;font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-6)}
+.rail h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.rail .sub{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-5);max-width:34ch}
+.eyebrow{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
+.badge{display:inline-flex;align-items:center;height:20px;padding:0 var(--s-2);border-radius:var(--r-1);font-size:var(--fs-xs);font-weight:600;letter-spacing:0;text-transform:none}
+.badge.stable{background:var(--ok-bg);color:var(--ok)}
+.badge.beta{background:var(--beta-bg);color:var(--beta)}
+.badge.test{background:var(--test-bg);color:var(--test)}
+.ver-big{font-family:var(--font-serif);font-size:var(--fs-xl);line-height:1.1;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;min-height:44px;word-break:break-all}
+.ver-meta{font-size:var(--fs-sm);color:var(--text-2);margin-top:var(--s-2);min-height:21px}
+.ver-sync{margin-top:var(--s-3);font-size:var(--fs-sm);padding:var(--s-3) var(--s-3);border-radius:var(--r-sm,10px);border:1px solid var(--border);background:var(--surface-2,transparent);line-height:1.5}
+.ver-sync .vs-row{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.ver-sync .vs-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.ver-sync.ok{border-color:rgba(46,125,91,.45);background:var(--green-soft,#DFF0E6)}
+.ver-sync.ok .vs-dot{background:var(--green,#2E7D5B)}
+.ver-sync.ok .vs-title{color:var(--green,#2E7D5B);font-weight:600}
+.ver-sync.behind{border-color:rgba(181,131,46,.5);background:var(--amber-soft,#F6ECD8)}
+.ver-sync.behind .vs-dot{background:var(--amber,#B5832E)}
+.ver-sync.behind .vs-title{color:var(--amber,#B5832E);font-weight:600}
+.ver-sync .vs-sub{color:var(--text-2);margin-top:var(--s-1);font-size:var(--fs-xs)}
+.ver-sync .vs-sub a{color:var(--green,#2E7D5B);font-weight:600;text-decoration:underline}
+.ver-sync .vs-hash{font-family:var(--font-mono,monospace);font-size:var(--fs-xs);color:var(--text-2)}
+.ver-test-badge{display:inline-block;vertical-align:middle;margin-left:var(--s-2);padding:2px 10px;border-radius:999px;background:var(--beta-bg,#F2E7D3);color:var(--beta,#86571D);font-family:var(--font-sans,sans-serif);font-size:var(--fs-xs);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.notes-label{margin-top:var(--s-5);padding-top:var(--s-4);border-top:1px solid var(--border);margin-bottom:var(--s-3)}
+.release-note{flex:1;min-height:0;overflow:auto;font-size:var(--fs-sm);color:var(--text-2);padding-right:var(--s-2);scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.release-note h2,.release-note h3,.release-note h4,.release-note h5,.release-note h6{font-size:var(--fs-sm);color:var(--text);font-weight:600;margin:var(--s-4) 0 var(--s-1)}
+.release-note h2:first-child,.release-note h3:first-child{margin-top:0}
+.release-note p{margin-bottom:var(--s-2)}
+.release-note ul,.release-note ol{padding-left:var(--s-5);margin-bottom:var(--s-3)}
+.release-note li{margin-bottom:var(--s-1)}
+.release-note code{font-family:var(--font-mono);font-size:var(--fs-xs);background:var(--surface-3);padding:0 var(--s-1);border-radius:4px}
+.release-note a{color:var(--accent);text-underline-offset:2px}
+.release-note table{border-collapse:collapse;width:100%;margin-bottom:var(--s-3)}
+.release-note th,.release-note td{border-bottom:1px solid var(--border);text-align:left;padding:var(--s-1) var(--s-2)}
+.release-note hr{border:0;border-top:1px solid var(--border);margin:var(--s-3) 0}
+/* GitHub 风格告警卡片（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]） */
+.release-note .md-alert{--ac:var(--text-2);--ac-bg:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--ac);background:var(--ac-bg);border-radius:var(--r-1);padding:var(--s-2) var(--s-3);margin-bottom:var(--s-3)}
+.release-note .md-alert-title{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;color:var(--ac);margin-bottom:2px}
+.release-note .md-alert-body{font-size:var(--fs-xs);color:var(--text-2);line-height:1.6}
+.release-note .md-alert--note{--ac:var(--accent);--ac-bg:rgba(52,81,178,.07)}
+.release-note .md-alert--tip{--ac:#2c6a4d;--ac-bg:#e3eee7}
+.release-note .md-alert--important{--ac:#6a3fa0;--ac-bg:#ece4f6}
+.release-note .md-alert--warning{--ac:#86571d;--ac-bg:#f2e7d3}
+.release-note .md-alert--caution{--ac:#a23b2e;--ac-bg:#f6e6e1}
+html.dark .release-note .md-alert{border-color:var(--border)}
+html.dark .release-note .md-alert--note{--ac:#8ea3ec;--ac-bg:rgba(142,163,236,.12)}
+html.dark .release-note .md-alert--tip{--ac:#6fcf9f;--ac-bg:rgba(111,207,159,.13)}
+html.dark .release-note .md-alert--important{--ac:#b79ae8;--ac-bg:rgba(183,154,232,.13)}
+html.dark .release-note .md-alert--warning{--ac:#e2a763;--ac-bg:rgba(226,167,99,.13)}
+html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128,.12)}
+.release-note blockquote{margin:0 0 var(--s-3);padding:var(--s-1) var(--s-3);border-left:3px solid var(--border-strong);color:var(--text-2);font-size:var(--fs-xs)}
+
+/* ---------- 右栏：操作层 ---------- */
+.ops{display:flex;flex-direction:column;min-height:0;min-width:0}
+.ops-bar{display:flex;justify-content:flex-end;gap:var(--s-1);padding:var(--s-3) var(--s-3) 0}
+.ops-body{flex:1;min-height:0;overflow:auto;padding:var(--s-2) var(--s-6) var(--s-5);scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.group{margin-bottom:var(--s-5)}
+.group-label{font-size:var(--fs-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
+
+/* =====================================================================
+   分段控件 .switch / .switch-btn
+   default      .switch-btn
+   selected     .switch-btn.active（thumb 滑块跟随）
+   hover        .switch-btn:hover
+   focus-visible.switch-btn:focus-visible
+   active       .switch-btn:active
+   disabled     .switch-btn:disabled（数据加载中 / 失败时）
+   ===================================================================== */
+.switch{position:relative;display:flex;padding:var(--s-1);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-2)}
+.switch .thumb{position:absolute;top:var(--s-1);bottom:var(--s-1);left:0;width:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-1);box-shadow:var(--shadow-sm);opacity:0;transition:transform var(--t-slow) var(--ease),width var(--t-slow) var(--ease),opacity var(--t-fast) var(--ease)}
+.switch .thumb.ready{opacity:1}
+.switch.no-anim .thumb{transition:none}
+.switch-btn{
+  position:relative;z-index:1;flex:1;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);
+  height:var(--ctl-h-sm);border:0;border-radius:var(--r-1);background:transparent;color:var(--text-2);
+  font:inherit;font-size:var(--fs-sm);font-weight:550;cursor:pointer;
+  transition:color var(--t) var(--ease),transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+}
+.switch-btn:hover{color:var(--text)}
+.switch-btn:active{transform:scale(.97)}
+.switch-btn.active{color:var(--text)}
+.switch-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.switch-btn:disabled{color:var(--text-disabled);cursor:not-allowed;transform:none}
+.switch-btn .dot{width:6px;height:6px;border-radius:50%;background:var(--text-disabled);transition:background-color var(--t) var(--ease)}
+.switch-btn[data-channel="stable"].active .dot{background:var(--ok)}
+.switch-btn[data-channel="beta"].active .dot{background:var(--beta)}
+.switch-btn[data-channel="test"].active .dot{background:var(--test)}
+.switch-btn[data-source].active .dot{background:var(--text)}
+
+/* 提示条 */
+.source-note{display:flex;gap:var(--s-2);align-items:flex-start;margin-top:var(--s-3);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--surface-2);border:1px solid var(--border);font-size:var(--fs-xs);color:var(--text-2);line-height:1.6}
+.source-note[hidden]{display:none}
+.source-note .ic{margin-top:2px}
+.source-note b{color:var(--text)}
+
+/* =====================================================================
+   Packages行 .pkg —— 推荐项（.is-rec）视觉权重最高，其余降级
+   default / hover(.pkg:hover) / 内部按钮见 .btn
+   ===================================================================== */
+.pkgs{display:flex;flex-direction:column;gap:var(--s-3)}
+.pkg{padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface);transition:border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.pkg:hover{border-color:var(--border-strong)}
+.pkg.is-rec{border-color:var(--border-strong);background:var(--surface);box-shadow:var(--shadow-sm)}
+.pkg-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-3)}
+.pkg-id{display:flex;align-items:center;gap:var(--s-2)}
+.pkg-name{font-weight:650;font-size:var(--fs-md)}
+.tag{font-size:var(--fs-xs);font-weight:600;color:var(--on-ink);background:var(--ink);border-radius:var(--r-1);padding:0 var(--s-2);line-height:20px}
+.pkg-size{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2);font-variant-numeric:tabular-nums}
+.pkg-abi{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2);margin-top:2px}
+.pkg-desc{font-size:var(--fs-sm);color:var(--text-2);margin:var(--s-2) 0 var(--s-3)}
+.pkg-actions{display:flex;gap:var(--s-2)}
+.pkg-actions .btn{flex:1}
+.pkg:not(.is-rec) .btn{height:var(--ctl-h-sm)}
+.pkg-hint{margin-top:var(--s-2);font-size:var(--fs-xs);color:var(--text-2)}
+.pkg-hint b{color:var(--text)}
+
+/* =====================================================================
+   骨架 loading：.sk（加载中占位）
+   空状态：.state（无版本 / 无Packages）
+   错误状态：.state.state-error（带Retry）
+   ===================================================================== */
+.sk{display:block;border-radius:var(--r-1);background:linear-gradient(90deg,var(--surface-3) 0%,var(--border) 50%,var(--surface-3) 100%);background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.sk-ver{width:55%;height:40px}
+.sk-line{height:12px;margin-bottom:var(--s-2)}
+.sk-pkg{height:132px;border-radius:var(--r-2);margin-bottom:var(--s-3)}
+.state{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2);padding:var(--s-5);border:1px dashed var(--border-strong);border-radius:var(--r-2);color:var(--text-2)}
+.state .ic{width:22px;height:22px;color:var(--text-2)}
+.state-title{font-weight:600;color:var(--text)}
+.state-desc{font-size:var(--fs-sm)}
+.state .btn{margin-top:var(--s-2)}
+.state-error{border-style:solid;border-color:var(--err-border);background:var(--err-bg)}
+.state-error .ic,.state-error .state-title{color:var(--err)}
+.inline-error{display:flex;gap:var(--s-2);align-items:flex-start;color:var(--err);font-size:var(--fs-sm)}
+.inline-error .ic{margin-top:2px}
+
+/* =====================================================================
+   链接 .link
+   default / hover / focus-visible / active
+   ===================================================================== */
+.foot{border-top:1px solid var(--border);padding:var(--s-4) var(--s-6);display:flex;flex-direction:column;gap:var(--s-2);background:var(--surface)}
+.foot-links{display:flex;flex-wrap:wrap;gap:var(--s-2) var(--s-4)}
+.link{display:inline-flex;align-items:center;gap:var(--s-1);font-size:var(--fs-sm);color:var(--text-2);text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;border-radius:4px;transition:color var(--t) var(--ease),text-decoration-color var(--t) var(--ease),box-shadow var(--t-fast) var(--ease)}
+.link:hover{color:var(--text);text-decoration-color:currentColor}
+.link:active{color:var(--text-2);text-decoration-color:currentColor;opacity:.8}
+.link:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.foot-note{font-size:var(--fs-xs);color:var(--text-2)}
+.foot-note .link{font-size:inherit;color:var(--accent)}
+
+/* ---------- 移动端：底部浮层 ---------- */
+@media (max-width:760px){
+  .dl{padding:0;place-items:end center}
+  .dl-panel{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);width:100%;height:min(92dvh,760px);border-radius:var(--r-3) var(--r-3) 0 0;border-bottom:0;transform:translateY(24px)}
+  .rail{padding:var(--s-5) var(--s-5) var(--s-4);border-right:0;border-bottom:1px solid var(--border)}
+  .rail-brand,.rail .sub,.notes-label{display:none}
+  .rail h1{display:none}
+  .ver-big{font-size:var(--fs-lg);min-height:28px}
+  .release-note{display:none}
+  .ops-bar{position:absolute;top:var(--s-2);right:var(--s-2);padding:0}
+  .ops-body{padding:var(--s-4) var(--s-5) var(--s-5)}
+  .foot{padding:var(--s-3) var(--s-5)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ---------- 下载页独立页面布局：打开即见完整内容，不再套一层弹窗 ---------- */
+html,body{min-height:100%;background:var(--bg)}
+body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(ellipse at 12% 0%,rgba(73,105,93,.08),transparent 38%),var(--bg)}
+.dl{position:relative;inset:auto;z-index:1;display:grid;place-items:center;min-height:calc(100dvh - clamp(24px,6vw,72px));padding:0;visibility:visible!important;transition:none}
+.dl-scrim{display:none!important}
+.dl-panel,.dl[data-open="true"] .dl-panel{width:min(1120px,100%);height:min(820px,calc(100dvh - clamp(24px,6vw,72px)));min-height:600px;opacity:1;transform:none;transition:none;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-panel);overflow:hidden}
+.home-btn{text-decoration:none}
+.home-btn:hover{background:var(--surface-2);color:var(--text)}
+.host{display:none!important}
+@media(max-width:760px){
+ body{padding:10px;background:var(--bg)}
+ .dl{min-height:calc(100dvh - 20px);align-items:stretch}
+ .dl-panel,.dl[data-open="true"] .dl-panel{width:100%;height:auto;min-height:calc(100dvh - 20px);max-height:none;border-radius:14px;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+ .rail{padding:22px 20px 16px}
+ .rail-brand{display:flex!important;margin-bottom:10px}
+ .rail h1{display:block!important;margin-bottom:4px}
+ .rail .sub{display:block!important;margin-bottom:12px}
+ .ver-big{font-size:25px;min-height:30px}
+ /* 移动端也显示更新公告，限高+内部滚动，避免挤占空间 */
+ .release-note{display:block!important;max-height:220px;overflow:auto;border-top:1px solid var(--border);padding-top:10px;margin-top:4px}
+ .notes-label{display:block!important;margin-top:14px}
+ .ops{min-height:0}
+ .ops-bar{position:absolute;top:12px;right:12px;z-index:3;padding:0}
+ .ops-body{padding:18px 18px 22px;overflow:visible}
+ .foot{padding:14px 18px 18px}
+}
+
+
+/* 独立下载页的视觉细节 */
+.rail{background:linear-gradient(155deg,var(--surface-2),var(--surface));}
+.rail-brand{letter-spacing:.02em}
+.rail h1{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
+.eyebrow{letter-spacing:.07em;text-transform:uppercase}
+.ver-big{font-size:clamp(34px,4vw,48px);letter-spacing:-.045em}
+.ops-bar{padding:14px 16px 0}
+.icon-btn{width:38px;height:38px;border-radius:10px}
+.ops-body{gap:22px}
+.group{margin-bottom:24px}
+.group-label{font-size:12px;letter-spacing:.055em}
+.pkg{border-radius:12px;padding:17px}
+.pkg.is-rec{border-color:var(--border-strong);box-shadow:0 5px 18px rgba(28,27,25,.055)}
+.pkg-name{letter-spacing:-.02em}
+@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h1{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
+
+/* =====================================================================
+   Test确认弹窗 .test-modal
+   遮罩 + 居中卡片；三个复选框全部勾选后确认按钮才可用；右上角 × 关闭即放弃
+   ===================================================================== */
+.test-modal-scrim{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:var(--s-5);background:var(--scrim);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity var(--t) var(--ease)}
+.test-modal-scrim[hidden]{display:none}
+.test-modal-scrim.open{opacity:1}
+.test-modal{width:min(440px,100%);max-height:min(88vh,640px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-3);box-shadow:var(--shadow-panel);transform:translateY(16px) scale(.98);opacity:0;transition:transform var(--t) var(--spring),opacity var(--t) var(--ease)}
+.test-modal-scrim.open .test-modal{transform:none;opacity:1}
+.test-modal-head{display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);border-bottom:1px solid var(--border)}
+.test-modal-title{flex:1;font-family:var(--font-serif);font-size:var(--fs-lg);font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:var(--s-2)}
+.test-modal-title .warn-ic{width:22px;height:22px;color:var(--test);flex-shrink:0}
+.test-modal-close{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--r-1);background:var(--surface-2);color:var(--text-2);cursor:pointer;transition:color var(--t) var(--ease),border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.test-modal-close:hover{color:var(--text);border-color:var(--border-strong);background:var(--surface-3)}
+.test-modal-close svg{width:16px;height:16px}
+.test-modal-body{flex:1;min-height:0;overflow:auto;padding:var(--s-4) var(--s-5) var(--s-5)}
+.test-modal-lead{font-size:var(--fs-sm);color:var(--text-2);line-height:1.7;margin-bottom:var(--s-4)}
+.test-modal-lead b{color:var(--text)}
+.ack-list{display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-5)}
+.ack-item{display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-3) var(--s-4);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2);cursor:pointer;transition:border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.ack-item:hover{border-color:var(--border-strong)}
+.ack-item input{margin-top:2px;width:16px;height:16px;accent-color:var(--test);cursor:pointer;flex-shrink:0}
+.ack-item span{font-size:var(--fs-sm);color:var(--text);line-height:1.6}
+.test-modal-foot{display:flex;gap:var(--s-3)}
+.test-modal-foot .btn{flex:1}
+</style>
+</head>
+<body>
+
+<!-- 内联 SVG 图标：统一 24 网格、stroke-width 1.75、圆角端点 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5.5 9v11h13V9M9.5 20v-6h5v6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.5L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.5l1.7-2"/><path d="M20 20v-4.5h-4.5"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 10.5 13.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M4 13.5 6.5 5h11l2.5 8.5"/><path d="M4 13.5V18a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4.5h-4.5a2.5 2.5 0 0 1-5 0H4z"/></symbol>
+  <symbol id="i-mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="9" ry="4.5" transform="rotate(-30 12 12)"/></symbol>
+</svg>
+
+<!-- 宿主页：模态关闭后的触发入口 -->
+<!-- 模态框：遮罩 + 非对称双栏面板 -->
+<div class="dl" id="dl" data-open="true">
+  <div class="dl-scrim" aria-hidden="true"></div>
+  <section class="dl-panel" id="dlPanel" role="dialog" aria-modal="true" aria-labelledby="dlTitle" tabindex="-1">
+
+    <!-- 左栏：上下文 -->
+    <aside class="rail">
+      <div class="rail-brand"><svg class="ic"><use href="#i-mark"/></svg>AiVerse</div>
+      <h1 id="dlTitle">Download AiVerse</h1>
+      <p class="sub">AI coding and a mobile workstation that complete the full development workflow on your phone.</p>
+
+      <div class="eyebrow" id="infoEyebrow"><span id="infoTitle">Version</span><span class="badge stable" id="channelBadge">Stable</span></div>
+      <div class="ver-big" id="verBig"><span class="sk sk-ver"></span></div>
+      <div class="ver-sync" id="verSync" hidden></div>
+      <div class="ver-meta" id="verMeta"><span class="sk sk-line" style="width:70%"></span></div>
+
+      <div class="eyebrow notes-label" id="notesTitle">Changelog</div>
+      <div class="release-note" id="releaseNote" tabindex="0" aria-label="Changelog">
+        <span class="sk sk-line" style="width:90%"></span><span class="sk sk-line" style="width:75%"></span><span class="sk sk-line" style="width:82%"></span><span class="sk sk-line" style="width:48%"></span>
+      </div>
+    </aside>
+
+    <!-- 右栏：操作 -->
+    <div class="ops">
+      <div class="ops-bar">
+        <button class="icon-btn" id="themeBtn" type="button" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
+          <svg class="ic i-moon"><use href="#i-moon"/></svg><svg class="ic i-sun"><use href="#i-sun"/></svg>
+        </button>
+        <a class="icon-btn home-btn" href="/" title="Back to home" aria-label="Back to home">
+          <svg class="ic"><use href="#i-home"/></svg>
+        </a>
+      </div>
+
+      <div class="ops-body">
+        <div class="group">
+          <div class="group-label" id="lblChannel">Channel</div>
+          <div class="switch" id="channelSwitch" role="radiogroup" aria-labelledby="lblChannel">
+            <div class="thumb"></div>
+            <button class="switch-btn active" data-channel="stable" type="button" role="radio" aria-checked="true" disabled><span class="dot"></span>Stable</button>
+            <button class="switch-btn" data-channel="beta" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>Preview</button>
+            <button class="switch-btn" data-channel="test" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>Test</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-label" id="lblSource">Download source</div>
+          <div class="switch" id="sourceSwitch" role="radiogroup" aria-labelledby="lblSource">
+            <div class="thumb"></div>
+            <button class="switch-btn active" data-source="github" type="button" role="radio" aria-checked="true" disabled><span class="dot"></span>Direct</button>
+            <button class="switch-btn" data-source="mirror" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>Mirror</button>
+          </div>
+          <div class="source-note" id="mirrorTip" hidden>
+            <svg class="ic ic-sm"><use href="#i-info"/></svg>
+            <span id="mirrorTipText"></span>
+          </div>
+        </div>
+
+        <div class="group" style="margin-bottom:0">
+          <div class="group-label">Packages</div>
+          <div class="pkgs" id="pkgs" aria-live="polite">
+            <span class="sk sk-pkg"></span><span class="sk sk-pkg"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <div class="foot-links">
+          <a class="link" href="https://github.com/yhdmgf/AiVerse/releases" target="_blank" rel="noreferrer">View all releases on GitHub<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
+          <a class="link" href="https://gitcode.com/aiverse/aiverse/releases" target="_blank" rel="noreferrer">View all releases on the GitCode mirror<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
+        </div>
+        <p class="foot-note">By downloading you agree to the <a class="link" href="/en/terms.html">Terms of Service</a> and <a class="link" href="/en/privacy.html">Privacy Policy</a>。</p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="sr-only" id="sr" aria-live="polite"></div>
+
+<div class="test-modal-scrim" id="testModal" hidden>
+  <div class="test-modal" role="dialog" aria-modal="true" aria-labelledby="testModalTitle">
+    <div class="test-modal-head">
+      <div class="test-modal-title" id="testModalTitle">
+        <svg class="warn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Test builds are for internal use only
+      </div>
+      <button class="test-modal-close" type="button" data-action="close-test" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="test-modal-body">
+      <p class="test-modal-lead">Test builds are for internal use only and <b>must not be used as a stable release</b>. For daily use we recommend the  <b>Preview</b> 或 <b>Stable</b>。</p>
+      <div class="ack-list">
+        <label class="ack-item"><input type="checkbox" data-ack><span>I understand test builds carry a watermark</span></label>
+        <label class="ack-item"><input type="checkbox" data-ack><span>I understand test builds may not auto-check for updates</span></label>
+        <label class="ack-item"><input type="checkbox" data-ack><span>I understand test builds may be unstable</span></label>
+      </div>
+      <div class="test-modal-foot">
+        <button class="btn btn-primary" type="button" data-action="confirm-test" disabled>Switch to test channel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
+  // Test：独立仓库 yhdmgf/aiverse-beta，仅供内部使用
+  var TEST_OWNER='yhdmgf', TEST_REPO='aiverse-beta';
+  var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
+  // 双Mirror：用户可手动选择Mirror一/Mirror二
+  var MIRRORS=[
+    {name:'Mirror 1', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/aiverse/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
+    {name:'Mirror 2', host:'gh.aivapp.cn (site accelerator)', build:function(tag,key){ return 'https://gh.aivapp.cn/https://github.com/'+GH_OWNER+'/'+GH_REPO+'/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }}
+  ];
+  var state={channel:'stable', source:'github', data:null, test:null, testUnlocked:false};
+  var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=30';
+  // 主仓库 main 最新 commit（用于Test内容同步对比）
+  var MAIN_COMMIT_API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/commits/main';
+
+  var PKGS=[
+    {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64-bit ARM chip — recommended for most Android phones', rec:true},
+    {key:'universal', name:'Universal', abi:'arm64-v8a + x86_64', desc:'Universal: includes both architectures, works on all devices, about twice the size of a single-arch package'},
+    {key:'x86_64', name:'x86_64', abi:'x86_64', desc:'x86_64 architecture — emulators / x86 devices'}
+  ];
+
+  var $=function(id){return document.getElementById(id)};
+  var ICON=function(n,c){return '<svg class="ic'+(c?' '+c:'')+'"><use href="#i-'+n+'"/></svg>';};
+
+  /* ---------- 主题 ---------- */
+  var root=document.documentElement;
+  try{ if(localStorage.getItem('vp-theme')==='dark') root.classList.add('dark'); }catch(e){}
+  $('themeBtn').addEventListener('click',function(){
+    var dark=root.classList.toggle('dark');
+    try{ localStorage.setItem('vp-theme',dark?'dark':'light'); }catch(e){}
+  });
+
+  /* ---------- 页面模式：下载界面直接呈现，不再需要二次点击 ---------- */
+  var dl=$('dl'), panel=$('dlPanel');
+  dl.dataset.open='true';
+
+  /* ---------- 更新公告清洗 ---------- */
+  // 去掉：所有表格、代码块/日志、"Full Changelog" 行、每条末尾的 (#数字)、以及残留的空括号
+  function cleanNote(md){
+    var lines=md.replace(/\r/g,'').split('\n');
+    var out=[], inTable=false, inCode=false;
+    for(var i=0;i<lines.length;i++){
+      var L=lines[i];
+      // 代码块/日志：``` 围栏，整块跳过
+      if(/^\s*```/.test(L)){ inCode=!inCode; continue; }
+      if(inCode) continue;
+      // 任意表格：表头含 | 且下一行是分隔行 -> 整块跳过（包名表、API 变更表等所有表格）
+      if(!inTable && L.indexOf('|')!==-1 && (lines[i+1]||'').indexOf('-')!==-1 && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i+1]||'')){ inTable=true; continue; }
+      if(inTable){
+        if(/^\s*\|?[\s:|-]+\|?\s*$/.test(L)) continue;                    // 分隔行
+        if(L.indexOf('|')!==-1 && !/^\s*$/.test(L)) continue;             // 表体行
+        inTable=false;
+      }
+      if(/Full\s+Changelog/i.test(L)) continue;                           // Full Changelog 行
+      out.push(L);
+    }
+    return out.join('\n');
+  }
+  // 渲染后清理行尾的 issue 引用and空括号
+  function stripRefs(html){
+    return html
+      .replace(/<a\s+[^>]*href="[^"]*\/(?:issues|pull)\/\d+"[^>]*>[\s\S]*?<\/a>/gi,'')
+      .replace(/<a[^>]*>\s*#\d+\s*<\/a>/gi,'')
+      .replace(/[（(]\s*(?:#\d+|\d+)\s*[）)]\s*/g,'')
+      .replace(/[（(]\s*[\s\S]*?\s*#\d+\s*[\s\S]*?\s*[）)]\s*/g,'')
+      .replace(/\s*#\d+/g,'')
+      .replace(/[（(]\s*[）)]/g,'')
+      .replace(/[（(]\s*<br\s*\/?>\s*[）)]/gi,'')
+      .replace(/[（(]\s*[）)]\s*/g,'')
+      .replace(/\s{2,}/g,' ')
+      .replace(/[ \t]+([。\.!?！？])/g,'$1');
+  }
+
+  /* ---------- 轻量 Markdown 渲染 ---------- */
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function inline(s){
+    return esc(s)
+      .replace(/`([^`]+)`/g,'<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+      .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/|#)[^)]*)\)/g,'<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  }
+  function splitRow(row){
+    row=row.trim();
+    if(row.charAt(0)==='|') row=row.slice(1);
+    if(row.charAt(row.length-1)==='|') row=row.slice(0,-1);
+    return row.split('|').map(function(c){return c.trim();});
+  }
+  function renderMD(md){
+    if(window.markdownit) return window.markdownit({html:false}).render(md);
+    var lines=md.replace(/\r/g,'').split('\n');
+    var out=[], i=0;
+    while(i<lines.length){
+      var line=lines[i];
+      if(line.indexOf('|')!==-1 && (lines[i+1]||'').indexOf('-')!==-1 && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i+1]||'')){
+        var header=splitRow(line); i+=2;
+        var rows=[];
+        while(i<lines.length && lines[i].indexOf('|')!==-1 && !/^\s*$/.test(lines[i])){ rows.push(splitRow(lines[i])); i++; }
+        var t='<table><thead><tr>';
+        header.forEach(function(c){t+='<th>'+inline(c)+'</th>';});
+        t+='</tr></thead><tbody>';
+        rows.forEach(function(r){ t+='<tr>'; header.forEach(function(_,ci){ t+='<td>'+inline(r[ci]||'')+'</td>'; }); t+='</tr>'; });
+        t+='</tbody></table>';
+        out.push(t); continue;
+      }
+      if(/^\s*([-*_])\s*(?:\1\s*){2,}$/.test(line)){ out.push('<hr>'); i++; continue; }
+      var hm=line.match(/^(#{1,6})\s+(.+)$/);
+      if(hm){ var lv=Math.min(hm[1].length+1,6); out.push('<h'+lv+'>'+inline(hm[2])+'</h'+lv+'>'); i++; continue; }
+      if(/^\s*[-*+]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)){
+        var ordered=/^\s*\d+\.\s+/.test(line);
+        var items=[];
+        while(i<lines.length && (/^\s*[-*+]\s+/.test(lines[i]) || /^\s*\d+\.\s+/.test(lines[i]))){
+          items.push(lines[i].replace(/^\s*(?:[-*+]|\d+\.)\s+/,'')); i++;
+        }
+        var tag=ordered?'ol':'ul', l='<'+tag+'>';
+        items.forEach(function(it){ l+='<li>'+inline(it)+'</li>'; });
+        out.push(l+'</'+tag+'>'); continue;
+      }
+      if(/^\s*$/.test(line)){ i++; continue; }
+      // 引用块：连续以 > 开头的行（含 GitHub 告警卡片 > [!NOTE] 等）
+      if(/^\s*>/.test(line)){
+        var q=[];
+        while(i<lines.length && /^\s*>/.test(lines[i])){
+          q.push(lines[i].replace(/^\s*>\s?/,'')); i++;
+        }
+        var alertM=(q[0]||'').match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+        if(alertM){
+          var type=alertM[1].toUpperCase();
+          var rest=alertM[2]||'';
+          if(/^\s*$/.test(rest)) q.shift();
+          else q[0]=rest;
+          var body=q.filter(function(x){return !/^\s*$/.test(x);}).map(inline).join('<br>');
+          out.push('<div class="md-alert md-alert--'+type.toLowerCase()+'"><div class="md-alert-title">'+type+'</div><div class="md-alert-body">'+body+'</div></div>');
+        } else {
+          var qbody=q.filter(function(x){return !/^\s*$/.test(x);}).map(inline).join('<br>');
+          out.push('<blockquote>'+qbody+'</blockquote>');
+        }
+        continue;
+      }
+      var para=[];
+      while(i<lines.length && !/^\s*$/.test(lines[i]) && !/^\s*(?:[-*+]|\d+\.)\s+/.test(lines[i]) && !/^#{1,6}\s/.test(lines[i]) && !/^\s*>/.test(lines[i]) && lines[i].indexOf('|')===-1){
+        para.push(lines[i]); i++;
+      }
+      if(para.length){ out.push('<p>'+para.map(inline).join('<br>')+'</p>'); }
+      else { i++; }
+    }
+    return out.join('\n');
+  }
+
+  /* ---------- 链接构造（文件名带 v = tag） ---------- */
+  function ghUrl(tag,key,owner,repo,fname){ return 'https://github.com/'+(owner||GH_OWNER)+'/'+(repo||GH_REPO)+'/releases/download/'+tag+'/'+(fname||('AiVerse-'+key+'-'+tag))+'.apk'; }
+  function mirrorUrl(idx,tag,key){ return MIRRORS[idx].build(tag,key); }
+
+  /* ---------- 下载按钮结构：图标槽同时容纳 default / loading / success ---------- */
+  function dlBtn(cls,href,label){
+    return '<a class="btn '+cls+'" href="'+href+'" download>'
+      +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
+      +'<span class="btn-label">'+label+'</span></a>';
+  }
+
+  /* ---------- 渲染Packages（一个架构一个按钮） ---------- */
+  function renderPkgs(rel){
+    var tag=rel.tag_name;
+    var assets=rel.assets||[];
+    var html='';
+    PKGS.forEach(function(p){
+      var a=assets.filter(function(x){return x.name.toLowerCase().indexOf(p.key)!==-1;})[0];
+      if(!a) return;
+      var mb=(a.size/1024/1024).toFixed(1);
+      var head='<article class="pkg'+(p.rec?' is-rec':'')+'" data-key="'+p.key+'">'
+        +'<div class="pkg-top"><div class="pkg-id"><span class="pkg-name">'+p.name+'</span>'+(p.rec?'<span class="tag">Recommended</span>':'')+'</div><span class="pkg-size">'+mb+' MB</span></div>'
+        +'<div class="pkg-abi">'+p.abi+'</div>'
+        +'<p class="pkg-desc">'+p.desc+'</p>';
+      var main=p.rec?'btn-primary':'btn-secondary';
+
+      var isTestCh=state.channel==='test';
+      if(isTestCh){
+        // Test：独立仓库 yhdmgf/aiverse-beta，文件名不带版本号（-beta）
+        // and其他通道一致：Direct模式只显示Direct按钮，Mirror模式只显示Mirror按钮（Test仅一个 gh Mirror）
+        var tf='AiVerse-'+p.key+'-beta';
+        var tgh=ghUrl(tag,p.key,TEST_OWNER,TEST_REPO,tf);
+        if(state.source==='github'){
+          html+=head+'<div class="pkg-actions">'+dlBtn(main,tgh,'Direct download')+'</div></article>';
+        } else {
+          html+=head+'<div class="pkg-actions">'+dlBtn(main,'https://gh.aivapp.cn/'+tgh,'Mirror download')+'</div></article>';
+        }
+      } else if(state.source==='github'){
+        html+=head+'<div class="pkg-actions">'+dlBtn(main,ghUrl(tag,p.key),'Direct download')+'</div></article>';
+      } else {
+        // Mirror模式：每个包固定两个按钮（Mirror一 / Mirror二），不做检测，直接可点
+        html+=head+'<div class="pkg-actions">'
+          +dlBtn(main,mirrorUrl(0,tag,p.key),'Mirror 1')
+          +dlBtn('btn-secondary',mirrorUrl(1,tag,p.key),'Mirror 2')
+          +'</div><div class="pkg-hint">Uses <b>Mirror 1</b> by default, or <b>Mirror 2</b></div></article>';
+      }
+    });
+    if(!html) html=emptyState('No packages found for this release','This release has no downloadable packages. Switch channels or check the releases page.');
+    $('pkgs').innerHTML=html;
+  }
+
+  /* ---------- 空状态 / 错误状态 / 骨架 ---------- */
+  function emptyState(title,desc,action){
+    return '<div class="state">'+ICON('box')+'<div class="state-title">'+title+'</div><div class="state-desc">'+desc+'</div>'+(action||'')+'</div>';
+  }
+  function errorState(title,desc){
+    return '<div class="state state-error" role="alert">'+ICON('alert')+'<div class="state-title">'+title+'</div><div class="state-desc">'+desc+'</div>'
+      +'<button class="btn btn-secondary" type="button" data-action="retry"><span class="btn-ic">'+ICON('refresh','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span><span class="btn-label">Retry</span></button></div>';
+  }
+  function showSkeleton(){
+    $('verBig').innerHTML='<span class="sk sk-ver"></span>';
+    $('verMeta').innerHTML='<span class="sk sk-line" style="width:70%"></span>';
+    $('releaseNote').innerHTML='<span class="sk sk-line" style="width:90%"></span><span class="sk sk-line" style="width:75%"></span><span class="sk sk-line" style="width:82%"></span><span class="sk sk-line" style="width:48%"></span>';
+    $('pkgs').innerHTML='<span class="sk sk-pkg"></span><span class="sk sk-pkg"></span>';
+  }
+
+  /* ---------- 分段控件：滑块定位 / 可用性 ---------- */
+  function positionThumb(sw,animate){
+    var active=sw.querySelector('.switch-btn.active');
+    var thumb=sw.querySelector('.thumb');
+    if(!active||!thumb) return;
+    if(!animate) sw.classList.add('no-anim');
+    thumb.style.transform='translateX('+active.offsetLeft+'px)';
+    thumb.style.width=active.offsetWidth+'px';
+    thumb.classList.add('ready');
+    if(!animate){ void thumb.offsetWidth; sw.classList.remove('no-anim'); }
+  }
+  function initThumbs(instant){
+    positionThumb($("channelSwitch"),!instant);
+    positionThumb($("sourceSwitch"),!instant);
+  }
+  function syncSwitch(sw){
+    sw.querySelectorAll('.switch-btn').forEach(function(x){ x.setAttribute('aria-checked',x.classList.contains('active')?'true':'false'); x.tabIndex=x.classList.contains('active')?0:-1; });
+  }
+  function setBusy(b){                                                    // 数据未就绪：禁用两个分段控件
+    document.querySelectorAll('.switch-btn').forEach(function(x){ x.disabled=b; });
+  }
+
+  /* ---------- Test内容同步：从 body 抓 commit，对比主仓库 main 最新提交 ---------- */
+  function extractCommit(body){
+    var m = /commit\s+([0-9a-f]{7,40})/i.exec(body||'');
+    return m ? m[1] : '';
+  }
+  function renderVerSync(body){
+    var box = $('verSync');
+    var testCommit = extractCommit(body);
+    if(!testCommit){ box.hidden = true; return; }        // body 无 commit，不显示
+    var shortTest = testCommit.slice(0,7);
+    box.hidden = false;
+    box.className = 'ver-sync';
+    box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">Checking whether the test build is up to date…</span></div>';
+    fetch(MAIN_COMMIT_API)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(c){
+        var mainSha = (c && c.sha) ? String(c.sha) : '';
+        if(!mainSha){ box.hidden = true; return; }
+        var shortMain = mainSha.slice(0,7);
+        var same = (mainSha.slice(0, testCommit.length).toLowerCase() === testCommit.toLowerCase());
+        if(same){
+          box.className = 'ver-sync ok';
+          box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">Test build is up to date</span></div>'
+            + '<div class="vs-sub">Build commit <span class="vs-hash">'+shortTest+'</span> matches the latest commit on the main repo</div>';
+        } else {
+          box.className = 'ver-sync behind';
+          box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">Test build is behind the main repo</span></div>'
+            + '<div class="vs-sub">Build commit <span class="vs-hash">'+shortTest+'</span> · latest on main <span class="vs-hash">'+shortMain+'</span></div>'
+            + '<div class="vs-sub">Please <a href="https://aivapp.cn/trigger/" target="_blank" rel="noopener noreferrer">trigger a build manually</a>，以获得最新Test</div>';
+        }
+      })
+      .catch(function(){ box.hidden = true; });          // 查询失败则静默隐藏，不打扰
+  }
+
+  /* ---------- 渲染全部 ---------- */
+  function renderAll(){
+    var isTest=state.channel==='test';
+    var isBeta=state.channel==='beta';
+    if(!isTest && !state.data) return;
+    var rel = isTest ? state.test : (isBeta ? state.data.beta : state.data.stable);
+    var chName = isTest?'Test':(isBeta?'Preview':'Stable');
+    var badge=$('channelBadge');
+    badge.className='badge '+(isTest?'test':(isBeta?'beta':'stable'));
+    badge.textContent=chName;
+    // Mirror提示：Test仅一个 gh Mirror，Stable/Preview为Mirror一/Mirror二双Mirror
+    var tip=$('mirrorTip');
+    if(state.source==='mirror'){
+      tip.hidden=false;
+      if(isTest){
+        $('mirrorTipText').innerHTML='The test mirror is the site accelerator (gh.aivapp.cn) — it is the only mirror.';
+      } else {
+        $('mirrorTipText').innerHTML='Mirror 1 is GitCode, Mirror 2 is the site accelerator. Uses <b>Mirror 1</b> by default; tap <b>Mirror 2</b> if it fails.';
+      }
+    } else {
+      tip.hidden=true;
+    }
+
+    if(!rel){
+      $('verBig').textContent = 'No '+chName;
+      $('verMeta').textContent='';
+      $('releaseNote').innerHTML='<p>No packages in this channel yet. Switch to another channel.</p>';
+      var otherCh = isTest?'Preview':(isBeta?'Stable':'Preview');
+      $('pkgs').innerHTML=emptyState('No '+chName,'No packages available in this channel yet.',
+        '<button class="btn btn-secondary" type="button" data-action="other-channel">Switch to'+otherCh+'</button>');
+      initThumbs();
+      return;
+    }
+    var v=rel.tag_name;
+    $('infoTitle').textContent='Version';
+    var d=new Date(rel.published_at);
+    var dateStr=isNaN(d)?'':d.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+    $('verMeta').textContent='Released '+dateStr+(isTest?' · internal test build, for internal use only':(isBeta?' · preview build, may be unstable':' · recommended for daily use'));
+    if(isTest){
+      // Test：版本号右侧加"Test"标记（Test号≠最终版本号）
+      $('verBig').innerHTML='';
+      var vText=document.createElement('span'); vText.textContent=v;
+      var vBadge=document.createElement('span'); vBadge.className='ver-test-badge'; vBadge.textContent='Test';
+      $('verBig').appendChild(vText); $('verBig').appendChild(vBadge);
+      // Test：隐藏顶部"Version"标题（避免and下方 notesTitle"Version"重复），通道名由 verBig 旁"Test"标记体现
+      $('infoEyebrow').hidden=true;
+      // Test左栏标题用"Version"（其余通道保持"Changelog"）
+      $('notesTitle').textContent='Version';
+      // 内容同步状态：对比 beta 构建 commit and主仓库 main 最新提交
+      renderVerSync(rel.body);
+    } else {
+      $('infoEyebrow').hidden=false;
+      $('verBig').textContent=v;
+      $('notesTitle').textContent='Changelog';
+      $('verSync').hidden=true;
+    }
+    $('releaseNote').innerHTML=stripRefs(renderMD(cleanNote(rel.body||'（No Changelog）')));
+
+    renderPkgs(rel);
+    initThumbs();
+  }
+
+  /* ---------- 事件 ---------- */
+  function bindSwitch(id,key,apply){
+    var sw=$(id);
+    sw.addEventListener('click',function(e){
+      var b=e.target.closest('.switch-btn'); if(!b||b.disabled||b.classList.contains('active')) return;
+      // Test通道：先弹窗确认（勾选三个已知悉 + 确认才切换；点 × 关闭则不切换）
+      if(id==='channelSwitch' && b.dataset.channel==='test'){ showTestModal(); return; }
+      sw.querySelectorAll('.switch-btn').forEach(function(x){x.classList.remove('active')});
+      b.classList.add('active');
+      apply(b.dataset[key]);
+      syncSwitch(sw);
+      renderAll();
+    });
+    sw.addEventListener('keydown',function(e){                            // 方向键在分段内移动
+      if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+      var btns=[].slice.call(sw.querySelectorAll('.switch-btn')), i=btns.indexOf(document.activeElement);
+      if(i<0) return; e.preventDefault();
+      var n=btns[(i+(e.key==='ArrowRight'?1:-1)+btns.length)%btns.length];
+      if(!n.disabled){ n.focus(); n.click(); }
+    });
+  }
+  bindSwitch('channelSwitch','channel',function(v){ state.channel=v; });
+  // Download source：二选一（Direct / Mirror），Mirror模式每个包固定Mirror一/Mirror二双按钮
+  bindSwitch('sourceSwitch','source',function(v){ state.source=v; });
+
+  /* ---------- Test确认弹窗（事件只绑一次）---------- */
+  var testModal=$('testModal');
+  var testChecks=[].slice.call(testModal.querySelectorAll('[data-ack]'));
+  var testConfirmBtn=testModal.querySelector('[data-action="confirm-test"]');
+  var testCloseBtn=testModal.querySelector('[data-action="close-test"]');
+  function updateTestConfirm(){
+    var all=testChecks.length>0 && testChecks.every(function(c){return c.checked});
+    testConfirmBtn.disabled=!all;
+  }
+  testChecks.forEach(function(c){ c.addEventListener('change',updateTestConfirm); });
+  function showTestModal(){
+    testChecks.forEach(function(c){c.checked=false});
+    testConfirmBtn.disabled=true;
+    testModal.hidden=false;
+    requestAnimationFrame(function(){ testModal.classList.add('open'); });
+    document.documentElement.classList.add('is-locked');
+  }
+  function closeTestModal(){
+    testModal.classList.remove('open');
+    document.documentElement.classList.remove('is-locked');
+    setTimeout(function(){ testModal.hidden=true; },200);
+  }
+  testConfirmBtn.addEventListener('click',function(){
+    state.channel='test';
+    state.testUnlocked=true;                       // 已确认 → 解锁下载
+    closeTestModal();
+    var sw=$('channelSwitch');
+    sw.querySelectorAll('.switch-btn').forEach(function(x){x.classList.remove('active')});
+    sw.querySelector('[data-channel="test"]').classList.add('active');
+    syncSwitch(sw);
+    renderAll();
+  });
+  testCloseBtn.addEventListener('click',closeTestModal);          // 点 × → 不切换（保持原通道）
+  testModal.addEventListener('click',function(e){ if(e.target===testModal) closeTestModal(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape' && !testModal.hidden) closeTestModal(); });
+
+  window.addEventListener('resize',function(){ initThumbs(true); });
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ initThumbs(true); });
+
+  /* ---------- 下载点击反馈：loading → success → 复位（不拦截原生下载） ---------- */
+  $('pkgs').addEventListener('click',function(e){
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var label=b.querySelector('.btn-label'), old=label.textContent;
+    var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
+    sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
+    b.classList.add('is-loading'); label.textContent='Preparing download…';
+    setTimeout(function(){
+      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='Download started';
+      $('sr').textContent='Download started';
+      setTimeout(function(){
+        b.classList.remove('is-success'); label.textContent=old;
+        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
+      },2200);
+    },700);
+  });
+  // 空状态 / 错误状态内的操作
+  $('pkgs').addEventListener('click',function(e){
+    var a=e.target.closest('[data-action]'); if(!a) return;
+    if(a.dataset.action==='other-channel'){
+      var t=state.channel==='stable'?'beta':'stable';
+      $('channelSwitch').querySelector('[data-channel="'+t+'"]').click();
+    } else if(a.dataset.action==='retry'){
+      a.classList.add('is-loading'); a.querySelector('.btn-label').textContent='Retrying…';
+      load(a);
+    }
+  });
+
+  /* ---------- 拉取数据 ---------- */
+  function load(retryBtn){
+    setBusy(true); showSkeleton();
+    fetch(API)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(rs){
+        if(!rs || !rs.length){
+          $('verBig').textContent='No version';
+          $('verMeta').textContent=''; $('releaseNote').innerHTML='';
+          $('pkgs').innerHTML=emptyState('No releases yet','Downloadable packages will appear here after release.');
+          initThumbs(); return;
+        }
+        var stable=rs.find(function(r){return !r.prerelease && !r.draft}) || null;
+        var beta=rs.find(function(r){return r.prerelease && !r.draft}) || null;
+        state.data={stable:stable, beta:beta};
+        if(!stable && beta){
+          state.channel='beta';
+          $('channelSwitch').querySelectorAll('.switch-btn').forEach(function(x){ x.classList.toggle('active', x.dataset.channel==='beta'); });
+        }
+        setBusy(false); syncSwitch($('channelSwitch')); syncSwitch($('sourceSwitch'));
+        renderAll();
+        loadTest();
+      })
+      .catch(function(){
+        $('verBig').textContent='Failed to load'; $('verMeta').textContent='';
+        $('releaseNote').innerHTML='<div class="inline-error">'+ICON('alert','ic-sm')+'<span>Cannot reach the GitHub API. Check your network and try again.</span></div>';
+        $('pkgs').innerHTML=errorState('Failed to load packages','Check your network connection and try again, or download from the releases page below.');
+        var nb=$('pkgs').querySelector('[data-action="retry"]'); if(nb&&retryBtn){ nb.classList.add('is-error'); setTimeout(function(){ nb.classList.remove('is-error'); },1600); }
+        initThumbs();
+      });
+  }
+
+  /* ---------- 拉取Test（独立仓库 yhdmgf/aiverse-beta）---------- */
+  function loadTest(){
+    fetch(TEST_API)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(rel){ state.test=(rel && !rel.draft)?rel:null; if(state.channel==='test') renderAll(); })
+      .catch(function(){ state.test=null; if(state.channel==='test') renderAll(); });
+  }
+
+  syncSwitch($('channelSwitch')); syncSwitch($('sourceSwitch'));
+  load();
+  // 下载界面已作为页面主体直接展示。
+})();
+
+/* =====================================================================
+   设计说明
+   布局采用“非对称双栏 + 分层”：左栏是偏灰的上下文层（版本号衬线大字、Changelog），
+   右栏是操作层（通道 → Download source → Packages），让“读”和“做”在视觉上分离；移动端自动
+   转为底部浮层。视觉权重刻意不均：只有推荐的 ARM64 使用墨色main button and the “Recommended” tag，
+   the remaining packages and Mirror 2 fall back to outlined buttons，避免所有元素同等抢眼。
+   状态设计以“明度/描边/小图形”区分而非高饱和色：focus-visible 使用两层墨色环
+   （表面色间隔 + 墨色外环），不依赖浏览器默认蓝色光环；loading 用按钮内嵌 spinner，
+   success 以绿色浅底 + 对勾，error/empty 用独立状态块（错误块自带Retry），首次加载用骨架。
+   The modal and right rail have fixed heights且只动画 transform/opacity，切换通道时内容在内部滚动区变化，面板
+   and the slider avoid layout jumps；所有状态过渡为 120–200ms，间距全部来自 4/8/12/16/24/32 令牌。
+   ===================================================================== */
+</script>
+</body>
+</html>
