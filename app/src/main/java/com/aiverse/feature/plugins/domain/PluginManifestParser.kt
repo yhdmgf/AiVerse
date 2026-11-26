@@ -46,7 +46,7 @@ object PluginManifestParser {
         // 仅给编辑器（JSON Schema）用，宿主不解析其内容。
         "\$schema",
         "manifestVersion", "id", "name", "version", "publisher", "repository",
-        "description", "license", "engines", "runtime", "contributes", "configPage", "icon"
+        "description", "license", "engines", "runtime", "contributes", "configPage", "styleTokens", "icon"
     )
     private val ENGINE_KEYS = setOf("pluginApi")
     private val RUNTIME_KEYS = setOf("type", "entry", "command", "dependencies", "resident")
@@ -203,7 +203,8 @@ object PluginManifestParser {
                     backup = contributes.backup,
                     modelAccess = contributes.modelAccess,
                     configPage = contributes.configPage ?: readConfigPage(obj["configPage"], "configPage"),
-                    styleTokens = contributes.styleTokens,
+                    styleTokens = contributes.styleTokens
+                        ?: readStyleTokens(obj["styleTokens"], "styleTokens"),
                     icon = icon
                 )
             )
