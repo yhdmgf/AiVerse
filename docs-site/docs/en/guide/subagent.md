@@ -224,7 +224,7 @@ After toggling enable/disable in the App, the list refreshes. In local mode, man
 
 ## Runtime Mechanics and Limits
 
--   **Concurrency cap**: the system supports at most **5 subagents running simultaneously**; beyond that you must wait for existing tasks to finish or pause some manually;
+-   **Concurrency cap**: **6 subagents run simultaneously by default** (adjustable in "Settings → General → Preferences", no less than 1); beyond that you must wait for existing tasks to finish or pause some manually;
 -   **No nesting**: a subagent cannot spawn further sub-level subagents;
 -   **Two-way communication**: the main session can append messages to a running or finished subagent at any time (repeatedly), and a running subagent can also proactively report to or ask the main session for help; messages arrive asynchronously without blocking each other.
 -   **Default mode**: a subagent inherits the main session's mode at dispatch time by default. A subagent dispatched in plan (PLAN) mode can likewise only do read-only exploration — the list the main session sees then labels "File modify / Run command" as "No (PLAN read-only)", and the dispatch result carries the same reminder, avoiding discovering only after dispatch that it can't be done; in auto (AUTO) mode, like the main session, there are no per-action pop-ups. A custom subagent can use the `mode` field to **narrow** permissions (for example fixing `mode: plan` on a read-only subagent so it stays read-only whenever dispatched), but cannot widen them beyond the parent session — this way PLAN mode can't be bypassed by "dispatch a subagent to change it";

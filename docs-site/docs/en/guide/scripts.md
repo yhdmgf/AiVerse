@@ -58,6 +58,8 @@ authorname.pluginname_version.zip
 
 The store list comes from the official plugin index and is updated from time to time; if you cannot find a new plugin, **pull to refresh** on the store page.
 
+**Mirror acceleration URL**: the store index and plugin packages are hosted on GitHub. When the direct connection is slow or fails, you can set a mirror acceleration URL (a URL prefix) in the plugin settings. It only applies to GitHub-hosted index and plugin packages; leave it empty to connect directly. The URL must start with `http(s)` and contain no user info; invalid input is ignored.
+
 ### Method 3: In-Development Directory (Edit and Try)
 
 This suits writing your own plugin or wanting to edit a plugin's source directly, without repeatedly importing a zip:
