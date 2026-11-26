@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
@@ -282,7 +283,7 @@ internal fun ProviderSectionHeader(text: String) {
  * [enableDrag] 为 false 时（分区态）不接拖拽把手，仅保留点击 / 左滑 / 星标置顶。
  */
 @Composable
-private fun ProviderCard(
+private fun LazyItemScope.ProviderCard(
     provider: AIProviderConfig,
     selection: ListSelectionState,
     onEdit: (AIProviderConfig) -> Unit,
