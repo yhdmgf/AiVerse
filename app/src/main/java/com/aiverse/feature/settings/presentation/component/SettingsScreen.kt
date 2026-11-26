@@ -285,6 +285,7 @@ fun SettingsScreen(
     onSessionsMutated: () -> Unit = {}
 ) {
     val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val syncAllState by viewModel.syncAllState.collectAsStateWithLifecycle()
     val logLevel by viewModel.logLevel.collectAsStateWithLifecycle()
     val logViewerState by viewModel.logViewerState.collectAsStateWithLifecycle()
     val mcpAuthState by viewModel.mcpAuthState.collectAsStateWithLifecycle()
@@ -415,6 +416,24 @@ fun SettingsScreen(
     var pluginSettingsTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val context = LocalContext.current
+
+    // 一键同步完成时弹汇总 Toast：成功 / 无密钥 / 失败 计数。以 running true→false 跳变判定完成。
+    var prevSyncRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(syncAllState.running) {
+        if (prevSyncRunning && !syncAllState.running) {
+            Toast.makeText(
+                context,
+                context.getString(
+                    R.string.provider_sync_all_summary,
+                    syncAllState.success,
+                    syncAllState.noKey,
+                    syncAllState.failed
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        prevSyncRunning = syncAllState.running
+    }
     // 技能分享/导出公共入口（顶栏 ⋯ 菜单与批量底部栏共用同一份，避免各自创建 launcher）。
     val skillShareExport = rememberSkillShareExport()
 
@@ -1008,6 +1027,21 @@ fun SettingsScreen(
                 actions = {
                     when (current) {
                         SettingsSection.Providers -> {
+                            // 一键同步：并行刷新所有已启用提供商的模型列表，同步中转圈、完成后 Toast 汇总。
+                            if (providers.any { it.isEnabled }) {
+                                IconButton(onClick = { viewModel.syncAllProviders() }, enabled = !syncAllState.running) {
+                                    if (syncAllState.running) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(
+                                            FeatherIcons.RefreshCw,
+                                            contentDescription = stringResource(R.string.provider_sync_all),
+                                            tint = MaterialTheme.colorScheme.onBackground,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
                             if (providers.isNotEmpty()) {
                                 SelectionToggleAction(selectionFor(SettingsSection.Providers))
                             }
@@ -1481,7 +1515,8 @@ fun SettingsScreen(
                         viewModel.reorderProviders(fromIndex, toIndex)
                     },
                     onBatchDelete = { ids -> viewModel.deleteProviders(ids) },
-                    onBatchSetEnabled = { ids, enabled -> viewModel.setProvidersEnabled(ids, enabled) }
+                    onBatchSetEnabled = { ids, enabled -> viewModel.setProvidersEnabled(ids, enabled) },
+                    onTogglePin = { id, pinned -> viewModel.setProviderPinned(id, pinned) }
                 )
                 SettingsSection.DefaultModels -> DefaultModelsSection(
                     providers = providers,

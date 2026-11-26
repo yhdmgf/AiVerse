@@ -2523,6 +2523,12 @@
     <!-- Providers & Log -->
     <string name="providers_empty">No vendors yet, tap + to add one</string>
     <string name="provider_sort_long_press">Long press to reorder</string>
+    <string name="provider_pin">Pin to top</string>
+    <string name="provider_unpin">Unpin</string>
+    <string name="provider_pinned_section">Favorites</string>
+    <string name="provider_other_section">Others</string>
+    <string name="provider_sync_all">Sync all</string>
+    <string name="provider_sync_all_summary">Sync done: %1$d succeeded, %2$d no key, %3$d failed</string>
     <string name="log_level">Log Level</string>
     <string name="log_level_desc">Logs below this level are ignored. Use VERBOSE during development; NONE disables logging.</string>
     <string name="log_file_location">Log files are located at Android/data/&lt;package&gt;/files/logs/.</string>

@@ -381,7 +381,7 @@ Room：`feature/agent/data/local/database/AgentDatabase.kt` + 各 DAO。迁移�
 
 **推 PR 前写好公告，验证与合并以云端 CI 为准，不用 `gh pr merge` 在本地强合。**
 
-0. **推送落点：追加到既有 PR，不要另开新 PR（硬规则）**。审核某个 PR 时发现问题、或对本次已推送改动做补充修正，一律 `git push origin <该 PR 的 head 分支>`，把修复追加到**同一个 PR**，不要单独新建 PR。判断口径：改动与该 PR 已有内容**相关**（同一批 issue / 同一主题 / 审核发现的回归或遗漏）→ 追加；改动是**新功能或与现有 PR 无关的新问题** → 才开新分支、新建 PR。**云端 PR CI 会在推送后自动跑单测 + 迁移对账 + 编译冒烟并上传 APK 产物，有问题会通知，本地不要再跑推送前闸门。**
+0. **推送落点：追加到既有 PR，不要另开新 PR（硬规则）**。审核某个 PR 时发现问题、或对本次已推送改动做补充修正，一律 `git push origin <该 PR 的 head 分支>`，把修复追加到**同一个 PR**，不要单独新建 PR。判断口径：改动与该 PR 已有内容**相关**（同一批 issue / 同一主题 / 审核发现的回归或遗漏）→ 追加；改动是**新功能或与现有 PR 无关的新问题** → 才开新分支、新建 PR。**追加的这些补充提交（审核修复、CI 修错、编译报错修、文档/公告补充）不再重复写 `Closes #N`**：`Closes #N` 只出现在本轮真正实现该 issue 的那个主提交里（PR 里有一处即可，合并时自动关闭），后续追加提交的 message 只写改动本身、不带 `Closes #N`，避免每个提交都堆一个 issue 标签。**云端 PR CI 会在推送后自动跑单测 + 迁移对账 + 编译冒烟并上传 APK 产物，有问题会通知，本地不要再跑推送前闸门。**
 1. **摸状态**：`git fetch origin` → `gh pr view <N> --json state,mergeable,mergeStateStatus,headRefName,changedFiles` + `gh pr checks <N>` → `git rev-list --left-right --count origin/main...main`。fork PR 的 Vercel 必报 `Authorization required to deploy` 属正常，只看 `Build & Test` 是否 pass。
 2. **拉到本地**：`git fetch origin pull/<N>/head:pr-<N>`。勿用 `gh pr checkout`。
 3. **审查**：`gh pr diff <N> > /tmp/pr<N>.diff` 通读。PR 描述与 CodeRabbit 结论都不算证据，逐项落地核实：新依赖、`R.string` 双语存在、组件签名与调用点、是否复用既有实现、安全面、资产同步、迁移对账、每个 dp 是否统一走 token、超范围改动。

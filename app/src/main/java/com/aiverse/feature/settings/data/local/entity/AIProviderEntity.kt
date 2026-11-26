@@ -52,6 +52,8 @@ data class AIProviderEntity(
     val customHeaders: String = "",
     /** 提供商列表排序序号，越小越靠前；新建时分配 max+1。 */
     val sortOrder: Int = 0,
+    /** 是否置顶到「常用」专区；置顶的提供商在列表中优先展示。 */
+    val pinned: Boolean = false,
     /** 单独为该提供商配置代理（关闭时跟随全局代理设置）。 */
     val proxyEnabled: Boolean = false,
     val proxyType: String = "HTTP",

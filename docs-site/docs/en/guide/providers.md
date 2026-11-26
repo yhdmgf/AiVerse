@@ -29,6 +29,12 @@ Each row shows the name, upstream format, model count and enabled status.
 - **Swipe a row left** to reveal a red delete button.
 - **Long-press and drag the name or upstream format area** to reorder; the order survives restart.
 
+**Pin a vendor**: each row has a star button on the right. Tap it once to **pin** that vendor to the top, tap again to unpin. As long as any vendor is pinned, the list splits into two sections — a **Favorites** section at the top holding every pinned vendor, and an **Others** section below for the rest — each with its own subheading. When nothing is pinned, the list stays as the single ordering you had before.
+
+Pinning is itself a way to order the list, so drag-to-reorder is disabled while the list is split into sections. To get dragging back, unpin every vendor.
+
+**Sync all**: a **refresh** icon button has been added to the top bar, to the left of the **Select** button. Tapping it refreshes the model list of every **enabled** vendor **in parallel**; one vendor failing does not affect the others. While syncing, the button shows a spinner and can't be tapped again. When everything finishes, a summary toast pops up: N succeeded, N skipped for no key, N failed. "No key" means that vendor has no usable API Key configured, so it was skipped and does not count as a failure. If no vendor is enabled, tapping the button does nothing.
+
 ### Batch operations
 
 The **Select** button at the top right (the check-square icon) lets you handle several vendors at once:

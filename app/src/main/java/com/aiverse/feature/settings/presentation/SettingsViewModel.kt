@@ -143,6 +143,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -160,6 +162,19 @@ sealed class FetchState {
     data class Success(val models: List<String>, val debugInfo: ModelTestResult? = null) : FetchState()
     data class Error(val message: String, val debugInfo: ModelTestResult? = null) : FetchState()
 }
+
+/**
+ * 一键同步所有已启用提供商模型列表的进度 / 结果态。
+ * [running] 为 true 时 [done]/[total] 表示已完成 / 总数，用于驱动进度提示。
+ */
+data class SyncAllState(
+    val running: Boolean = false,
+    val done: Int = 0,
+    val total: Int = 0,
+    val success: Int = 0,
+    val noKey: Int = 0,
+    val failed: Int = 0
+)
 
 /** 镜像下载页的完整 UI 状态：空闲 / 下载中（进度）/ 下载完成（可安装）/ 失败。 */
 sealed interface ContainerImageDownloadUiState {
@@ -903,6 +918,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _fetchState = MutableStateFlow<FetchState>(FetchState.Idle)
     val fetchState: StateFlow<FetchState> = _fetchState.asStateFlow()
+
+    private val _syncAllState = MutableStateFlow<SyncAllState>(SyncAllState())
+    val syncAllState: StateFlow<SyncAllState> = _syncAllState.asStateFlow()
 
     private val _testResults = MutableStateFlow<Map<String, ModelTestResult>>(emptyMap())
     val testResults: StateFlow<Map<String, ModelTestResult>> = _testResults.asStateFlow()
@@ -3516,6 +3534,66 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             repository.setProvidersEnabled(ids, isEnabled)
         }
+    }
+
+    /** 置顶 / 取消置顶提供商（常用专区）。只写 pinned 列，不影响其它配置。 */
+    fun setProviderPinned(id: String, pinned: Boolean) {
+        viewModelScope.launch {
+            repository.setPinned(id, pinned)
+        }
+    }
+
+    /**
+     * 一键同步所有已启用提供商的模型列表：并行拉取、错误隔离（单个失败不影响其它），
+     * 逐个将拉到的模型列表写回数据库，并汇总成功 / 无密钥 / 失败计数。
+     * [noKey] 表示该提供商未配置可用 Key，跳过拉取但单独计数，不算失败。
+     */
+    fun syncAllProviders() {
+        val enabled = _providers.value.filter { it.isEnabled }
+        if (enabled.isEmpty()) return
+        if (_syncAllState.value.running) return
+        _syncAllState.value = SyncAllState(running = true, total = enabled.size)
+        viewModelScope.launch {
+            var success = 0
+            var noKey = 0
+            var failed = 0
+            var done = 0
+            // 并行拉取：每个提供商独立 async，互不阻塞；结果按完成顺序逐个落库与计数。
+            val deferred = enabled.map { provider ->
+                async {
+                    val result = if (!provider.hasUsableApiKey) {
+                        Result.failure(IllegalStateException("no api key"))
+                    } else {
+                        modelApiService.fetchModels(
+                            provider.baseUrl,
+                            provider.firstUsableApiKey,
+                            provider.type,
+                            provider.useFullUrl,
+                            provider.customHeaders
+                        )
+                    }
+                    provider to result
+                }
+            }
+            deferred.awaitAll().forEach { (provider, result) ->
+                result.onSuccess { fetched ->
+                    if (fetched.models.isNotEmpty()) {
+                        repository.updateModels(provider.id, fetched.models)
+                    }
+                    success++
+                }.onFailure {
+                    if (!provider.hasUsableApiKey) noKey++ else failed++
+                }
+                done++
+                _syncAllState.value = _syncAllState.value.copy(done = done, success = success, noKey = noKey, failed = failed)
+            }
+            _syncAllState.value = _syncAllState.value.copy(running = false)
+        }
+    }
+
+    /** 重置一键同步状态，避免下次进入残留上一次的进度 / 结果。 */
+    fun resetSyncAllState() {
+        _syncAllState.value = SyncAllState()
     }
 
     fun saveProvider(provider: AIProviderConfig) {

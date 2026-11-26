@@ -53,4 +53,8 @@ interface AIProviderDao {
 
     @Query("UPDATE ai_providers SET isEnabled = :isEnabled WHERE id IN (:ids)")
     suspend fun setProvidersEnabled(ids: Collection<String>, isEnabled: Boolean)
+
+    /** 置顶 / 取消置顶：只写 pinned 列，不触碰其它字段。 */
+    @Query("UPDATE ai_providers SET pinned = :pinned WHERE id = :id")
+    suspend fun setPinned(id: String, pinned: Boolean)
 }

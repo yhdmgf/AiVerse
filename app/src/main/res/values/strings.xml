@@ -2523,6 +2523,12 @@
     <!-- Providers & Log -->
     <string name="providers_empty">还没有供应商，点右上角 + 添加</string>
     <string name="provider_sort_long_press">长按拖动排序</string>
+    <string name="provider_pin">置顶</string>
+    <string name="provider_unpin">取消置顶</string>
+    <string name="provider_pinned_section">常用</string>
+    <string name="provider_other_section">其他</string>
+    <string name="provider_sync_all">一键同步</string>
+    <string name="provider_sync_all_summary">同步完成：成功 %1$d、无密钥 %2$d、失败 %3$d</string>
     <string name="log_level">日志等级</string>
     <string name="log_level_desc">低于该等级的日志将被忽略；开发期建议 VERBOSE，NONE 关闭日志。</string>
     <string name="log_file_location">日志文件位于 Android/data/&lt;包名&gt;/files/logs/。</string>
