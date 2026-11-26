@@ -31,6 +31,10 @@ Controls how chat history is handled when you remove an external local workspace
 
 Deleting the app's built-in workspaces and remote workspaces is not affected by this switch: when you delete them, both the directory and the chat history are removed together.
 
+**Auto-expand reasoning** (disabled by default)
+
+Controls whether a model's reasoning (thinking) cards are expanded by default. When enabled, thinking cards open automatically so you can read the reasoning as it arrives; when disabled, they stay collapsed and you tap to expand the ones you want to read.
+
 ## Input
 
 **Enter key sends message** (disabled by default)
@@ -60,3 +64,25 @@ The number of exponential-backoff retries after a network request fails (not cou
 **sendFile per-file limit** (100MB by default, accepts an integer greater than 0)
 
 The maximum size allowed for a single file when the AI sends a file to the chat area with `sendFile`. Files over the limit are not sent, and the AI receives the reason for the failure. Increasing the limit allows larger files, but a single file is first copied into the app's private directory before being shown, so very large files may consume considerable storage.
+
+**MCP on-demand tool loading** (experimental, disabled by default)
+
+Changes how MCP tools are offered to the model when a server exposes many of them. When enabled, only two entries are given to the model — one to **search** the available tools and one to **call** one by name — instead of listing every tool up front, which keeps them out of the context window until they're actually needed. Built-in tools are unaffected. With few tools there's little benefit, so leave it off unless a server's tool list is large enough to crowd the context.
+
+## Goal
+
+These two limits cap the **Goal** autonomous loop, which keeps working toward a goal across multiple turns without a new instruction each time.
+
+**Max continuation turns** (50 by default, accepts an integer greater than 0)
+
+The most turns the autonomous loop may run before it stops on its own. Each turn is one round of the model deciding what to do next and acting on it; once the count is reached, the loop halts rather than continuing indefinitely.
+
+**Token budget** (500,000 by default, accepts an integer not less than 1000)
+
+The total input plus output tokens the autonomous loop may consume, counted cumulatively across its turns. When the budget is used up the loop stops, so a runaway goal can't keep burning tokens without end.
+
+## Subagents
+
+**Max concurrent subagents** (6 by default, accepts 1–32)
+
+The number of subagents that may run at the same time. When more are requested than the limit allows, the extras wait until a slot frees up. Raise it if you routinely fan out many subagents in parallel and your device can handle the load; lower it to keep things light.

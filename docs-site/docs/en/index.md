@@ -42,4 +42,6 @@ features:
     details: Connect local stdio and remote HTTP MCP servers to dynamically extend tools. Global and project-level skills plus long-term memory let the AI reuse experience across sessions.
   - title: Git & Workspace Sync
     details: Built-in status, branch, commit, diff and tag management. SFTP / FTP sync support, plus a built-in FTP server for managing files from your computer.
+  - title: Plugin System
+    details: Install third-party plugins to extend AI tools, skills, subagents, vendors and UI entries. Ships with a plugin store and in-app login for cookies; plugins run as isolated processes inside the container.
 ---
