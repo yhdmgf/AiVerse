@@ -553,6 +553,8 @@ definePlugin({ handlers: {
 
 圆角、尺寸与阴影字段填整数（dp），透明度填 10–100 的整数百分比，非法类型或超出范围都会拒绝安装。
 
+声明 `chatInputShadow` 时会以插件值为准，覆盖宿主原有的输入框阴影（含 HyperOS 风格档的默认阴影）。只声明这一项时其它圆角、颜色等保持不变；想让输入框恢复无阴影，填 `0` 即可。
+
 颜色字段接受两种写法：
 
 - **语义令牌名**（推荐）：自动跟随 App 的亮/暗主题与配色方案，主题切换时同步变化。代码实际接受以下 16 个语义色名：`primary`、`onPrimary`、`secondary`、`tertiary`、`surface`、`surfaceVariant`、`background`、`onSurface`、`onSurfaceVariant`、`outline`、`error`、`success`、`warning`、`info`、`cardSurface`、`pageBackground`；

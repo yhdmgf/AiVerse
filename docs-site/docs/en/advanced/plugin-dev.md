@@ -1178,6 +1178,8 @@ The priority is **plugin > user setting > default**: once a plugin declares a fi
 
 Corner radius, size and shadow fields take integers (dp); opacity takes an integer percentage from 10 to 100; a wrong type or an out-of-range value causes the install to be rejected.
 
+Declaring `chatInputShadow` overrides the host's existing input box shadow with the plugin's value, including the default shadow of the HyperOS style preset. Other tokens such as radii and colors stay unchanged when only this field is declared; set it to `0` to restore a shadow-less input box.
+
 Color fields accept two forms:
 
 - **Semantic token names** (recommended): these automatically follow the app's light/dark theme and color scheme and change in sync when the theme switches. The code accepts exactly these 16 semantic color names: `primary`, `onPrimary`, `secondary`, `tertiary`, `surface`, `surfaceVariant`, `background`, `onSurface`, `onSurfaceVariant`, `outline`, `error`, `success`, `warning`, `info`, `cardSurface`, `pageBackground`;
