@@ -210,7 +210,7 @@ internal fun ChatHeader(
                 } else {
                     Spacer(modifier = Modifier.width(Spacing.sm))
                 }
-                Column(modifier = Modifier.weight(1f).padding(start = -LocalUIDensityTokens.current.scale(4))) {
+                Column(modifier = Modifier.weight(1f)) {
                     val hyperOS = LocalHyperOSStyle.current
                     val glass = LocalSurfaceGlassStyle.current
                     val t = LocalUIDensityTokens.current
@@ -471,11 +471,10 @@ private fun HeaderMenuBarsButton(
     val t = LocalUIDensityTokens.current
     Box(
         modifier = modifier
-            .size(t.scale(40))
+            .size(t.scale(36))
             .clip(RoundedCornerShape(t.buttonCorner))
             .clickable(onClick = onClick)
-            .semantics { this.contentDescription = contentDescription }
-            .offset(x = -t.scale(4)),
+            .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.size(t.scale(20))) {
