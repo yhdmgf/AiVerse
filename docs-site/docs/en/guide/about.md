@@ -53,6 +53,17 @@ The "Download mirror source" setting on the settings page is only for configurin
 -   **Terms of Service**: opens the [Terms of Service](https://aivapp.cn/md/terms.md) in the system browser to learn about usage rules, AI and operation risks, third-party fees, and open source rights.
 -   **Privacy Policy**: opens the [Privacy Policy](https://aivapp.cn/md/privacy.md) in the system browser to learn how data storage, network transmission, logs, and backups are handled.
 
+## Contributors
+
+When contributor data is available, the bottom of "Settings → About" has a **Contribute** row ("Contribute on GitHub") that opens the repository's contribution page. It sits above the contributor wall and is always visible, so the one-tap call to action doesn't require expanding anything.
+
+Below it is the **Contributor Wall** row, collapsed by default like the update settings above. Tap it to expand a wall of contributor avatars:
+
+-   **Drag** to pan around the wall and **pinch** to zoom in or out, so a large number of contributors stays browsable.
+-   **Tap an avatar** to open a detail card with the contributor's name and handle, how many **commits** they have, a one-line summary of what they contributed (or a general thanks when there's no specific note), and chips for the areas they contributed to — app, build, docs, feedback, terminal, plugins, git, editor, UI, or core. If the contributor has a linked GitHub account, a **View on GitHub** button opens their profile.
+
+The wall loads a snapshot bundled with the app first, so it isn't blank on open, and then quietly refreshes in the background while you're looking at it — new contributors appear without reinstalling or clearing data. The list only ever grows: someone credited once stays on the wall, including contributors with no commits to their name (for example people who filed issues or gave feedback).
+
 ## First-Launch Confirmation
 
 When you launch the app for the first time, an agreement confirmation dialog covers the main interface, containing two blue links: "Terms of Service" and "Privacy Policy". Tapping either link opens the full text in the system browser; after reading, return to the app to decide whether to agree. The main interface stays visible while the confirmation state is being read; first-launch onboarding and automatic update checks start only after you agree.
