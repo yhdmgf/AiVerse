@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aiverse.core.theme.Spacing
+import com.aiverse.core.theme.drawerEntryTextColor
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.feature.agent.domain.model.ChatSession
 import compose.icons.FeatherIcons
@@ -134,7 +135,7 @@ fun ChatSessionRow(
         Text(
             text = session.title,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            color = if (selected) MaterialTheme.colorScheme.primary else drawerEntryTextColor(),
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

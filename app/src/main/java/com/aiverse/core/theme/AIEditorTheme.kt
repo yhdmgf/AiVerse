@@ -512,6 +512,8 @@ fun AIEditorTheme(
     fieldCornerDp: Int = 12,
     bubbleCornerDp: Int = 10,
     imageCornerDp: Int = 12,
+    /** 插件外观覆盖层：非空时覆盖同名字段（插件 > 用户设置 > 默认）；由 MainActivity 从插件域令牌映射而来。 */
+    pluginStyleTokens: PluginStyleOverride? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -551,8 +553,9 @@ fun AIEditorTheme(
         LocalCodeWrapEnabled provides codeWrapEnabled,
         LocalCodeAutoFoldEnabled provides codeAutoFoldEnabled,
         LocalCodeShowLineNumber provides codeShowLineNumber,
-        LocalUserBubbleOpacity provides userBubbleOpacity,
-        LocalAssistantBubbleOpacity provides assistantBubbleOpacity,
+        LocalUserBubbleOpacity provides (pluginStyleTokens?.userBubbleOpacity ?: userBubbleOpacity),
+        LocalAssistantBubbleOpacity provides (pluginStyleTokens?.assistantBubbleOpacity ?: assistantBubbleOpacity),
+        LocalChatInputStyle provides pluginStyleTokens?.chatInput,
         LocalUIDensityTokens provides remember(uiDensity, cardCornerDp, buttonCornerDp, fieldCornerDp, bubbleCornerDp, imageCornerDp) {
             UIDensityTokens.forDensity(
                 uiDensity,
@@ -565,15 +568,99 @@ fun AIEditorTheme(
         }
     ) {
         val baseDensity = LocalDensity.current
-        CompositionLocalProvider(
-            LocalDensity provides Density(baseDensity.density, uiFontScale)
+        MaterialTheme(
+            colorScheme = themeColors.colorScheme,
+            typography = typography,
+            shapes = shapes
         ) {
-            MaterialTheme(
-                colorScheme = themeColors.colorScheme,
-                typography = typography,
-                shapes = shapes,
-                content = content
-            )
+            CompositionLocalProvider(
+                LocalDensity provides Density(baseDensity.density, uiFontScale),
+                LocalPluginUiStyle provides remember(pluginStyleTokens, themeColors) {
+                    pluginStyleTokens?.let { tokens ->
+                        val scheme = themeColors.colorScheme
+                        val semantic = themeColors.semanticColors
+                        PluginUiStyle(
+                            userBubbleColor = tokens.bubbleUserColor.asPluginColor(scheme, semantic),
+                            userBubbleTextColor = tokens.bubbleUserTextColor.asPluginColor(scheme, semantic),
+                            topBarColor = tokens.topBarColor.asPluginColor(scheme, semantic),
+                            topBarTextColor = tokens.topBarTextColor.asPluginColor(scheme, semantic),
+                            drawerColor = tokens.drawerColor.asPluginColor(scheme, semantic),
+                            drawerTextColor = tokens.drawerTextColor.asPluginColor(scheme, semantic),
+                            iconColor = tokens.iconColor.asPluginColor(scheme, semantic)
+                        )
+                    }
+                }
+            ) {
+                content()
+            }
         }
     }
 }
+
+/**
+ * 插件外观颜色覆盖的解析结果：全部字段可空，null 表示该字段无插件声明、渲染端回退现有取色。
+ * 颜色文本可以是 `#RRGGBB` / `#AARRGGBB` 字面量，也可以是 [PluginStyleColorTokens] 里的语义名
+ * （随当前主题含深色解析）。
+ */
+data class PluginUiStyle(
+    val userBubbleColor: Color? = null,
+    val userBubbleTextColor: Color? = null,
+    val topBarColor: Color? = null,
+    val topBarTextColor: Color? = null,
+    val drawerColor: Color? = null,
+    val drawerTextColor: Color? = null,
+    val iconColor: Color? = null
+)
+
+/** 插件外观颜色覆盖；无插件声明时为 null，渲染端全部回退现有取色路径。 */
+val LocalPluginUiStyle = staticCompositionLocalOf<PluginUiStyle?> { null }
+
+/** 把插件声明的颜色（语义名或 `#` 十六进制）按当前配色方案解析成 [Color]；无法识别返回 null。 */
+internal fun String?.asPluginColor(
+    scheme: androidx.compose.material3.ColorScheme,
+    semantic: AppSemanticColors
+): Color? {
+    if (isNullOrBlank()) return null
+    val resolved = when (this) {
+        PluginStyleColorTokens.PRIMARY -> scheme.primary
+        PluginStyleColorTokens.ON_PRIMARY -> scheme.onPrimary
+        PluginStyleColorTokens.SECONDARY -> scheme.secondary
+        PluginStyleColorTokens.TERTIARY -> scheme.tertiary
+        PluginStyleColorTokens.SURFACE -> scheme.surface
+        PluginStyleColorTokens.SURFACE_VARIANT -> scheme.surfaceVariant
+        PluginStyleColorTokens.BACKGROUND -> scheme.background
+        PluginStyleColorTokens.ON_SURFACE -> scheme.onSurface
+        PluginStyleColorTokens.ON_SURFACE_VARIANT -> scheme.onSurfaceVariant
+        PluginStyleColorTokens.OUTLINE -> scheme.outline
+        PluginStyleColorTokens.ERROR -> scheme.error
+        PluginStyleColorTokens.SUCCESS -> semantic.success
+        PluginStyleColorTokens.WARNING -> semantic.warning
+        PluginStyleColorTokens.INFO -> semantic.info
+        PluginStyleColorTokens.CARD_SURFACE -> semantic.cardSurface
+        PluginStyleColorTokens.PAGE_BACKGROUND -> semantic.pageBackground
+        else -> null
+    }
+    if (resolved != null) return resolved
+    if (!startsWith("#")) return null
+    return runCatching { Color(android.graphics.Color.parseColor(this)) }.getOrNull()
+}
+
+/** 插件顶栏标题/文字色；未声明时为 null，渲染端回退现有取色。 */
+@Composable
+internal fun pluginTopBarTextColor(): Color? = LocalPluginUiStyle.current?.topBarTextColor
+
+/**
+ * 插件侧栏条目文字色：未声明时回退传入的默认取色，保持无插件时外观不变。
+ * 选中态强调色（如 primary）由调用方自行保留，不经过这里覆盖。
+ */
+@Composable
+internal fun drawerEntryTextColor(fallback: Color = MaterialTheme.colorScheme.onSurface): Color =
+    LocalPluginUiStyle.current?.drawerTextColor ?: fallback
+
+/**
+ * 插件图标色：插件声明了 iconColor 时覆盖中性色图标（原本用 onSurfaceVariant 这类中性色的通用图标），
+ * 未声明时回退传入的 tint。状态语义色（选中态强调色/错误色/成功色等）由调用方不传给这里、自行保留。
+ */
+@Composable
+internal fun pluginIconColorOr(tint: Color): Color =
+    LocalPluginUiStyle.current?.iconColor ?: tint

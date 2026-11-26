@@ -240,6 +240,10 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var pluginUpdateNotifier: com.aiverse.feature.plugins.domain.PluginUpdateNotifier
 
+    /** 插件宿主：收集已启用插件的外观令牌声明，叠加成全局外观覆盖层（插件 > 用户设置 > 默认）。 */
+    @Inject
+    lateinit var pluginManager: com.aiverse.feature.plugins.domain.PluginManager
+
     /** 环境安装是否成功：本地容器读 /.provisioned 标记（版本匹配才算完成）；远程模式用户自装，恒 true。 */
     private fun isContainerProvisioned(): Boolean =
         if (executionModeHolder.currentMode() == com.aiverse.feature.settings.data.repository.ExecutionMode.REMOTE_SSH) true
@@ -368,6 +372,50 @@ class MainActivity : ComponentActivity() {
             val fieldCorner by appearanceSettings.fieldCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_FIELD_CORNER)
             val bubbleCorner by appearanceSettings.bubbleCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_BUBBLE_CORNER)
             val imageCorner by appearanceSettings.imageCornerFlow.collectAsStateWithLifecycle(initialValue = AppearanceSettingsRepository.DEFAULT_IMAGE_CORNER)
+            // 已启用插件的外观令牌：按插件 id 排序后合并（字段取第一个非 null 声明者），保证结果稳定可复现。
+            val installedPlugins by pluginManager.plugins.collectAsStateWithLifecycle()
+            val pluginStyleTokens = remember(installedPlugins) {
+                val merged = com.aiverse.feature.plugins.domain.PluginStyleTokensRef.mergeStyleTokens(
+                    installedPlugins
+                        .asSequence()
+                        .filter { it.isActive }
+                        .sortedBy { it.id }
+                        .map { it.manifest?.styleTokens }
+                        .toList()
+                )
+                com.aiverse.core.theme.PluginStyleOverride(
+                    cardRadius = merged.cardRadius,
+                    buttonRadius = merged.buttonRadius,
+                    // 插件 chatInputRadius 只通过 chatInput.cornerRadius 作用输入框，不再连带覆盖用户通用 fieldRadius。
+                    fieldRadius = merged.fieldRadius,
+                    bubbleRadius = merged.bubbleRadius,
+                    imageRadius = merged.imageRadius,
+                    userBubbleOpacity = merged.userBubbleOpacity,
+                    assistantBubbleOpacity = merged.assistantBubbleOpacity,
+                    chatPanelOpacity = merged.chatPanelOpacity,
+                    bubbleUserColor = merged.bubbleUserColor,
+                    bubbleUserTextColor = merged.bubbleUserTextColor,
+                    topBarColor = merged.topBarColor,
+                    topBarTextColor = merged.topBarTextColor,
+                    drawerColor = merged.drawerColor,
+                    drawerTextColor = merged.drawerTextColor,
+                    iconColor = merged.iconColor,
+                    chatInput = com.aiverse.core.theme.ChatInputStyleOverride(
+                        minHeight = merged.chatInputMinHeight,
+                        cornerRadius = merged.chatInputRadius,
+                        shadow = merged.chatInputShadow
+                    )
+                )
+            }
+            // 最终生效外观值：插件 > 用户设置 > 默认（默认值已由 collect 初值 / forDensity 兼底）。
+            val effectiveCardCorner = pluginStyleTokens.cardRadius ?: cardCorner
+            val effectiveButtonCorner = pluginStyleTokens.buttonRadius ?: buttonCorner
+            val effectiveFieldCorner = pluginStyleTokens.fieldRadius ?: fieldCorner
+            val effectiveBubbleCorner = pluginStyleTokens.bubbleRadius ?: bubbleCorner
+            val effectiveImageCorner = pluginStyleTokens.imageRadius ?: imageCorner
+            val effectiveUserBubbleOpacity = pluginStyleTokens.userBubbleOpacity ?: userBubbleOpacity
+            val effectiveAssistantBubbleOpacity = pluginStyleTokens.assistantBubbleOpacity ?: assistantBubbleOpacity
+            val effectiveChatPanelOpacity = pluginStyleTokens.chatPanelOpacity ?: chatPanelOpacity
             val fileTreeDisplayPrefs by appearanceSettings.fileTreeDisplayPrefsFlow.collectAsStateWithLifecycle(initialValue = FileTreeDisplayPrefs.Default)
             val systemDarkTheme = isSystemInDarkTheme()
             val darkTheme = when (themeMode) {
@@ -399,16 +447,17 @@ class MainActivity : ComponentActivity() {
                 codeWrapEnabled = codeWrapEnabled,
                 codeAutoFoldEnabled = codeAutoFoldEnabled,
                 codeShowLineNumber = codeShowLineNumber,
-                userBubbleOpacity = userBubbleOpacity,
-                assistantBubbleOpacity = assistantBubbleOpacity,
+                userBubbleOpacity = effectiveUserBubbleOpacity,
+                assistantBubbleOpacity = effectiveAssistantBubbleOpacity,
                 uiFontScale = uiFontScale,
                 uiFontPath = uiFontPath,
                 uiDensity = uiDensity,
-                cardCornerDp = cardCorner,
-                buttonCornerDp = buttonCorner,
-                fieldCornerDp = fieldCorner,
-                bubbleCornerDp = bubbleCorner,
-                imageCornerDp = imageCorner
+                cardCornerDp = effectiveCardCorner,
+                buttonCornerDp = effectiveButtonCorner,
+                fieldCornerDp = effectiveFieldCorner,
+                bubbleCornerDp = effectiveBubbleCorner,
+                imageCornerDp = effectiveImageCorner,
+                pluginStyleTokens = pluginStyleTokens
             ) {
                 // 启动向导结束后的引导选择；由 LaunchGate 写入，下面 LaunchedEffect 消费。
                 var startOnboardingAfterWizard by remember { mutableStateOf<Boolean?>(null) }
@@ -435,7 +484,7 @@ class MainActivity : ComponentActivity() {
                                 agreementAccepted = true,
                                 startOnboardingAfterWizard = startOnboardingAfterWizard,
                                 onStartOnboardingConsumed = { startOnboardingAfterWizard = null },
-                                chatPanelOpacity = chatPanelOpacity,
+                                chatPanelOpacity = effectiveChatPanelOpacity,
                                 isContainerReady = isContainerReady,
                                 webMessageBridge = this@MainActivity.webMessageBridge,
                                 pluginUpdateNotifier = this@MainActivity.pluginUpdateNotifier,

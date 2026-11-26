@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
+import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.core.theme.chatPanelGlassOr
 import com.aiverse.core.theme.glassBorderOr
 import com.aiverse.core.theme.glassOr
@@ -178,7 +179,8 @@ internal fun ChatHeader(
     onRunPluginAction: (PluginUiEntry) -> Unit = {}
 ) {
     Surface(
-        color = chatPanelGlassOr(MaterialTheme.semanticColors.surfaceGlass),
+        color = LocalPluginUiStyle.current?.topBarColor
+            ?: chatPanelGlassOr(MaterialTheme.semanticColors.surfaceGlass),
         border = if (LocalSurfaceGlassStyle.current) {
             BorderStroke(1.dp, MaterialTheme.semanticColors.surfaceGlassBorder)
         } else {
@@ -204,7 +206,7 @@ internal fun ChatHeader(
                     HeaderMenuBarsButton(
                         onClick = onOpenDrawer,
                         contentDescription = stringResource(R.string.chat_open_sidebar),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = com.aiverse.core.theme.pluginIconColorOr(MaterialTheme.colorScheme.onSurfaceVariant),
                         modifier = Modifier.onboardingTarget(OnboardingStep.OPEN_SIDEBAR)
                     )
                 } else {
@@ -227,7 +229,8 @@ internal fun ChatHeader(
                             Text(
                                 text = sessionTitle,
                                 style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onBackground,
+                                color = com.aiverse.core.theme.pluginTopBarTextColor()
+                                    ?: MaterialTheme.colorScheme.onBackground,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -236,7 +239,8 @@ internal fun ChatHeader(
                         Text(
                             text = sessionTitle,
                             style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            color = com.aiverse.core.theme.pluginTopBarTextColor()
+                                ?: MaterialTheme.colorScheme.onBackground,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -517,7 +521,7 @@ private fun HeaderOverflowMenu(
         CompactHeaderIconButton(
             icon = FeatherIcons.MoreHorizontal,
             contentDescription = stringResource(R.string.chat_header_more),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = com.aiverse.core.theme.pluginIconColorOr(MaterialTheme.colorScheme.onSurfaceVariant),
             onClick = { menuExpanded = true },
             // 终端入口收进「···」菜单后，新手引导第 1 步要把聚光灯打在「···」本体上，
             // 否则目标矩形为空，只剩一层遮罩，用户只能手动点下一步。

@@ -344,6 +344,7 @@ data class PluginManifest(
     val backup: PluginBackupRef? = null,
     val modelAccess: PluginModelAccessRef? = null,
     val configPage: String? = null,
+    val styleTokens: PluginStyleTokensRef? = null,
     /** 内置图标名，或包内 `.png` / `.webp` 相对路径；缺省用宿主默认图标。 */
     val icon: String? = null
 ) {
@@ -352,7 +353,8 @@ data class PluginManifest(
         get() = skills.size + agents.size + workspaceTools.size + uiEntries.size +
             tools.size + hooks.size + mcp.size + providers.size + sessionSources.size + (if (shizuku != null) 1 else 0) + (if (ssh != null) 1 else 0) +
             (if (overlay != null) 1 + overlay.surfaces.size else 0) + (if (backup != null) 1 else 0) +
-            (if (modelAccess != null) 1 else 0) + (if (configPage != null) 1 else 0)
+            (if (modelAccess != null) 1 else 0) + (if (configPage != null) 1 else 0) +
+            (if (styleTokens != null) 1 else 0)
 }
 
 /** 安装与加载过程中的失败原因。UI 按 [PluginErrorCode] 取本地化文案，[detail] 是语言无关的定位信息。 */

@@ -118,6 +118,7 @@ import com.aiverse.feature.settings.presentation.component.SettingsGroup
 import com.aiverse.feature.settings.presentation.component.SettingsGroupHeader
 import com.aiverse.feature.settings.presentation.component.SettingsRow
 import com.aiverse.feature.settings.presentation.component.settingsPageBackground
+import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.feature.agent.domain.model.ChatSession
 import com.aiverse.feature.agent.presentation.AgentUIState
 import com.aiverse.feature.agent.presentation.ChatSearchHit
@@ -366,7 +367,7 @@ fun ChatDrawerContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(settingsPageBackground())
+            .background(LocalPluginUiStyle.current?.drawerColor ?: settingsPageBackground())
             .windowInsetsPadding(
                 WindowInsets.systemBars.only(
                     WindowInsetsSides.Horizontal + WindowInsetsSides.Top

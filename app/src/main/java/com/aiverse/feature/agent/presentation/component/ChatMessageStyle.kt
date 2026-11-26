@@ -55,6 +55,7 @@ import com.aiverse.core.theme.LocalAssistantBubbleStyle
 import com.aiverse.core.theme.LocalUserBubbleStyle
 import com.aiverse.core.theme.LocalAssistantBubbleOpacity
 import com.aiverse.core.theme.LocalUserBubbleOpacity
+import com.aiverse.core.theme.LocalPluginUiStyle
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 import compose.icons.feathericons.Copy
@@ -107,13 +108,21 @@ private fun chatBubbleStyleOf(role: ChatBubbleRole): ChatBubbleStyle = when (rol
 /** 聊天气泡底色（按所选聊天气泡样式返回）：用户与助手两侧可各自独立配置，并应用各自气泡透明度。 */
 @Composable
 internal fun chatBubbleColor(role: ChatBubbleRole): Color {
-    val base = chatBubbleColorFor(chatBubbleStyleOf(role))
+    val base = pluginBubbleColor(role) ?: chatBubbleColorFor(chatBubbleStyleOf(role))
     val opacity = when (role) {
         ChatBubbleRole.USER -> LocalUserBubbleOpacity.current
         ChatBubbleRole.ASSISTANT -> LocalAssistantBubbleOpacity.current
     }
     return base.copy(alpha = opacity / 100f)
 }
+
+/**
+ * 插件对气泡底色的覆盖：仅作用用户气泡（助手侧不受插件 bubbleUserColor 影响），
+ * 无插件声明或声明颜色无法识别时返回 null，回退按气泡样式推导的默认色。
+ */
+@Composable
+private fun pluginBubbleColor(role: ChatBubbleRole): Color? =
+    if (role == ChatBubbleRole.USER) LocalPluginUiStyle.current?.userBubbleColor else null
 
 /** 聊天气泡底色：按具体样式取值，供设置页预览复用同一推导。 */
 @Composable
@@ -134,7 +143,8 @@ internal fun chatBubbleColorFor(style: ChatBubbleStyle): Color = when (style) {
 /** 聊天气泡文字色（按所选聊天气泡样式返回）：用户与助手两侧可各自独立配置。 */
 @Composable
 internal fun chatBubbleTextColor(role: ChatBubbleRole): Color =
-    chatBubbleTextColorFor(chatBubbleStyleOf(role))
+    (if (role == ChatBubbleRole.USER) LocalPluginUiStyle.current?.userBubbleTextColor else null)
+        ?: chatBubbleTextColorFor(chatBubbleStyleOf(role))
 
 /** 聊天气泡文字色：按具体样式取值，供设置页预览复用同一推导。 */
 @Composable

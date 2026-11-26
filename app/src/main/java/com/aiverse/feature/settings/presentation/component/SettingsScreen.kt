@@ -222,7 +222,6 @@ internal enum class SettingsSection(@param:StringRes val titleRes: Int) {
     About(R.string.settings_about),
     Appearance(R.string.settings_appearance),
     AppearanceDensity(R.string.settings_appearance_density_title),
-    AppearanceCorner(R.string.settings_appearance_corner_title),
     AppearanceFont(R.string.settings_appearance_ui_font_title),
     Plugins(R.string.settings_plugins),
     Tts(R.string.settings_tts),
@@ -260,7 +259,6 @@ private fun SettingsSection.depth(): Int = when (this) {
     SettingsSection.PluginRepo,
     SettingsSection.SearchProvider,
     SettingsSection.AppearanceDensity,
-    SettingsSection.AppearanceCorner,
     SettingsSection.AppearanceFont -> 2
     SettingsSection.SearchProviderDetail -> 3
     SettingsSection.PhoneControl -> 2
@@ -356,19 +354,12 @@ fun SettingsScreen(
     val uiFontScale by viewModel.uiFontScale.collectAsStateWithLifecycle()
     val uiDensity by viewModel.uiDensity.collectAsStateWithLifecycle()
     val uiFontPath by viewModel.uiFontPath.collectAsStateWithLifecycle()
-    val cardCorner by viewModel.cardCorner.collectAsStateWithLifecycle()
-    val buttonCorner by viewModel.buttonCorner.collectAsStateWithLifecycle()
-    val fieldCorner by viewModel.fieldCorner.collectAsStateWithLifecycle()
-    val bubbleCorner by viewModel.bubbleCorner.collectAsStateWithLifecycle()
-    val imageCorner by viewModel.imageCorner.collectAsStateWithLifecycle()
+    val cornerStyleIndex by viewModel.cornerStyleIndex.collectAsStateWithLifecycle()
     val fileTreeDisplayPrefs by viewModel.fileTreeDisplayPrefs.collectAsStateWithLifecycle()
     val codeFontSizeSp by viewModel.codeFontSizeSp.collectAsStateWithLifecycle()
     val codeWrapEnabled by viewModel.codeWrapEnabled.collectAsStateWithLifecycle()
     val codeAutoFoldEnabled by viewModel.codeAutoFoldEnabled.collectAsStateWithLifecycle()
     val codeShowLineNumber by viewModel.codeShowLineNumber.collectAsStateWithLifecycle()
-    val userBubbleOpacity by viewModel.userBubbleOpacity.collectAsStateWithLifecycle()
-    val assistantBubbleOpacity by viewModel.assistantBubbleOpacity.collectAsStateWithLifecycle()
-    val chatPanelOpacity by viewModel.chatPanelOpacity.collectAsStateWithLifecycle()
     val inputBarPrefs by viewModel.inputBarPrefs.collectAsStateWithLifecycle()
     val defaultSkillInstallScope by viewModel.defaultSkillInstallScope.collectAsStateWithLifecycle()
     val languageTag by viewModel.languageTag.collectAsStateWithLifecycle()
@@ -678,7 +669,6 @@ fun SettingsScreen(
         SettingsSection.SearchProviderDetail -> SettingsSection.SearchProvider
         SettingsSection.PhoneControl -> if (expanded) null else SettingsSection.Menu
         SettingsSection.AppearanceDensity -> SettingsSection.Appearance
-        SettingsSection.AppearanceCorner -> SettingsSection.Appearance
         SettingsSection.AppearanceFont -> SettingsSection.Appearance
         SettingsSection.PhoneControlAccessibilityGrant -> phoneControlGrantReturn
         SettingsSection.PhoneControlUnlock -> SettingsSection.PhoneControl
@@ -1442,9 +1432,7 @@ fun SettingsScreen(
                     codeWrapEnabled = codeWrapEnabled,
                     codeAutoFoldEnabled = codeAutoFoldEnabled,
                     codeShowLineNumber = codeShowLineNumber,
-                    userBubbleOpacity = userBubbleOpacity,
-                    assistantBubbleOpacity = assistantBubbleOpacity,
-                    chatPanelOpacity = chatPanelOpacity,
+                    cornerStyleIndex = cornerStyleIndex,
                     onSetFileNameDisplay = { viewModel.setFileNameDisplay(it) },
                     onSetShowHiddenFiles = { viewModel.setShowHiddenFiles(it) },
                     onSetFileIndentDensity = { viewModel.setFileIndentDensity(it) },
@@ -1458,15 +1446,12 @@ fun SettingsScreen(
                     onSetUiFontScale = { viewModel.setUiFontScale(it) },
                     onSetUiDensity = { viewModel.setUiDensity(it) },
                     onOpenDensity = { section = SettingsSection.AppearanceDensity },
-                    onOpenCorner = { section = SettingsSection.AppearanceCorner },
+                    onSetCornerStyle = { viewModel.setCornerStyle(it) },
                     onOpenUiFont = { section = SettingsSection.AppearanceFont },
                     onSetCodeFontSizeSp = { viewModel.setCodeFontSizeSp(it) },
                     onSetCodeWrapEnabled = { viewModel.setCodeWrapEnabled(it) },
                     onSetCodeAutoFoldEnabled = { viewModel.setCodeAutoFoldEnabled(it) },
                     onSetCodeShowLineNumber = { viewModel.setCodeShowLineNumber(it) },
-                    onSetUserBubbleOpacity = { viewModel.setUserBubbleOpacity(it) },
-                    onSetAssistantBubbleOpacity = { viewModel.setAssistantBubbleOpacity(it) },
-                    onSetChatPanelOpacity = { viewModel.setChatPanelOpacity(it) },
                     onRestoreDefaults = { viewModel.restoreAppearanceDefaults() },
                     onExportRequest = { exportRequest++ },
                     exportedThemeJson = exportedThemeJson,
@@ -1486,18 +1471,6 @@ fun SettingsScreen(
                 SettingsSection.AppearanceDensity -> DensitySettingsSection(
                     uiDensity = uiDensity,
                     onSetUiDensity = { viewModel.setUiDensity(it) }
-                )
-                SettingsSection.AppearanceCorner -> CornerRadiusSettingsSection(
-                    cardCorner = cardCorner,
-                    buttonCorner = buttonCorner,
-                    fieldCorner = fieldCorner,
-                    bubbleCorner = bubbleCorner,
-                    imageCorner = imageCorner,
-                    onSetCardCorner = { viewModel.setCardCorner(it) },
-                    onSetButtonCorner = { viewModel.setButtonCorner(it) },
-                    onSetFieldCorner = { viewModel.setFieldCorner(it) },
-                    onSetBubbleCorner = { viewModel.setBubbleCorner(it) },
-                    onSetImageCorner = { viewModel.setImageCorner(it) }
                 )
                 SettingsSection.AppearanceFont -> UiFontSettingsSection(
                     currentPath = uiFontPath,

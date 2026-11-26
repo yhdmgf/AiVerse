@@ -12,7 +12,7 @@ Code and identifiers in this document are in English and explanations are in Eng
 
 1.  [Package structure](#package-structure)
 2.  [plugin.json all fields](#pluginjson-all-fields)
-3.  [The thirteen contributes types](#the-thirteen-contributes-types)
+3.  [The fourteen contributes types](#the-fourteen-contributes-types)
 4.  [runtime JSON-RPC protocol](#runtime-jsonrpc-protocol)
 5.  [Page bridge](#page-bridge)
 6.  [Packaging, installing & debugging](#packaging-installing--debugging)
@@ -328,9 +328,9 @@ The default launch command is `node ` or `python3 `. You must declare `runtime` 
 
 \---
 
-## The Thirteen contributes Types
+## The Fourteen contributes Types
 
-`contributes` is an object whose usable keys are exactly the 13 below. Any other key causes a rejection with `UNSUPPORTED_CONTRIBUTION`; each type allows at most 64 entries (`uiEntries` has an additional per-slot cap), and a completely empty `contributes` is also invalid.
+`contributes` is an object whose usable keys are exactly the 14 below. Any other key causes a rejection with `UNSUPPORTED_CONTRIBUTION`; each array type allows at most 64 entries (`uiEntries` has an additional per-slot cap), and a completely empty `contributes` is also invalid.
 
 Key
 
@@ -409,6 +409,12 @@ Declares receiving backup & restore events
 Object
 
 Declares calling the user's configured AI providers
+
+`styleTokens`
+
+Object
+
+Changes the purely decorative look of host components (style tokens)
 
 `configPage`
 
@@ -1127,6 +1133,61 @@ json
 ```
 
 It can also be written in `contributes.configPage`. It must be an in-package `.html` / `.htm` file, max 512 KiB. The config page appears only in the plugin details under "Settings → Plugins" and is never mixed into the main settings menu. Config pages are for entering API keys, toggles and options, and are loaded only when the plugin is enabled and you switch to the config tab for the first time; while you stay on the native management tab, page scripts aren't executed early. Disabling, uninstalling or replacing the install invalidates the old page bridge and cancels that bridge's in-flight tasks, file subscriptions and model streams; after re-enabling, the page must be reopened — the old bridge doesn't restore its authorization.
+
+### styleTokens
+
+`styleTokens` lets a plugin restyle the **purely decorative look** of host components (style tokens): the corner radius, transparency, background and text colors of chat bubbles, the input box, top bar, drawer, cards, buttons and icons. It only changes how things look — it never alters functionality, layout or content, and it cannot read or modify the user's data.
+
+```json
+{
+  "styleTokens": {
+    "bubbleRadius": 22,
+    "bubbleUserColor": "cardSurface",
+    "userBubbleOpacity": 85,
+    "chatInputRadius": 28
+  }
+}
+```
+
+All fields are optional and take effect per field; declare only the ones you want to change and the rest keep the user's current settings. For each field, only the **first enabled plugin that declares it** wins; later plugins' declarations for the same field have no effect.
+
+The priority is **plugin > user setting > default**: once a plugin declares a field, the plugin's value is used; when no plugin declares it, it falls back to the user's "Appearance" settings, and if that isn't set either, to the built-in default. Plugins are therefore best suited to full theme makeovers, while the user keeps the final say — disabling or uninstalling the plugin restores the previous look.
+
+**Fields and value ranges** (out-of-range or invalid values invalidate the whole manifest and the install is rejected):
+
+| Field | Type | Range | Controls |
+| --- | --- | --- | --- |
+| `chatInputRadius` | Corner radius | 0–48 dp | Chat input box corner radius |
+| `cardRadius` | Corner radius | 0–48 dp | Card corner radius |
+| `buttonRadius` | Corner radius | 0–48 dp | Button corner radius |
+| `fieldRadius` | Corner radius | 0–48 dp | Text field corner radius |
+| `bubbleRadius` | Corner radius | 0–48 dp | Chat bubble corner radius |
+| `imageRadius` | Corner radius | 0–48 dp | Image corner radius |
+| `chatInputMinHeight` | Size | 0–160 dp | Chat input box minimum height |
+| `chatInputShadow` | Shadow | 0–40 dp | Chat input box shadow strength |
+| `userBubbleOpacity` | Opacity | 10–100 (%) | User bubble opacity |
+| `assistantBubbleOpacity` | Opacity | 10–100 (%) | AI reply bubble opacity |
+| `chatPanelOpacity` | Opacity | 10–100 (%) | Chat panel (top bar, input box, etc.) opacity |
+| `bubbleUserColor` | Color | Semantic token name / hex | User bubble background |
+| `bubbleUserTextColor` | Color | Semantic token name / hex | User bubble text color |
+| `topBarColor` | Color | Semantic token name / hex | Chat top bar background |
+| `topBarTextColor` | Color | Semantic token name / hex | Chat top bar title color |
+| `drawerColor` | Color | Semantic token name / hex | Drawer background |
+| `drawerTextColor` | Color | Semantic token name / hex | Drawer item text color |
+| `iconColor` | Color | Semantic token name / hex | Icon color |
+
+Corner radius, size and shadow fields take integers (dp); opacity takes an integer percentage from 10 to 100; a wrong type or an out-of-range value causes the install to be rejected.
+
+Color fields accept two forms:
+
+- **Semantic token names** (recommended): these automatically follow the app's light/dark theme and color scheme and change in sync when the theme switches. The code accepts exactly these 16 semantic color names: `primary`, `onPrimary`, `secondary`, `tertiary`, `surface`, `surfaceVariant`, `background`, `onSurface`, `onSurfaceVariant`, `outline`, `error`, `success`, `warning`, `info`, `cardSurface`, `pageBackground`;
+- **Hex colors**: `#RRGGBB`, or `#AARRGGBB` with an alpha channel.
+
+An invalid form (a typo, an out-of-range value, a token name not listed above, or a non-existent token name) invalidates the whole manifest and the install is rejected.
+
+::: tip Purely declarative contribution
+`styleTokens` is a declarative contribution and **does not require a `runtime`**. It takes effect once the plugin is installed and enabled; disabling or uninstalling the plugin immediately restores the user's previous appearance.
+:::
 
 \---
 
