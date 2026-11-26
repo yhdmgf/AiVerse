@@ -13,6 +13,9 @@ on:
 permissions:
   contents: write
   pull-requests: read
+  # 删除 PR 检查（pr-check.yml）的 workflow run 需要此权限；
+  # GITHUB_TOKEN 仅能删 pull_request / push 事件的 run，正好覆盖要清的 pr-check 日志。
+  actions: write
 
 jobs:
   cleanup:
@@ -27,10 +30,36 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_MERGED: ${{ github.event.pull_request.merged }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
         run: |
-          # ── PR 触发时：PR 已关闭（含合并），直接删该 PR 的源分支 ──
+          # 删除某个分支关联的全部 pr-check.yml 检查日志。
+          # 只删 path == .github/workflows/pr-check.yml 的 run，不碰发版/同步/清理等其它 workflow；
+          # cleanup 自身也不是 pr-check.yml，天然不会被误删。
+          delete_pr_checks() {
+            local branch="$1"
+            local ids
+            ids=$(gh api "/repos/$REPO/actions/runs?head_branch=$branch&per_page=100" \
+              --jq '.workflow_runs[] | select(.path == ".github/workflows/pr-check.yml") | .id')
+            if [ -z "$ids" ]; then
+              echo "  无 pr-check 日志需清理: $branch"
+              return
+            fi
+            for id in $ids; do
+              gh api -X DELETE "/repos/$REPO/actions/runs/$id" >/dev/null 2>&1 \
+                && echo "  已删除 pr-check 日志: run $id ($branch)" \
+                || echo "  删除失败（可能已不存在或无权限）: run $id ($branch)"
+            done
+          }
+
+          # ── PR 触发时：PR 已关闭（含合并）──
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "PR 已关闭，删除源分支: $PR_HEAD"
+
+            # 1) 删除该 PR 产生的全部 pr-check.yml 检查日志（构建冒烟 + 单测 + 各项对账）
+            echo "清理 PR 的 pr-check 检查日志（分支: $PR_HEAD）..."
+            delete_pr_checks "$PR_HEAD"
+
+            # 2) 删除该 PR 的源分支
+            echo "删除源分支: $PR_HEAD"
             git push origin --delete "$PR_HEAD" 2>/dev/null \
               && echo "已删除: $PR_HEAD" \
               || echo "分支不存在或已删除: $PR_HEAD"
@@ -58,7 +87,9 @@ jobs:
               --json number --jq '.[0].number' 2>/dev/null)
 
             if [ -n "$CLOSED_PR" ] && [ "$CLOSED_PR" != "null" ]; then
-              echo "删除（PR #$CLOSED_PR 已关闭）: $branch"
+              echo "处理（PR #$CLOSED_PR 已关闭）: $branch"
+              # 先清该分支的 pr-check 检查日志，再删分支
+              delete_pr_checks "$branch"
               git push origin --delete "$branch" 2>/dev/null \
                 && echo "已删除: $branch" \
                 || echo "删除失败（可能已不存在）: $branch"
