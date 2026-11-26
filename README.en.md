@@ -7,7 +7,7 @@
     <a href="README.md">中文</a> · <a href="README.en.md">English</a>
   </p>
   <p align="center">
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" height="20" /></a>&nbsp;<img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" height="20" />&nbsp;<a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" height="20" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License GPL-3.0" height="20" /></a>&nbsp;<img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Android Platform" height="20" />&nbsp;<a href="https://github.com/yhdmgf/AiVerse/releases"><img src="https://img.shields.io/github/v/release/yhdmgf/AiVerse?display_name=tag&include_prereleases" alt="Latest Release" height="20" /></a>&nbsp;<img src="https://camo.githubusercontent.com/4ca80c88a74fa4feca87209de443194ed0cc03f310eb2c1d2d145943ada3aeeb/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4b6f746c696e2d3746353246463f7374796c653d666c61742d737175617265266c6f676f3d6b6f746c696e266c6f676f436f6c6f723d7768697465" alt="Kotlin" height="20" />
   </p>
 </p>
 
