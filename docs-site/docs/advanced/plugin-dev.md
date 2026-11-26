@@ -126,8 +126,8 @@ demo-kit/
 
 ### id 与 publisher
 
-- `id` 形如 `community.demo-kit`：两段均以小写字母开头，仅含小写字母、数字和连字符，每段最多 32 个字符（正则 `^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$`）；
-- `publisher` 必须等于 `id` 的第一段；
+- `id` 形如 `community.demo-kit`：两段均以一个字母（Unicode 字母，支持中文等）开头，后续仅含字母、数字、下划线和连字符，每段最多 32 个字符（正则 `^[\p{L}][\p{L}\p{N}_-]{0,31}\.[\p{L}][\p{L}\p{N}_-]{0,31}$`，因此发布者名与插件名都可以用中文）；
+- `publisher` 必须等于 `id` 的第一段；注意 `publisher` 字段本身仍限小写 ASCII（正则 `^[a-z][a-z0-9-]{0,31}$`），与上面已放宽为 Unicode 的 `id` 不同——因此现阶段发布者名实际仍需用小写 ASCII，中文发布者要等 `publisher` 也放开后才能用；
 - `id` 同时用作安装目录名，安装后不应靠重命名区分版本；
 - 局部 ID（技能、工具、页面、hook 等的 `id`）由字母开头，仅含字母、数字、下划线、连字符，最多 64 个字符，同一类型内不可重复。
 
@@ -579,6 +579,7 @@ definePlugin({ handlers: {
 | --- | --- |
 | `host.mcp.status` | 查询 MCP server 连接状态 |
 | `host.http.request` | 由宿主代理的 HTTP 请求；不注入宿主凭据、不跟随重定向 |
+| `host.webview.login` | 主进程能力，应用内打开目标站点登录页并取该域 Cookie（含 HttpOnly）。兼容两套参数：Nox 风格（`url` + `cookieUrls`）与 AiVerse 风格（`loginUrl` + `targetDomain` / `cookieName` / `timeoutMs`）；返回 `{ url, finalUrl, cookies }`（进程侧比页面桥多一个 `finalUrl`）。需用户确认且校验域名白名单，Cookie 用后即清、不落盘；用户取消时抛 `LOGIN_CANCELED` |
 
 进程侧还可用 `host.fs.*`（`read` / `write` / `list` / `delete` / `stat` / `mkdir` / `rename` / `copy` / `append` / `readBinary` / `writeBinary`）、`host.bash`、`host.notify`、`host.tip`、`host.shizuku.exec`、`host.overlay.*`、`host.terminal.*`、`host.secrets.*` 等方法，与页面桥能力一一对应（见下节）。
 
@@ -616,7 +617,7 @@ await window.aicode.ui.openUrl('https://example.com');
 | `aicode.tip(options)` | 在对话内显示可关闭提示条（可带点击回调） |
 | `aicode.app.info()` / `aicode.app.isForeground()` | 应用信息 / 前后台状态 |
 | `aicode.ui.close()` / `openUrl(url)` / `setOverlay(visible, rect)` / `onBack(handler)` | 关闭页面、打开链接、页面内全屏弹层、注册返回处理 |
-| `aicode.webview.login(options)` | 应用内打开目标站点登录页并取该域 Cookie（含 HttpOnly），返回 `{ url, cookies }`；需用户确认且校验域名白名单，Cookie 用后即清、不落盘 |
+| `aicode.webview.login(options)` | 应用内打开目标站点登录页并取该域 Cookie（含 HttpOnly），返回 `{ url, cookies }`；需用户确认且校验域名白名单，Cookie 用后即清、不落盘。进程侧对应 `host.webview.login`，返回值多一个 `finalUrl` |
 | `aicode.fs.read/write/list/delete/stat/mkdir/rename/copy/append/readBinary/writeBinary/watch` | 文件操作。路径为执行环境的真实绝对路径；`~` 展开到 home；插件私有数据用 `data://` 虚拟根。`fs.read` 支持可选 `offset` / `limit`（字节）分段读取大文件，返回额外字段 `returned`（本次返回字节数）与 `nextOffset`（下一窗口起点，读到尾等于 `size`）；`size` 始终是文件总字节数，不受 `offset` / `limit` 影响 |
 | `aicode.chat.listSessions/createSession/listMessages/sendMessage/setDraft/stop/openSession/getSession/renameSession/pinSession/deleteSession/getRunState/waitForRun/listApprovals/resolveToolApproval/resolveQuestion/resolvePlanApproval` | 会话与消息；读取范围限定当前工作区 |
 | `aicode.model.listProviders/listModels/create/close/start/read/cancel/stream` | 模型句柄（需 `modelAccess`） |
@@ -739,6 +740,8 @@ demo-kit-1.0.0.zip
 5. **进入商店**：客户端从 main 分支拉 `index.json` 列表，再从 `packages/` 下载对应 `{id}_{version}.zip` 安装。
 
 > 客户端只从 main 分支的 `packages/` 下载，仓库或目录不存在时会直接提示未找到（HTTP 404）。更新插件时递增 `version` 并重新走一遍发布流程即可。
+>
+> 除上面这条主路径外，`index.json` 条目还支持 `package_url` **直链托管**：服务端把插件包放在任意可直下的 URL 并写进条目，客户端命中该字段就直接下载，不再依赖作者仓库的 `packages/` 目录与命名约定。索引本身改为**直连拉取**，不再套镜像；镜像加速仅用于插件包下载。
 
 ### 插件所有者校验
 
@@ -751,7 +754,7 @@ demo-kit-1.0.0.zip
 
 > 注意：作者名（uploader）和 plugin.json 里的 `author` 字段是两个概念：
 > - `uploader`：上传者标识，用于所有者校验，只在后台审核队列显示；
-> - `author`：插件作者，在商店和客户端显示，必须符合正则 `^[a-z][a-z0-9-]*$` 且与 `id` 第一段一致。
+> - `author`：插件作者，在商店和客户端显示，记录在 `index.json` 条目里，正则已放宽为 Unicode（`^[\p{L}][\p{L}\p{N}_-]{0,31}$`），可以是中文；仍须与 `id` 第一段一致。
 >
 > 两者可以不同（例如：张三开发插件，李四帮忙上传，则 `author=张三`、`uploader=李四`）。
 
@@ -766,11 +769,13 @@ demo-kit-1.0.0.zip
 | `schema_version` | 必须为 `1` |
 | 插件条目数 | 不超过上限 `MAX_PLUGINS` |
 | `id` | 符合插件 ID 规则，且全表不得重复 |
-| `author` | 正则 `^[a-z][a-z0-9-]*$`，且必须与 `id` 第一段（发布者）一致 |
+| `author` | 正则 `^[\p{L}][\p{L}\p{N}_-]{0,31}$`（放宽为 Unicode，允许中文作者），且必须与 `id` 第一段（发布者）一致 |
 | `repository` | 必须是 `https` 且 host 为 `github.com` |
 | `version` | 禁止 `v` 前缀，须为合法语义化版本 |
 | `min_app_version` | 须为合法语义化版本 |
 | `logo` / `homepage` | 必须是 `https` |
+| `icon` | 可选，清单内置图标名（如 `zap` / `users`）；没有图片 `logo` 时客户端用它选一个内置图标 |
+| `package_url` | 可选，插件包的直链地址；命中时客户端直接按该地址下载，跳过对作者仓库 `packages/` 的 Release 查找 |
 | `tags` | 取值只能来自 `provider` / `tool` / `skill` / `agent` / `mcp` / `ui` / `integration` / `other`，最多 4 个且不得重复 |
 
 > 「官方」标记不是 `tags` 里的一个值，而是按索引里 `author` 是否在官方白名单判定。

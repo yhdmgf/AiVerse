@@ -47,13 +47,19 @@ Supported operations:
 -   **Key Event** (`key_event`): Supports `BACK` / `HOME` / `RECENT` / `NOTIFICATIONS` / `QUICK_SETTINGS`.
 -   **List Installed Apps** (`list_apps`): Returns the apps installed on the device; it can list third-party apps only.
 
-`PhoneControl` manipulates the phone directly, which is an **extremely high-risk** operation. Therefore:
+`PhoneControl` manipulates the phone directly, which is an **extremely high-risk** operation. Its safety policy (all adjustable on the "Settings → Phone Control" page):
 
--   **Every execution requires user confirmation**: even if you enable "Settings → Tool Authorization → Disable Safety Interception" or "Allow All Tools", every call still pops up a confirmation, and it **cannot be saved as always allowed**.
--   **Confirmation uses a floating window**: the confirmation dialog pops up as a system floating window, so you see "Deny / Allow" whether the app is in the foreground or you are on another page.
--   **Floating window permission is required**: the floating confirmation depends on the "Display Over Other Apps" permission. Without it, the tool is rejected outright and prompts you to enable it (System Settings → Apps → AiVerse → Display Over Other Apps).
--   **Actions such as sending, payment, and deletion ask you first**; the AI does not fill in passwords or verification codes on your behalf, does not pay for you, and does not change system settings or permissions.
+-   **Confirmation mode** (default "Ask every time"): controls when a confirmation pops up, with three options —
+    -   **Ask every time** (default): confirms before entering a new app, sending, deleting, or paying.
+    -   **Task-level skip**: asks only once per task; later actions within the same task no longer ask again.
+    -   **Always skip**: never asks and acts directly; this is the riskiest option, so enable it with care.
+-   **Deny list takes priority**: when the action targets an app on the "deny" list (banking/payment/brokerage apps are built in by default), it is denied regardless of the confirmation mode — this is a safety floor that cannot be bypassed.
+-   **Confirmation uses a floating window**: when confirmation is needed, the dialog pops up as a system floating window, so you see "Deny / Allow" whether the app is in the foreground or you are on another page. Modes that need confirmation depend on the "Display Over Other Apps" permission; without it, the tool is rejected outright and prompts you to enable it (System Settings → Apps → AiVerse → Display Over Other Apps).
+-   **App rules**: you can set a rule per app, with priority "deny > confirm each step > normal". Adding banking/payment apps to "deny" makes the AI leave them completely untouched; "confirm each step" makes every action inside that app ask you.
+-   **Unlocks** (all off by default): let the AI do what is normally reserved for you, with three switches — **system pages** (taps in system settings, permission pages, the installer, security center, and the notification shade), **secret fields** (filling in password, verification code, and payment code inputs), and **this app's own UI** (reading and operating AiVerse's own interface). When enabled, the AI is no longer restricted accordingly; enable them sparingly as needed.
+-   **Actions such as sending, payment, and deletion ask you first** (in modes that need confirmation); the AI does not fill in passwords or verification codes on your behalf, does not pay for you, and does not change system settings or permissions.
 -   It is **blocked in PLAN mode**; **deny rules** in project permission rules still apply.
+-   **Recent actions**: the page keeps the last several phone-control actions so you can review what the AI did.
 
 ### Dynamic Island (Floating Bar)
 

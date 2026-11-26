@@ -236,8 +236,8 @@ Only the keys above may appear at the top level; any other key causes the instal
 
 ### id & publisher
 
--   `id` looks like `community.demo-kit`: both segments start with a lowercase letter and contain only lowercase letters, digits and hyphens, max 32 characters each (regex `^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$`);
--   `publisher` must equal the first segment of `id`;
+-   `id` looks like `community.demo-kit`: both segments start with one letter (a Unicode letter, so Chinese and other scripts are allowed), followed only by letters, digits, underscores and hyphens, max 32 characters each (regex `^[\p{L}][\p{L}\p{N}_-]{0,31}\.[\p{L}][\p{L}\p{N}_-]{0,31}$`, so both the publisher name and the plugin name may be non-ASCII);
+-   `publisher` must equal the first segment of `id`; note that the `publisher` field itself is still limited to lowercase ASCII (regex `^[a-z][a-z0-9-]{0,31}$`), unlike the `id` which has been widened to Unicode — so for now the publisher name still has to be lowercase ASCII in practice, and a non-ASCII publisher will only work once `publisher` is widened too;
 -   `id` is also used as the install directory name, so versions shouldn't be distinguished by renaming after install;
 -   Local IDs (the `id` of skills, tools, pages, hooks, etc.) start with a letter and contain only letters, digits, underscores and hyphens, max 64 characters, and must be unique within their type.
 
@@ -1304,6 +1304,10 @@ Query MCP server connection status
 
 An HTTP request proxied by the host; doesn't inject host credentials and doesn't follow redirects
 
+`host.webview.login`
+
+Main-process capability: open the target site's sign-in page in-app and retrieve that domain's cookies (including HttpOnly). Accepts two parameter styles — Nox style (`url` + `cookieUrls`) and AiVerse style (`loginUrl` + `targetDomain` / `cookieName` / `timeoutMs`); returns `{ url, finalUrl, cookies }` (the process side has one more field, `finalUrl`, than the page bridge). Requires user confirmation and a domain allow-list; cookies are cleared after use and never stored; a user cancellation raises `LOGIN_CANCELED`
+
 The process side can also use methods like `host.fs.*` (`read` / `write` / `list` / `delete` / `stat` / `mkdir` / `rename` / `copy` / `append` / `readBinary` / `writeBinary`), `host.bash`, `host.notify`, `host.tip`, `host.shizuku.exec`, `host.overlay.*`, `host.terminal.*`, `host.secrets.*`, which map one-to-one to the page bridge capabilities (see the next section).
 
 \---
@@ -1363,7 +1367,7 @@ Close the page, open a link, show a full-screen in-page overlay, register a back
 
 `aicode.webview.login(options)`
 
-Open the target site's sign-in page in-app and retrieve that domain's cookies (including HttpOnly); returns `{ url, cookies }`. Requires user confirmation and a domain allow-list; cookies are cleared after use and never stored
+Open the target site's sign-in page in-app and retrieve that domain's cookies (including HttpOnly); returns `{ url, cookies }`. Requires user confirmation and a domain allow-list; cookies are cleared after use and never stored. The process-side counterpart is `host.webview.login`, whose result has an extra `finalUrl` field
 
 `aicode.fs.read/write/list/delete/stat/mkdir/rename/copy/append/readBinary/writeBinary/watch`
 
@@ -1609,6 +1613,8 @@ Plugins are distributed via a plugin index (`index.json`), with plugin packages 
 1.  **Enter the store**: the client pulls the `index.json` list from the `main` branch, then downloads the matching `{id}_{version}.zip` from `packages/` to install.
 
 \> The client only downloads from the `packages/` directory on the `main` branch, and reports "not found" (HTTP 404) straight away if the repository or directory is missing. To update a plugin, just bump `version` and go through the publish flow again.
+>
+> Besides this main path, an `index.json` entry also supports **direct-link hosting** via `package_url`: the backend puts the package at any directly downloadable URL and writes it into the entry, and the client downloads straight from it once the field is present, without relying on the author repository's `packages/` directory and naming convention. The index itself is now pulled over a **direct connection** and no longer goes through a mirror; mirror acceleration is only used for package downloads.
 
 ### Plugin-Owner Verification
 
@@ -1619,7 +1625,7 @@ To prevent plugin IDs from being impersonated, the store backend implements an *
 -   **Admin privilege**: when an admin logs into the backend to review, they aren't subject to the owner restriction and can update any plugin;
 -   **Owner transfer**: an admin can manually change a plugin's owner (transfer ownership) in the backend's "ID management" feature.
 
-\> Note that the author name (uploader) and the `author` field in plugin.json are two different concepts: > - `uploader`: the uploader identifier, used for owner verification, shown only in the backend review queue; > - `author`: the plugin author, shown in the store and the client, must match the regex `^[a-z][a-z0-9-]*$` and be consistent with the first segment of `id`. > > The two can differ (e.g. Alice develops the plugin and Bob helps upload, giving `author=Alice` and `uploader=Bob`).
+\> Note that the author name (uploader) and the `author` field in plugin.json are two different concepts: > - `uploader`: the uploader identifier, used for owner verification, shown only in the backend review queue; > - `author`: the plugin author, shown in the store and the client, recorded in the `index.json` entry; the regex has been widened to Unicode (`^[\p{L}][\p{L}\p{N}_-]{0,31}$`), so it can be non-ASCII, but it must still match the first segment of `id`. > > The two can differ (e.g. Alice develops the plugin and Bob helps upload, giving `author=Alice` and `uploader=Bob`).
 
 \> Note: the chain of upload → staging → manual review → writing to `packages/` and `index.json` runs on the plugin store's backend, not inside the app client; the client is only responsible for pulling `index.json` from `main` and downloading the packages in `packages/`.
 
@@ -1645,7 +1651,7 @@ Follows the plugin ID rules, and must not repeat across the table
 
 `author`
 
-Matches the regex `^[a-z][a-z0-9-]*$`, and must be consistent with the first segment of `id` (the publisher)
+Matches the regex `^[\p{L}][\p{L}\p{N}_-]{0,31}$` (widened to Unicode, non-ASCII authors allowed), and must be consistent with the first segment of `id` (the publisher)
 
 `repository`
 
@@ -1662,6 +1668,14 @@ Must be a valid semantic version
 `logo` / `homepage`
 
 Must be `https`
+
+`icon`
+
+Optional; a built-in icon name from the manifest (e.g. `zap` / `users`). When there is no image `logo`, the client uses it to pick a built-in icon
+
+`package_url`
+
+Optional; a direct link to the plugin package. When present, the client downloads straight from it and skips the Release lookup in the author repository's `packages/`
 
 `tags`
 

@@ -31,6 +31,7 @@ Entries marked with a version (e.g. "since 1.0.0") were introduced in that versi
 | Subagents | Spawn independent sessions to run tasks in parallel; create, edit, enable and disable in settings, with custom models and tool sets (since 1.0.0) |
 | Custom prompts | Override and customize AI system prompt fragments |
 | Memory & project rules | Cross-session long-term memory, plus AGENTS.md / CLAUDE.md project rules |
+| Plugins | Install third-party plugins to extend AI tools, skills, subagents, vendors and UI entries; includes a plugin store and in-app login (since 1.0.0) |
 
 ### Runtime
 
@@ -61,6 +62,7 @@ Entries marked with a version (e.g. "since 1.0.0") were introduced in that versi
 | Token stats | Usage, cost estimation, call details |
 | Storage | Per-category usage of chats, containers, workspaces, and cleanup of temporary data |
 | Backup & restore | Encrypted export/import of configuration and workspaces |
+| Session management | Manage sessions in workspace buckets with filtering, bulk move/delete and export → [docs](https://aivapp.cn/md/en/guide/sessions.md) |
 | About | Version info and update checks; separate User Agreement and Privacy Policy entries open in the system browser |
 | [User Agreement](https://aivapp.cn/md/en/terms.md) | Usage rules, AI and operational risks, third-party fees, and open-source rights |
 | [Privacy Policy](https://aivapp.cn/md/en/privacy.md) | Data storage, network transfers, logs, backups, and deletion |

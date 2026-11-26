@@ -77,3 +77,12 @@ The "Refine input" shortcut button hands what you have already written in the in
 -   **Assign a dedicated model**: the refinement request is temporarily switched to that dedicated model to send, then restored afterward, without affecting the model selected for the current session; it is a good fit for picking a cheap, fast model to do the polishing.
 
 When no usable model is configured, tapping "Refine input" prompts you to first add and configure a model under "AI Providers".
+
+## Compaction Model
+
+When the context approaches the threshold and triggers automatic compression, it uses the current chat model to send the summary request by default. Here you can assign a model dedicated to compression:
+
+-   **Follow the current chat model** (default): compression just uses the model selected for the current session.
+-   **Assign a dedicated model**: the compression round is temporarily switched to that dedicated model to send the summary request, then restored to the chat model afterward, without affecting the model selected for the current session; it is a good fit for picking a cheap or long-window model to do the compression.
+
+When the compression model's window is small it processes in chunks, which may increase waiting time and call cost; see [Context Usage and Compression](https://aivapp.cn/en/guide/chat.md).

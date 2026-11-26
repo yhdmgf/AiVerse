@@ -40,7 +40,8 @@
 | 默认与专用模型 | 新会话默认模型，以及识图、生图、标题总结的专用模型 → [文档](https://aivapp.cn/md/guide/default-models.md) |
 | MCP 服务器 | 接入外部工具，全局与项目两级配置 → [文档](https://aivapp.cn/md/guide/mcp.md) |
 | 技能 | 按需加载的专项能力扩展包 → [文档](https://aivapp.cn/md/guide/skills.md) |
-| 脚本插件 | 用 JavaScript 编写插件，向 AI 注册自定义工具，可访问网络、文件、剪贴板等能力 → [文档](https://aivapp.cn/md/guide/scripts.md) |
+| 插件 | 安装第三方插件给 AI 扩展工具、技能、子代理、供应商与界面入口，含插件商店与应用内登录 → [文档](https://aivapp.cn/md/guide/scripts.md) |
+| 会话管理 | 按工作区分桶管理会话，支持筛选、批量移动 / 删除与导出 → [文档](https://aivapp.cn/md/guide/sessions.md) |
 | 语音朗读 | 系统 TTS（离线免费）或在线 TTS 把 AI 回复读出来 → [文档](https://aivapp.cn/md/guide/tts.md) |
 | 子代理 | 派生独立会话并行执行任务，可在设置内新建、编辑与启停，支持自定义模型与工具集（1.0.0 起）→ [文档](https://aivapp.cn/md/guide/subagent.md) |
 | Shizuku 工具 | AI 的 `Shizuku` 工具：用 Shizuku 执行系统命令（1.0.0 起）→ [文档](https://aivapp.cn/md/guide/shizuku.md) |

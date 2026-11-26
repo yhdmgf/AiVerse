@@ -42,6 +42,8 @@ features:
     details: 可连接本地 stdio 与远程 HTTP 的 MCP 服务器动态扩展工具；支持全局与项目级技能和长期记忆，让 AI 跨会话复用经验。
   - title: Git 与工作区同步
     details: 内置状态、分支、提交、差异与标签管理；支持 Issue 与 PR 浏览、创建、合并、CI 状态与 AI 审查；支持 SFTP / FTP 同步，并自带 FTP 服务端方便电脑侧管理文件。
+  - title: 插件系统
+    details: 安装第三方插件为 AI 扩展工具、技能、子代理、供应商与界面入口，内置插件商店，支持应用内登录获取 Cookie，插件在容器内独立进程运行。
 ---
 
 ::: warning 重要说明

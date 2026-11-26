@@ -64,6 +64,10 @@ const siteData = {
               "link": "/guide/chat"
             },
             {
+              "text": "会话管理",
+              "link": "/guide/sessions"
+            },
+            {
               "text": "角色系统",
               "link": "/guide/roles"
             },
@@ -308,6 +312,10 @@ const siteData = {
             {
               "text": "Chat Interface Tour",
               "link": "/en/guide/chat"
+            },
+            {
+              "text": "Session Management",
+              "link": "/en/guide/sessions"
             },
             {
               "text": "Roles",
@@ -655,6 +663,10 @@ const siteData = {
                 {
                   "text": "Chat Interface Tour",
                   "link": "/en/guide/chat"
+                },
+                {
+                  "text": "Session Management",
+                  "link": "/en/guide/sessions"
                 },
                 {
                   "text": "Roles",
