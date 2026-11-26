@@ -2,6 +2,7 @@ package com.aiverse.core.ui.overlay
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -26,8 +27,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.aiverse.R
+import com.aiverse.feature.phonecontrol.domain.PhoneControlStatus
 import com.aiverse.feature.settings.data.repository.ToolSafetySettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -55,8 +58,18 @@ class OverlayBallService : Service() {
     @Inject
     lateinit var toolSafety: ToolSafetySettingsRepository
 
+    @Inject
+    lateinit var phoneControlStatus: PhoneControlStatus
+
     private var windowManager: WindowManager? = null
-    private var ballView: ImageView? = null
+    /** 悬浮球根容器：App 图标 + 状态徽标，触摸/拖动监听挂在该容器上。 */
+    private var ballView: FrameLayout? = null
+    /** 球本体图标（白色椭圆底 + App 图标），容器内居中、尺寸固定为球大小。 */
+    private var ballIconView: ImageView? = null
+    /** 右上角状态徽标：操控进行中/完成/失败用颜色圆点区分，空闲时隐藏。 */
+    private var badgeView: View? = null
+    /** 徽标进行中时的呼吸脉冲动画。 */
+    private var badgePulse: ObjectAnimator? = null
     private var ballParams: WindowManager.LayoutParams? = null
     private var panelView: View? = null
     private var ballSizeDp: Int = DEFAULT_SIZE_DP
@@ -105,6 +118,7 @@ class OverlayBallService : Service() {
         windowManager = wm
 
         val sizePx = dp(ballSizeDp)
+        // 球本体：白色椭圆底 + App 图标，尺寸保持原样（徽标叠加在容器内，不改变球大小与吸附计算）。
         val imageView = ImageView(this).apply {
             setImageDrawable(packageManager.getApplicationIcon(packageName))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -122,6 +136,31 @@ class OverlayBallService : Service() {
             setPadding(dp(8), dp(8), dp(8), dp(8))
             alpha = ballAlphaPercent / 100f
         }
+
+        // 状态徽标：右上角小圆点，颜色随手机操控状态变化（空闲时隐藏）。
+        val badgeSize = dp(BADGE_SIZE_DP)
+        val badge = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xFF34C759.toInt())
+                setStroke(dp(1), 0xFFFFFFFF.toInt())
+            }
+            contentDescription = getString(R.string.overlay_ball_tap_to_review)
+            visibility = View.GONE
+        }
+        val badgeParams = FrameLayout.LayoutParams(badgeSize, badgeSize).apply {
+            gravity = Gravity.TOP or Gravity.END
+            setMargins(0, dp(2), dp(2), 0)
+        }
+
+        // 根容器：叠加图标与徽标，触摸/拖动监听挂在此处，球本体尺寸不变。
+        val container = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        }
+        container.addView(imageView, FrameLayout.LayoutParams(sizePx, sizePx))
+        container.addView(badge, badgeParams)
 
         val params = WindowManager.LayoutParams(
             sizePx,
@@ -147,7 +186,7 @@ class OverlayBallService : Service() {
             longPressTriggered = true
             showPanel()
         }
-        imageView.setOnTouchListener { _, event ->
+        container.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     snapAnimator?.cancel()
@@ -158,7 +197,7 @@ class OverlayBallService : Service() {
                     moved = false
                     longPressTriggered = false
                     // 长按计时：按住未移动达到阈值即弹出控制面板
-                    imageView.postDelayed(longPressRunnable, LONG_PRESS_TIMEOUT_MS)
+                    container.postDelayed(longPressRunnable, LONG_PRESS_TIMEOUT_MS)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -167,18 +206,23 @@ class OverlayBallService : Service() {
                     if (abs(dx) > TOUCH_SLOP || abs(dy) > TOUCH_SLOP) {
                         moved = true
                         // 拖动后取消长按
-                        imageView.removeCallbacks(longPressRunnable)
+                        container.removeCallbacks(longPressRunnable)
                     }
                     params.x = initialX + dx
                     params.y = initialY + dy
-                    runCatching { wm.updateViewLayout(imageView, params) }
+                    runCatching { wm.updateViewLayout(container, params) }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    imageView.removeCallbacks(longPressRunnable)
+                    container.removeCallbacks(longPressRunnable)
                     if (!moved && !longPressTriggered) {
-                        // 单击：快速切换当前 App（球保留，可继续使用）
-                        launchMainActivity()
+                        if (phoneControlStatus.state.value.active) {
+                            // 操控中：禁止单击切回应用，避免把 AiVerse 切到前台导致读屏读到自身界面（死循环根因）。
+                            showRunningToast()
+                        } else {
+                            // 单击：快速切换当前 App（球保留，可继续使用）
+                            launchMainActivity()
+                        }
                     } else if (moved) {
                         // 拖动结束：松手自动平滑吸附到最近的左/右边缘（固定行为）
                         snapToNearestEdge()
@@ -186,7 +230,7 @@ class OverlayBallService : Service() {
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
-                    imageView.removeCallbacks(longPressRunnable)
+                    container.removeCallbacks(longPressRunnable)
                     // 手势被打断但球已拖离原位：同样吸附到最近边缘，避免停在屏幕中间
                     if (moved) {
                         snapToNearestEdge()
@@ -197,14 +241,88 @@ class OverlayBallService : Service() {
             }
         }
 
-        runCatching { wm.addView(imageView, params) }
+        runCatching { wm.addView(container, params) }
             .onSuccess {
-                ballView = imageView
+                ballView = container
+                ballIconView = imageView
+                badgeView = badge
                 ballParams = params
+                observePhoneControlStatus()
             }
             .onFailure {
                 stopSelf()
             }
+    }
+
+    /** 订阅手机操控状态，轻量刷新徽标（服务长期存在时仅状态变化时回调）。 */
+    private fun observePhoneControlStatus() {
+        scope.launch {
+            phoneControlStatus.state.collect { state -> updateBallStatus(state) }
+        }
+    }
+
+    /** 据手机操控状态渲染徽标：进行中蓝点脉冲、失败红、完成绿、空闲隐藏。 */
+    private fun updateBallStatus(state: PhoneControlStatus.State) {
+        val badge = badgeView ?: return
+        val color = when {
+            state.active -> BADGE_COLOR_ACTIVE
+            state.finished && state.success == false -> BADGE_COLOR_FAILED
+            state.finished -> BADGE_COLOR_DONE
+            else -> null
+        }
+        if (color == null) {
+            stopBadgePulse()
+            badge.visibility = View.GONE
+            return
+        }
+        badge.visibility = View.VISIBLE
+        badge.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setStroke(dp(1), 0xFFFFFFFF.toInt())
+        }
+        badge.contentDescription = when {
+            state.active -> if (state.currentAction.isNullOrBlank()) {
+                getString(R.string.overlay_ball_status_running)
+            } else {
+                getString(R.string.overlay_ball_status_running_with_action, state.currentAction)
+            }
+            state.finished && state.success == false -> getString(R.string.overlay_ball_status_failed)
+            else -> getString(R.string.overlay_ball_status_done)
+        }
+        if (state.active) startBadgePulse() else stopBadgePulse()
+    }
+
+    /** 进行中：徽标透明度呼吸脉冲。 */
+    private fun startBadgePulse() {
+        if (badgePulse?.isRunning == true) return
+        val badge = badgeView ?: return
+        badgePulse = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.35f).apply {
+            duration = BADGE_PULSE_DURATION_MS
+            repeatMode = ObjectAnimator.REVERSE
+            repeatCount = ObjectAnimator.INFINITE
+            start()
+        }
+    }
+
+    private fun stopBadgePulse() {
+        badgePulse?.cancel()
+        badgePulse = null
+        badgeView?.alpha = 1f
+    }
+
+    /** 操控中单击悬浮球：提示当前状态，不切回应用（打破读屏死循环）。 */
+    private fun showRunningToast() {
+        val state = phoneControlStatus.state.value
+        val action = state.currentAction
+        val message = if (action.isNullOrBlank()) {
+            getString(R.string.overlay_ball_status_running)
+        } else {
+            getString(R.string.overlay_ball_status_running_with_action, action)
+        }
+        runCatching {
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** 拖动结束：计算最近的左/右边缘目标 x，并平滑动画吸附过去（y 保持松手位置不变）。 */
@@ -247,8 +365,11 @@ class OverlayBallService : Service() {
     private fun hideBall() {
         snapAnimator?.cancel()
         snapAnimator = null
+        stopBadgePulse()
         ballView?.let { view -> runCatching { windowManager?.removeView(view) } }
         ballView = null
+        ballIconView = null
+        badgeView = null
         ballParams = null
     }
 
@@ -337,7 +458,8 @@ class OverlayBallService : Service() {
                 val newAlpha = ToolSafetySettingsRepository.MIN_ALPHA_PERCENT + progress
                 ballAlphaPercent = newAlpha
                 scope.launch { toolSafety.setOverlayBallAlpha(newAlpha) }
-                ballView?.alpha = newAlpha / 100f
+                // 透明度只作用于球本体图标，状态徽标保持清晰可见。
+                ballIconView?.alpha = newAlpha / 100f
                 getString(R.string.overlay_ball_alpha_value, newAlpha)
             }
         )
@@ -488,8 +610,11 @@ class OverlayBallService : Service() {
         snapAnimator = null
         panelView?.let { view -> runCatching { windowManager?.removeView(view) } }
         panelView = null
+        stopBadgePulse()
         ballView?.let { view -> runCatching { windowManager?.removeView(view) } }
         ballView = null
+        ballIconView = null
+        badgeView = null
         ballParams = null
         windowManager = null
         scope.cancel()
@@ -513,6 +638,14 @@ class OverlayBallService : Service() {
         const val MAX_SIZE_DP = 80
         /** 控制面板边长（dp），正方形。 */
         private const val PANEL_SIZE_DP = 260
+        /** 右上角状态徽标圆点直径（dp）。 */
+        private const val BADGE_SIZE_DP = 12
+        /** 徽标呼吸脉冲半周期（ms）。 */
+        private const val BADGE_PULSE_DURATION_MS = 600L
+        /** 徽标颜色：进行中蓝、完成绿、失败红。 */
+        private const val BADGE_COLOR_ACTIVE = 0xFF3B82F6.toInt()
+        private const val BADGE_COLOR_DONE = 0xFF34C759.toInt()
+        private const val BADGE_COLOR_FAILED = 0xFFEF4444.toInt()
         const val ACTION_SHOW = "com.aiverse.action.SHOW_OVERLAY_BALL"
         const val ACTION_HIDE = "com.aiverse.action.HIDE_OVERLAY_BALL"
 
