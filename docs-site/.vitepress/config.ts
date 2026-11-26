@@ -4,7 +4,7 @@ const siteData = {
   "lang": "en-US",
   "dir": "ltr",
   "title": "AiVerse",
-  "titleTemplate": ":title | AiVerse - 手机端 AI 编程工具与终端",
+  "titleTemplate": ":title - AiVerse 官网",
   "description": "AiVerse 是一款开源的 Android 端 AI 编程与移动工作站工具。内置 Linux 容器与终端环境，AI Agent 可自主读写文件、执行 Shell 命令与运行构建，深度集成 MCP 协议、Git 版本控制与远程 SSH 开发。",
   "base": "/",
   "head": [],
@@ -579,7 +579,7 @@ const siteData = {
       "label": "English",
       "lang": "en",
       "title": "AiVerse",
-      "titleTemplate": ":title | AiVerse - AI Coding Tool & Terminal on Android",
+      "titleTemplate": ":title - AiVerse",
       "description": "AiVerse is an open-source AI coding and mobile workstation tool for Android. It ships with a built-in Linux container and terminal, letting the AI Agent read and write files, run shell commands and builds on its own — with deep integration of the MCP protocol, Git version control and remote SSH development.",
       "head": [
         [
