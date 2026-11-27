@@ -683,7 +683,8 @@ private fun ContextUsageRing(
     onToggle: () -> Unit
 ) {
     val t = LocalUIDensityTokens.current
-    val trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    // 底环要能独立看见：outlineVariant 本身偏淡，再乘低 alpha 会接近透明；改用更实的 outline 并提高不透明度。
+    val trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
     val usageLabel = stringResource(
         if (tokenEstimated) R.string.chat_context_usage_estimated else R.string.chat_context_usage,
         (progress * 100).toInt()

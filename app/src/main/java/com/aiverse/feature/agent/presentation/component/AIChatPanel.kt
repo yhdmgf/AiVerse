@@ -793,6 +793,8 @@ fun AIChatPanel(
     onOpenDrawer: () -> Unit,
     /** 侧栏角色入口点击后递增；>0 时打开角色切换抽屉。 */
     openRoleSwitcherSignal: Int = 0,
+    /** 侧栏角色入口信号已被消费，父层需复位，避免导航返回重组时把旧信号当成新请求自动弹层。 */
+    onRoleSwitcherSignalConsumed: () -> Unit = {},
     showMenuButton: Boolean = true,
     /** 大屏右栏当前开的是终端 / Git 时，顶栏对应图标高亮。 */
     terminalActive: Boolean = false,
@@ -868,7 +870,11 @@ fun AIChatPanel(
     var showRoleSwitcher by remember { mutableStateOf(false) }
     // 侧栏底部角色入口（issue #271）通过信号复用同一个角色抽屉，避免两处各养一份弹层状态。
     LaunchedEffect(openRoleSwitcherSignal) {
-        if (openRoleSwitcherSignal > 0) showRoleSwitcher = true
+        if (openRoleSwitcherSignal > 0) {
+            showRoleSwitcher = true
+            // 消费后立刻复位：否则离开会话页再返回时 remember 归零、信号仍 >0，会被误判为新请求。
+            onRoleSwitcherSignalConsumed()
+        }
     }
     val sessionTitle = currentSession?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.chat_new_session_btn)
     val sessionInputTokens = currentSession?.totalInputTokens ?: 0
@@ -2134,25 +2140,6 @@ fun AIChatPanel(
                         }
                     }
             ) {
-            // 消息流常驻子代理状态行（issue #43）：当前会话有子代理时始终可见，
-            // 不随「N 次工具调用」分组折叠；与工具详情卡片复用同一份状态数据。
-            if (currentSubAgentStates.isNotEmpty()) {
-                // 子代理状态行与顶栏/输入框一致：滚动时轻微变淡，透出下方消息层次。
-                val subAgentAlpha by animateFloatAsState(
-                    targetValue = if (listState.isScrollInProgress) 0.4f else 1f,
-                    animationSpec = tween(200),
-                    label = "sub-agent-row-alpha"
-                )
-                SubAgentStatusRow(
-                    states = currentSubAgentStates,
-                    onOpen = { id -> viewModel.selectSession(id) },
-                    onStop = { id -> viewModel.stopAgentSession(id) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.lg, vertical = Spacing.xs)
-                        .graphicsLayer { alpha = subAgentAlpha }
-                )
-            }
             Box(modifier = Modifier.weight(1f)) {
                 if (!messagesReady) {
                     // 远程模式连接未就绪时显示连接状态占位，避免空白或旧工作区记录闪烁
@@ -2435,6 +2422,7 @@ fun AIChatPanel(
                     .fillMaxWidth()
                     .onSizeChanged { headerHeightPx = it.height.toFloat() }
             ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
             ChatHeader(
                 sessionTitle = sessionTitle,
                 modelName = activeProvider?.effectiveModel,
@@ -2477,6 +2465,31 @@ fun AIChatPanel(
                 onRunPluginAction = runPluginAction,
                 topBarColor = LocalPluginUiStyle.current?.topBarColor
             )
+            // 子代理状态行（issue #43）挂在顶栏容器里，而不是内容层顶部：
+            // 顶栏自 #194 起悬浮在内容之上，放在内容层会被整条盖住，看起来像被删掉了。
+            // 放进顶栏容器后高度参与 headerHeightPx 实测，消息列表的顶部留白会自动排到它下面。
+            if (currentSubAgentStates.isNotEmpty()) {
+                val subAgentAlpha by animateFloatAsState(
+                    targetValue = if (listState.isScrollInProgress) 0.4f else 1f,
+                    animationSpec = tween(200),
+                    label = "sub-agent-row-alpha"
+                )
+                SubAgentStatusRow(
+                    states = currentSubAgentStates,
+                    onOpen = { id -> viewModel.selectSession(id) },
+                    onStop = { id -> viewModel.stopAgentSession(id) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = Spacing.lg,
+                            end = Spacing.lg,
+                            top = Spacing.xs,
+                            bottom = Spacing.xs
+                        )
+                        .graphicsLayer { alpha = subAgentAlpha }
+                )
+            }
+            } // 顶栏容器内容 Column 结束
             } // 顶栏透明容器 Box 结束（默认不铺色，仅测量 headerHeightPx；插件声明时才铺色）
 
             // 悬浮层：错误气泡 / 面板 / 输入框（原先的底部颜色蒙版已删，防透字改由内容层底部渐隐负责）

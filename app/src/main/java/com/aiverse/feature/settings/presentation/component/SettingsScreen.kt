@@ -1445,7 +1445,6 @@ fun SettingsScreen(
                     onSetInputFontSizeSp = { viewModel.setInputFontSizeSp(it) },
                     onSetUiFontScale = { viewModel.setUiFontScale(it) },
                     onSetUiDensity = { viewModel.setUiDensity(it) },
-                    onOpenDensity = { section = SettingsSection.AppearanceDensity },
                     onSetCornerStyle = { viewModel.setCornerStyle(it) },
                     onOpenUiFont = { section = SettingsSection.AppearanceFont },
                     onSetCodeFontSizeSp = { viewModel.setCodeFontSizeSp(it) },

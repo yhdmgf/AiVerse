@@ -3,11 +3,16 @@ package com.aiverse.feature.settings.presentation.component
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -30,6 +35,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.aiverse.R
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.ChatBubbleStyle
@@ -110,7 +116,6 @@ internal fun AppearanceSettingsSection(
     onSetInputFontSizeSp: (Int) -> Unit,
     onSetUiFontScale: (Float) -> Unit,
     onSetUiDensity: (UIDensity) -> Unit,
-    onOpenDensity: () -> Unit,
     onSetCornerStyle: (Int) -> Unit,
     onOpenUiFont: () -> Unit,
     onRestoreDefaults: () -> Unit,
@@ -212,6 +217,14 @@ internal fun AppearanceSettingsSection(
                 onClick = onOpenUserBubbleStyleSheet
             )
             SettingsDivider()
+            // AI 回复气泡与用户气泡成对出现：数据层与样式表一直保留，此前只是入口被精简掉。
+            SettingsRow(
+                icon = FeatherIcons.Star,
+                title = stringResource(R.string.bubble_assistant),
+                subtitle = stringResource(assistantBubbleStyle.labelRes),
+                onClick = onOpenAssistantBubbleStyleSheet
+            )
+            SettingsDivider()
             SettingsRow(
                 icon = FeatherIcons.Image,
                 title = stringResource(R.string.settings_background_image),
@@ -263,23 +276,17 @@ internal fun AppearanceSettingsSection(
                 onSet = onSetUiFontScale
             )
             SettingsDivider()
-            SettingsRow(
+            // 界面密度与下方圆角/文件名/缩进统一为「标题 + 就地三档分段」，不再单独跳子页。
+            InlineSegmentedRow(
                 icon = FeatherIcons.Sliders,
                 title = stringResource(R.string.settings_appearance_density),
-                onClick = onOpenDensity,
-                trailing = {
-                    Text(
-                        text = stringResource(
-                            when (uiDensity) {
-                                UIDensity.COMPACT -> R.string.density_compact
-                                UIDensity.STANDARD -> R.string.density_standard
-                                UIDensity.COMFORTABLE -> R.string.density_comfortable
-                            }
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.semanticColors.subtleText
-                    )
-                }
+                labels = listOf(
+                    stringResource(R.string.density_compact),
+                    stringResource(R.string.density_standard),
+                    stringResource(R.string.density_comfortable)
+                ),
+                selected = UIDensity.entries.indexOf(uiDensity).coerceAtLeast(0),
+                onSelect = { index -> onSetUiDensity(UIDensity.entries[index]) }
             )
             SettingsDivider()
             CornerStyleRow(
@@ -452,22 +459,13 @@ private fun FileNameDisplayRow(
         stringResource(R.string.file_name_display_two_lines),
         stringResource(R.string.file_name_display_ellipsis)
     )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
-    ) {
-        Text(
-            text = stringResource(R.string.file_tree_filename_display),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(bottom = Spacing.sm)
-        )
-        SegmentedTabs(
-            selected = options.indexOf(selected).coerceAtLeast(0),
-            labels = labels,
-            onSelect = { index -> onSelect(options[index]) }
-        )
-    }
+    InlineSegmentedRow(
+        icon = FeatherIcons.Type,
+        title = stringResource(R.string.file_tree_filename_display),
+        labels = labels,
+        selected = options.indexOf(selected).coerceAtLeast(0),
+        onSelect = { index -> onSelect(options[index]) }
+    )
 }
 
 /** 文件树缩进密度两档选择行：紧凑 / 标准，实时持久化。 */
@@ -481,22 +479,13 @@ private fun FileIndentDensityRow(
         stringResource(R.string.indent_compact),
         stringResource(R.string.indent_standard)
     )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
-    ) {
-        Text(
-            text = stringResource(R.string.file_tree_indent_density),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(bottom = Spacing.sm)
-        )
-        SegmentedTabs(
-            selected = options.indexOf(selected).coerceAtLeast(0),
-            labels = labels,
-            onSelect = { index -> onSelect(options[index]) }
-        )
-    }
+    InlineSegmentedRow(
+        icon = FeatherIcons.Sliders,
+        title = stringResource(R.string.file_tree_indent_density),
+        labels = labels,
+        selected = options.indexOf(selected).coerceAtLeast(0),
+        onSelect = { index -> onSelect(options[index]) }
+    )
 }
 
 /** 界面缩放滑块行（0.85~1.30），拖动实时预览，松手才落盘。 */
@@ -547,22 +536,56 @@ private fun CornerStyleRow(
         stringResource(R.string.corner_style_standard),
         stringResource(R.string.corner_style_comfortable)
     )
+    InlineSegmentedRow(
+        icon = FeatherIcons.Star,
+        title = stringResource(R.string.settings_appearance_corner),
+        labels = labels,
+        selected = selected.coerceIn(0, labels.lastIndex),
+        onSelect = onSelect,
+        subtitle = stringResource(R.string.settings_appearance_corner_plugin_hint)
+    )
+}
+
+/**
+ * 外观设置里的「同类 2–3 档」统一行：左侧与普通设置行同规格图标 + 标题，
+ * 下方就地铺 [SegmentedTabs]，不再一半跳子页、一半就地分段（issue #294）。
+ */
+@Composable
+private fun InlineSegmentedRow(
+    icon: ImageVector,
+    title: String,
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    subtitle: String? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
-        Text(
-            text = stringResource(R.string.settings_appearance_corner),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(bottom = Spacing.xs)
-        )
-        Text(
-            text = stringResource(R.string.settings_appearance_corner_plugin_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.semanticColors.subtleText,
-            modifier = Modifier.padding(bottom = Spacing.sm)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.semanticColors.subtleText,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+        if (subtitle != null) {
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.semanticColors.subtleText
+            )
+        }
+        Spacer(Modifier.height(Spacing.sm))
         SegmentedTabs(
             selected = selected.coerceIn(0, labels.lastIndex),
             labels = labels,

@@ -129,7 +129,7 @@ fun SelectionToggleAction(selection: ListSelectionState, enabled: Boolean = true
     ) {
         Icon(
             FeatherIcons.CheckSquare,
-            contentDescription = stringResource(R.string.common_select_mode),
+            contentDescription = stringResource(R.string.chat_batch_select),
             tint = if (selection.isActive) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onBackground.copy(alpha = if (enabled) 1f else 0.38f),
             modifier = Modifier.size(22.dp)

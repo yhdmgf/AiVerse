@@ -401,6 +401,11 @@ class AIAgentViewModel @Inject constructor(
 
     fun updateInputDraft(text: String) {
         val id = _currentSessionId.value ?: return
+        updateInputDraftFor(id, text)
+    }
+
+    /** 指定会话的草稿写入：优化输入在 A 启动后切到 B，增量仍必须回填 A，不能串到 B。 */
+    private fun updateInputDraftFor(id: String, text: String) {
         val editor = draftPrefs.edit()
         if (text.isEmpty()) {
             _inputDrafts.value = _inputDrafts.value - id
@@ -1800,12 +1805,14 @@ class AIAgentViewModel @Inject constructor(
 
     /** 优化输入进行中的 Job；连点先 cancel 再重新 launch，单 Job 防并发。 */
     private var optimizeJob: Job? = null
-    /** 优化输入是否进行中（驱动按钮 loading/停止态）。 */
+    /** 优化输入是否进行中（驱动按钮 loading/停止态）。按会话隔离：A 优化中切到 B，B 不显示转圈。 */
+    private val _optimizingSessionId = MutableStateFlow<String?>(null)
 
-    /** 优化输入是否进行中（驱动按钮 loading/停止态）。 */
-    private val _isOptimizing = MutableStateFlow(false)
-
-    val isOptimizing: StateFlow<Boolean> = _isOptimizing.asStateFlow()
+    val isOptimizing: StateFlow<Boolean> = _currentSessionId
+        .combine(_optimizingSessionId) { current, optimizing ->
+            current != null && current == optimizing
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     /** 优化输入的一次性事件（成功/失败），UI 收集后展示 Snackbar。 */
 
     /** 优化输入的一次性事件（成功/失败），UI 收集后展示 Snackbar。 */
@@ -1851,7 +1858,7 @@ class AIAgentViewModel @Inject constructor(
         if (text.isBlank()) return
         // 优化进行中再次点击 = 取消当前任务（既可中途停止，也防重复并发）。
         optimizeJob?.cancel()
-        _isOptimizing.value = true
+        _optimizingSessionId.value = id
         optimizeJob = viewModelScope.launch {
             // 流式回填：模型逐字吐增量，这里累积并以 ~60ms 窗口节流后写草稿，避免每次增量都 apply 磁盘
             //（仿 StatefulAgentWorkflow.StreamAccumulator.DELTA_THROTTLE_MS）。
@@ -1861,7 +1868,7 @@ class AIAgentViewModel @Inject constructor(
             fun flushDraft() {
                 val t = pendingDraft ?: return
                 pendingDraft = null
-                updateInputDraft(t)
+                updateInputDraftFor(id, t)
             }
             val onDelta: suspend (String) -> Unit = { delta ->
                 if (delta.isEmpty()) {
@@ -1886,7 +1893,7 @@ class AIAgentViewModel @Inject constructor(
                         // 以权威全文兜底回填一次：节流窗口内可能还压着最新增量，确保最终与模型输出一致。
                         _optimizedOriginals.value = _optimizedOriginals.value +
                             (id to ((_optimizedOriginals.value[id] ?: emptyList()) + text))
-                        updateInputDraft(result.text)
+                        updateInputDraftFor(id, result.text)
                         // 成功不再弹「已优化」Snackbar：撤销改为输入栏常驻小按钮（见 canUndoOptimize）。
                     }
                     OptimizeResult.NoChange -> Unit // 无实质改动，不打扰
@@ -1895,11 +1902,14 @@ class AIAgentViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 FileLogger.w(TAG, "优化输入失败", e)
-                _optimizeEvents.tryEmit(OptimizeEvent.Failure(e.message ?: e.javaClass.simpleName))
+                // 失败提示只发给发起优化的会话：A 优化失败时已切到 B，不应在 B 弹「优化失败」。
+                if (_currentSessionId.value == id) {
+                    _optimizeEvents.tryEmit(OptimizeEvent.Failure(e.message ?: e.javaClass.simpleName))
+                }
             } finally {
                 // 仅当仍是当前 job 时清除标志：连点取消后新 job 接管，旧 job 的 finally 不误清。
                 if (optimizeJob == coroutineContext[Job]) {
-                    _isOptimizing.value = false
+                    _optimizingSessionId.value = null
                 }
             }
         }
