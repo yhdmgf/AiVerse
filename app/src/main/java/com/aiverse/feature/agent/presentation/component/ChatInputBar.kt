@@ -603,7 +603,10 @@ internal fun ChatInputBar(
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent
-                        )
+                        ),
+                        // 外层已给 16dp 左内距；TextField 默认再缩 16dp，导致正文比模式名右移 8dp。
+                        // 收到 8dp 后两条左边缘都落在 24dp（16dp 外距 + 模式键 8dp 内距）。
+                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs)
                     )
 
                     Column(
@@ -650,12 +653,13 @@ internal fun ChatInputBar(
                             PressableSurface(
                                 onClick = { modeMenuExpanded = !modeMenuExpanded },
                                 shape = RoundedCornerShape(Radius.xs),
-                                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
-                                modifier = Modifier.heightIn(min = densityTokens.touchTarget)
+                                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
+                                // 与右侧 32dp 快捷图标齐平；横向仍保留 8dp 内距，热区不缩到文字本身。
+                                modifier = Modifier.height(densityTokens.scale(32))
                             ) {
                                 Text(
                                     text = stringResource(currentMode.labelRes),
-                                    style = MaterialTheme.typography.labelMedium.copy(
+                                    style = MaterialTheme.typography.labelLarge.copy(
                                         color = modeTextColor
                                     )
                                 )
@@ -737,7 +741,7 @@ internal fun ChatInputBar(
                                 .padding(horizontal = Spacing.xs)
                                 .width(densityTokens.scale(1))
                                 .height(densityTokens.scale(14))
-                                .background(MaterialTheme.colorScheme.outlineVariant)
+                                .background(MaterialTheme.colorScheme.outline)
                         )
 
                         val capability = reasoningCapabilityOf(activeProvider, activeProvider?.effectiveModel.orEmpty(), modelMetadata)
