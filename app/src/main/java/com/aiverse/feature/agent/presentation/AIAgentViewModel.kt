@@ -3933,6 +3933,52 @@ class AIAgentViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 批量导出会话：一次 SAF 选择位置后打成 zip，包内每条仍是单条导出的 tar.gz 格式。
+     * 先写缓存临时包，全部成功后再拷到 [output]，避免中途某条失败留下半个压缩包。
+     */
+    fun exportSessions(sessionIds: Set<String>, output: OutputStream, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        if (sessionIds.isEmpty()) {
+            onResult(false)
+            return@launch
+        }
+        val temp = runCatching { File.createTempFile("aiverse-sessions-", ".zip", context.cacheDir) }.getOrNull()
+        if (temp == null) {
+            onResult(false)
+            return@launch
+        }
+        try {
+            val allSessions = sessions.value + subSessionsByParent.value.values.flatten()
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(temp))).use { zip ->
+                var index = 0
+                sessionIds.forEach { id ->
+                    val title = allSessions.firstOrNull { it.id == id }?.title.orEmpty()
+                    val safeTitle = title.trim()
+                        .replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_")
+                        .trim('_')
+                        .take(60)
+                        .ifBlank { "session" }
+                    index++
+                    val entryName = "AiVerse-session-${safeTitle}-${id.take(8)}-${index}.tar.gz"
+                    zip.putNextEntry(ZipEntry(entryName))
+                    try {
+                        backupManager.exportSession(id, zip)
+                    } finally {
+                        runCatching { zip.closeEntry() }
+                    }
+                }
+            }
+            FileInputStream(temp).use { it.copyTo(output) }
+            onResult(true)
+        } catch (e: Exception) {
+            FileLogger.e("AIAgentViewModel", "exportSessions failed", e)
+            onResult(false)
+        } finally {
+            runCatching { temp.delete() }
+            runCatching { output.close() }
+        }
+    }
+
     private suspend fun ensureSession(): String {
         _currentSessionId.value?.let { return it }
         val ws = _currentWorkspace.value

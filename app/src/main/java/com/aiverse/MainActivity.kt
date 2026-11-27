@@ -670,6 +670,7 @@ fun AppNavigation(
 
     // ── 导出会话：SAF 保存文件 ──
     var pendingExportSessionId by remember { mutableStateOf<String?>(null) }
+    var pendingExportSessionIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val sessionExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -693,6 +694,35 @@ fun AppNavigation(
             }
         } else {
             pendingExportSessionId = null
+        }
+    }
+
+    // 批量导出：一次 SAF 选位置，打包 zip（包内每条为单条导出的 tar.gz）。
+    val sessionsExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        val ids = pendingExportSessionIds
+        if (uri != null && ids.isNotEmpty()) {
+            scope.launch {
+                val os = withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri) }
+                if (os != null) {
+                    agentViewModel.exportSessions(ids, os) { success ->
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                if (success) R.string.chat_export_sessions_done else R.string.chat_export_sessions_failed,
+                                ids.size
+                            ),
+                            if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } else {
+                    Toast.makeText(context, context.getString(R.string.chat_export_sessions_failed), Toast.LENGTH_LONG).show()
+                }
+                pendingExportSessionIds = emptySet()
+            }
+        } else {
+            pendingExportSessionIds = emptySet()
         }
     }
 
@@ -1037,6 +1067,10 @@ fun AppNavigation(
                 pendingExportSessionId = session.id
                 val safeTitle = session.title.replace(Regex("[^\\w\\u4e00-\\u9fa5\\-]"), "_")
                 sessionExportLauncher.launch("AiVerse-session-$safeTitle-${System.currentTimeMillis()}.tar.gz")
+            },
+            onExportSessions = { ids ->
+                pendingExportSessionIds = ids
+                sessionsExportLauncher.launch("AiVerse-sessions-${System.currentTimeMillis()}.zip")
             },
             onNavigateToBrowser = {
                 openWorkbench(WorkbenchPaneKind.BROWSER)

@@ -1336,6 +1336,7 @@
     <string name="chat_delete_session_confirm">Delete "%1$s"? All messages in this session will be cleared and cannot be undone.</string>
     <string name="chat_batch_select">Select Multiple</string>
     <string name="chat_batch_delete_title">Delete Selected Sessions</string>
+    <string name="chat_batch_export">Export</string>
     <string name="chat_batch_delete_confirm">Delete the selected %1$d sessions? All messages in these sessions will be cleared and cannot be undone.</string>
     <string name="chat_sessions_selected_count">%1$d sessions selected</string>
     <string name="chat_move_to_workspace">Move to Workspace</string>
@@ -1346,6 +1347,8 @@
     <string name="chat_session_name">Session name</string>
     <string name="chat_export_session">Export Session</string>
     <string name="chat_export_session_done">Session exported</string>
+    <string name="chat_export_sessions_done">Exported %1$d sessions</string>
+    <string name="chat_export_sessions_failed">Batch export failed</string>
     <string name="chat_export_session_failed">Export failed</string>
 
     <!-- Session Management (settings secondary page) -->
