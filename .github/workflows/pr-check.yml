@@ -139,7 +139,16 @@ jobs:
       # 只跑 universal debug 变体：单测逻辑与 flavor 无关（flavor 仅影响 abiFilters/assets），
       # 跑全 flavor 6 变体是重复编译，无额外覆盖。
       - name: Run unit tests
-        run: >-
-          ./gradlew :app:testUniversalDebugUnitTest
-          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC"
-          --stacktrace
+        run: |
+          set -o pipefail
+          # Robolectric 的 @BeforeClass 会在测试进程里从 Maven 拉 android-all-instrumented；
+          # GitHub runner 偶发连不上 Maven，表现为 classMethod FAILED + MavenArtifactFetcher IOException，
+          # 不是断言失败。失败时原样重跑一次（Gradle 缓存已热，代价很小），真回归仍会第二次失败。
+          ./gradlew :app:testUniversalDebugUnitTest \
+            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC" \
+            --stacktrace || {
+              echo "::warning title=Unit tests retry::首次单测失败，重试一次以排除 Robolectric 下载抖动"
+              ./gradlew :app:testUniversalDebugUnitTest \
+                -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC" \
+                --stacktrace
+            }

@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,7 +72,6 @@ import com.aiverse.feature.settings.presentation.SessionScopeFilter
 import com.aiverse.feature.settings.presentation.WorkspaceBucket
 import com.aiverse.feature.settings.presentation.WorkspaceBucketSource
 import compose.icons.FeatherIcons
-import compose.icons.feathericons.ArrowRight
 import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Copy
 import compose.icons.feathericons.Download
@@ -248,8 +246,6 @@ internal fun SessionManagementSectionHost(
                             session = session,
                             messageCount = messageCounts[session.id] ?: 0,
                             isPinned = session.isPinned,
-                            selectionMode = selection.isActive,
-                            selected = selection.isSelected(sessionKey(session)),
                             sourceTag = workspaceSourceTag(bucket.source)
                         )
                     }
@@ -345,11 +341,6 @@ internal fun SessionManagementSectionHost(
                 pendingExportSessionId = session.id
                 exportLauncher.launch("aiverse-session-${safeFileTitle(session.title)}-${System.currentTimeMillis()}.tar.gz")
             },
-            onBatchSelect = {
-                menuSession = null
-                selection.enter()
-                selection.toggle(sessionKey(session))
-            },
             onDelete = {
                 menuSession = null
                 pendingDeleteIds = setOf(session.id)
@@ -423,7 +414,6 @@ internal fun SessionManagementSectionHost(
     pendingMoveIds?.let { ids ->
         TargetWorkspacePickerSheet(
             buckets = buckets,
-            isCrossEnvironmentMove = { target -> viewModel.isCrossEnvironmentMove(ids, target) },
             onDismiss = { pendingMoveIds = null },
             onPick = { target ->
                 pendingMoveIds = null
@@ -605,9 +595,6 @@ internal fun SessionDetailSectionHost(
         TargetWorkspacePickerSheet(
             buckets = allBuckets,
             disabledPaths = setOf(session.workspacePath),
-            isCrossEnvironmentMove = { target ->
-                viewModel.isCrossEnvironmentMove(setOf(session.workspacePath), target)
-            },
             onDismiss = { showMoveSheet = false },
             onPick = { target ->
                 showMoveSheet = false
@@ -762,8 +749,6 @@ private fun ManagedSessionCard(
     session: ChatSession,
     messageCount: Int,
     isPinned: Boolean,
-    selectionMode: Boolean,
-    selected: Boolean,
     sourceTag: String
 ) {
     val t = LocalUIDensityTokens.current
@@ -785,14 +770,6 @@ private fun ManagedSessionCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             when {
-                selectionMode -> {
-                    Checkbox(
-                        checked = selected,
-                        onCheckedChange = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.sm))
-                }
                 running -> {
                     Box(
                         modifier = Modifier
@@ -886,7 +863,6 @@ private fun ManagedSessionActionSheet(
     onTogglePin: () -> Unit,
     onRename: () -> Unit,
     onExport: () -> Unit,
-    onBatchSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
     val canOpenInChat = bucket?.workspace != null && bucket.isAvailable
@@ -928,11 +904,6 @@ private fun ManagedSessionActionSheet(
                 icon = FeatherIcons.Download,
                 text = stringResource(R.string.chat_export_session),
                 onClick = onExport
-            )
-            SessionActionSheetItem(
-                icon = FeatherIcons.ArrowRight,
-                text = stringResource(R.string.common_select_mode),
-                onClick = onBatchSelect
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = Spacing.sm))
             SessionActionSheetItem(
@@ -1022,7 +993,6 @@ private fun SessionRenameDialog(
 private fun TargetWorkspacePickerSheet(
     buckets: List<WorkspaceBucket>,
     disabledPaths: Set<String> = emptySet(),
-    isCrossEnvironmentMove: (WorkspaceBucket) -> Boolean,
     onDismiss: () -> Unit,
     onPick: (WorkspaceBucket) -> Unit
 ) {
@@ -1041,7 +1011,6 @@ private fun TargetWorkspacePickerSheet(
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                 items(buckets, key = { it.path }) { bucket ->
                     val isSource = bucket.path in sourcePaths
-                    val crossEnv = isCrossEnvironmentMove(bucket)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1073,13 +1042,12 @@ private fun TargetWorkspacePickerSheet(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        if (crossEnv) {
-                            Text(
-                                text = stringResource(R.string.session_mgmt_tag_remote_offline),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.semanticColors.subtleText
-                            )
-                        }
+                        Text(
+                            // 直接复用工作区真实来源六档，不再把「源路径≠目标路径」误标成「远程·离线」（#296）。
+                            text = workspaceSourceTag(bucket.source),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.semanticColors.subtleText
+                        )
                     }
                 }
                 item { Spacer(Modifier.height(Spacing.lg)) }
