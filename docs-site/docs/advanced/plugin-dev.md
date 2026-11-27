@@ -545,7 +545,7 @@ definePlugin({ handlers: {
 | `chatPanelOpacity` | 透明度 | 10–100（%） | 聊天面板（输入框、悬浮面板、气泡等）不透明度 |
 | `bubbleUserColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡底色 |
 | `bubbleUserTextColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡文字颜色 |
-| `topBarColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏底色 |
+| `topBarColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏可选底色，默认不铺色 |
 | `topBarTextColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏标题颜色 |
 | `drawerColor` | 颜色 | 语义令牌名 / 十六进制 | 侧栏底色 |
 | `drawerTextColor` | 颜色 | 语义令牌名 / 十六进制 | 侧栏条目文字颜色 |
