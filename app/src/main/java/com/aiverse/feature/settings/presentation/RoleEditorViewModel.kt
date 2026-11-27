@@ -71,6 +71,11 @@ class RoleEditorViewModel @Inject constructor(
             val success = runCatching {
                 withContext(Dispatchers.IO) {
                     val now = System.currentTimeMillis()
+                    // 工作区可能刚被删除；保存时再校验一次，防止界面还没刷新就点保存把失效绑定写回。
+                    // 列表尚为空（启动未加载完）时不抹掉用户原有绑定，避免误清。
+                    val validWorkspaceId = workspaceId?.takeIf { id ->
+                        id.isNotBlank() && (workspaces.value.isEmpty() || workspaces.value.any { it.name == id })
+                    }
                     val role = Role(
                         id = existing?.id ?: draftId,
                         name = name,
@@ -84,7 +89,7 @@ class RoleEditorViewModel @Inject constructor(
                         sortOrder = existing?.sortOrder ?: nextSortOrder(),
                         createdAt = existing?.createdAt ?: now,
                         updatedAt = now,
-                        workspaceId = workspaceId?.takeIf { it.isNotBlank() }
+                        workspaceId = validWorkspaceId
                     )
                     roleDao.upsert(RoleEntity.fromDomain(role))
                 }

@@ -30,7 +30,7 @@ In the role edit page you can assign a "bound workspace" to a role. When bound, 
 -   **Bound Workspace**: When a new conversation is created with this role selected, it is automatically placed in the role's bound workspace; the session management page's bucketing and filtering work automatically.
 -   **Compatibility**: Old data (workspaceId = null) is fully compatible with unchanged behavior; backup export and import both preserve this field.
 
-Once a workspace is bound, conversations are bucketed by workspace. For how to view and filter conversations by workspace, see [Session Management](/en/guide/sessions). The role detail page and the role entry in the sidebar also show the current binding; when unbound, they show "Follow current workspace".
+Once a workspace is bound, conversations are bucketed by workspace. For how to view and filter conversations by workspace, see [Session Management](/en/guide/sessions). The role detail page and the role entry in the sidebar also show the current binding; when unbound, they show "Follow current workspace". When a bound workspace is deleted, all roles automatically drop that binding and fall back to following the current workspace; the role editor no longer shows the deleted workspace.
 
 ## Managing Roles
 

@@ -54,4 +54,8 @@ interface RoleDao {
 
     @Query("UPDATE roles SET enabled = :enabled, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setEnabledById(id: String, enabled: Boolean, updatedAt: Long)
+
+    /** 工作区被删除时清掉所有角色对它的绑定，回退为「跟随当前工作区」。 */
+    @Query("UPDATE roles SET workspaceId = NULL, updatedAt = :updatedAt WHERE workspaceId = :workspaceName")
+    suspend fun clearWorkspaceBinding(workspaceName: String, updatedAt: Long)
 }

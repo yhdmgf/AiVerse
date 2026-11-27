@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.aiverse.core.datastore.preferencesCorruptionHandler
 import com.aiverse.R
 import com.aiverse.core.util.FileLogger
+import com.aiverse.feature.agent.data.local.dao.RoleDao
 import com.aiverse.feature.agent.domain.container.ConnectionState
 import com.aiverse.feature.agent.domain.container.RemoteSshConnection
 import com.aiverse.feature.agent.domain.session.SessionUseCase
@@ -60,6 +61,7 @@ class WorkspaceRepository @Inject constructor(
     private val remoteSshConnection: RemoteSshConnection,
     private val pathHomeResolver: PathHomeResolver,
     private val sessionUseCase: SessionUseCase,
+    private val roleDao: RoleDao,
     private val generalSettingsRepository: GeneralSettingsRepository,
     private val credentialInjectSettings: CredentialInjectSettingsRepository,
     private val credentialRepository: CredentialRepository
@@ -475,10 +477,12 @@ class WorkspaceRepository @Inject constructor(
      *  若删的是当前工作区，则自动切到剩余的第一个。 */
     suspend fun deleteWorkspace(name: String) = withContext(Dispatchers.IO) {
         val target = _workspaces.value.firstOrNull { it.name == name }
+        var deleted = false
         if (isLocal() && target?.type == WorkspaceType.EXTERNAL_LOCAL) {
             val records = readExternalWorkspaces()
             val removed = records.firstOrNull { it.name == name }
             writeExternalWorkspaces(records.filterNot { it.name == name })
+            deleted = true
             removed?.let { record ->
                 runCatching {
                     context.contentResolver.releasePersistableUriPermission(
@@ -493,14 +497,15 @@ class WorkspaceRepository @Inject constructor(
             }
             FileLogger.i(TAG, "移除外部工作区关联: $name")
         } else if (isLocal()) {
-            File(projectsRoot, name).deleteRecursively()
+            deleted = File(projectsRoot, name).deleteRecursively()
             target?.let { sessionUseCase.deleteSessionsByWorkspace(it.path) }
         } else {
             val cfg = remoteSshConnection.config
             if (cfg != null) {
                 val remotePath = "${pathHomeResolver.expandHome(cfg.remoteWorkspacePath).trimEnd('/')}/$name"
-                runCatching { execRemoteExit("rm -rf ${shellQuote(remotePath)}") }
+                deleted = runCatching { execRemoteExit("rm -rf ${shellQuote(remotePath)}") }
                     .onFailure { FileLogger.e(TAG, "远程删除工作区失败: $remotePath", it) }
+                    .isSuccess
             }
             target?.let { sessionUseCase.deleteSessionsByWorkspace(it.path) }
         }
@@ -511,6 +516,12 @@ class WorkspaceRepository @Inject constructor(
             if (map.remove(key) != null) writeAliases(map)
         }
         refreshWorkspaces()
+        // 目录确实删掉/解除关联后，清掉所有角色对它的绑定，避免角色编辑页继续显示失效工作区。
+        // 放在删除成功之后，远程删除失败或目录仍被占用时不会误清。
+        if (deleted) {
+            roleDao.clearWorkspaceBinding(name, System.currentTimeMillis())
+            FileLogger.i(TAG, "已解除角色对工作区的绑定: $name")
+        }
         FileLogger.i(TAG, "删除工作区: $name")
     }
 
