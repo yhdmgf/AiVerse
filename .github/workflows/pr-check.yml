@@ -68,6 +68,25 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # 与 beta / release 共用同一签名密钥，保证每次 PR 产出的 debug 包签名一致。
+      # 不还原的话 AGP 会在每台 runner 上现场生成默认 debug keystore，证书逐次随机，
+      # 不同 run 的 com.aiverse.debug 互相覆盖安装会报“签名不一致”。
+      # Secrets 不可用时（如 fork PR 拿不到仓库 Secrets）退回默认行为，只告警不失败。
+      - name: Restore signing for debug build
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::签名 Secrets 不可用，本次 debug 包将使用临时 debug 证书"
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > app/AiVerse.jks
+          printf 'storeFile=AiVerse.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > app/keystore.properties
+
       # 迁移版本号对账：编号连续、SCHEMA_VERSION 一致、已发布迁移未被篡改/复用
       # （hotfix 合流后 main 未把未发布迁移后移会在这里被拦）。秒级失败，放最前。
       - name: Check migration versions

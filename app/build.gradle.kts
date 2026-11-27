@@ -257,6 +257,12 @@ android {
         // release 已解压的容器 rootfs 与工作区项目在 debug 下不可见（需重新解压/clone），属预期隔离行为。
         debug {
             applicationIdSuffix = ".debug"
+            // debug 与 beta / release 用同一套签名（CI 由 pr-check.yml 从 Secrets 还原，
+            // 本地存在 keystore.properties 时同样生效）。默认 debug keystore 是每台
+            // 构建机现场生成的，证书随机，会让不同 CI run 的 debug 包互相覆盖时签名不一致。
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         release {
             isMinifyEnabled = true
