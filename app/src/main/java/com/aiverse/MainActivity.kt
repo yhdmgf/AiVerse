@@ -1134,6 +1134,7 @@ fun AppNavigation(
                                     workspaceViewModel = workspaceViewModel,
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
                                     openRoleSwitcherSignal = roleSwitcherSignal,
+                                    onRoleSwitcherSignalConsumed = { roleSwitcherSignal = 0 },
                                     showMenuButton = !permanentDrawer,
                                     onNavigateToTerminal = {
                                         openWorkbench(WorkbenchPaneKind.TERMINAL)

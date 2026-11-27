@@ -212,6 +212,14 @@ internal fun AppearanceSettingsSection(
                 onClick = onOpenUserBubbleStyleSheet
             )
             SettingsDivider()
+            // AI 回复气泡与用户气泡成对出现：数据层与样式表一直保留，此前只是入口被精简掉。
+            SettingsRow(
+                icon = FeatherIcons.Star,
+                title = stringResource(R.string.bubble_assistant),
+                subtitle = stringResource(assistantBubbleStyle.labelRes),
+                onClick = onOpenAssistantBubbleStyleSheet
+            )
+            SettingsDivider()
             SettingsRow(
                 icon = FeatherIcons.Image,
                 title = stringResource(R.string.settings_background_image),

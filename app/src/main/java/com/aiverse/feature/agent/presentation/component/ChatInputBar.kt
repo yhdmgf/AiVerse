@@ -1038,83 +1038,43 @@ internal fun ChatInputBar(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier
                                         .size(20.dp)
-                                        .graphicsLayer { alpha = 1f - restoreAlpha }
+                                        .graphicsLayer { alpha = (1f - restoreAlpha) * (1f - progressAlpha) }
                                 )
                             }
-                        }
-                        if (restoreMenuExpanded) {
-                            Popup(
-                                alignment = Alignment.BottomCenter, // 锚定在按钮上方展开
-                                onDismissRequest = { restoreMenuExpanded = false },
-                                properties = PopupProperties(focusable = true, dismissOnBackPress = true)
+                            // 与模型选择等菜单统一用标准 DropdownMenu（同一套容器 / 动效 / leadingIcon 行样式）。
+                            DropdownMenu(
+                                expanded = restoreMenuExpanded,
+                                onDismissRequest = { restoreMenuExpanded = false }
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shadowElevation = 8.dp,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .height(IntrinsicSize.Min)
-                                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .clickable {
-                                                    restoreMenuExpanded = false
-                                                    onUndoOptimize()
-                                                }
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                FeatherIcons.RotateCcw,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(Modifier.width(Spacing.xs))
-                                            Text(
-                                                text = stringResource(R.string.chat_optimize_restore_original),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                        VerticalDivider(
-                                            modifier = Modifier.fillMaxHeight(),
-                                            thickness = 1.dp,
-                                            color = MaterialTheme.colorScheme.outlineVariant
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.chat_optimize_restore_original)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            FeatherIcons.RotateCcw,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        Row(
-                                            modifier = Modifier
-                                                .clickable(enabled = value.isNotBlank()) {
-                                                    restoreMenuExpanded = false
-                                                    onOptimizeInput()
-                                                }
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.AutoAwesome,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(Modifier.width(Spacing.xs))
-                                            Text(
-                                                text = stringResource(R.string.chat_optimize_continue),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = if (value.isNotBlank()) {
-                                                    MaterialTheme.colorScheme.onSurface
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                }
-                                            )
-                                        }
+                                    },
+                                    onClick = {
+                                        restoreMenuExpanded = false
+                                        onUndoOptimize()
                                     }
-                                }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.chat_optimize_continue)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    enabled = value.isNotBlank(),
+                                    onClick = {
+                                        restoreMenuExpanded = false
+                                        onOptimizeInput()
+                                    }
+                                )
                             }
                         }
                     }

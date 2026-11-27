@@ -793,6 +793,8 @@ fun AIChatPanel(
     onOpenDrawer: () -> Unit,
     /** 侧栏角色入口点击后递增；>0 时打开角色切换抽屉。 */
     openRoleSwitcherSignal: Int = 0,
+    /** 侧栏角色入口信号已被消费，父层需复位，避免导航返回重组时把旧信号当成新请求自动弹层。 */
+    onRoleSwitcherSignalConsumed: () -> Unit = {},
     showMenuButton: Boolean = true,
     /** 大屏右栏当前开的是终端 / Git 时，顶栏对应图标高亮。 */
     terminalActive: Boolean = false,
@@ -868,7 +870,11 @@ fun AIChatPanel(
     var showRoleSwitcher by remember { mutableStateOf(false) }
     // 侧栏底部角色入口（issue #271）通过信号复用同一个角色抽屉，避免两处各养一份弹层状态。
     LaunchedEffect(openRoleSwitcherSignal) {
-        if (openRoleSwitcherSignal > 0) showRoleSwitcher = true
+        if (openRoleSwitcherSignal > 0) {
+            showRoleSwitcher = true
+            // 消费后立刻复位：否则离开会话页再返回时 remember 归零、信号仍 >0，会被误判为新请求。
+            onRoleSwitcherSignalConsumed()
+        }
     }
     val sessionTitle = currentSession?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.chat_new_session_btn)
     val sessionInputTokens = currentSession?.totalInputTokens ?: 0
