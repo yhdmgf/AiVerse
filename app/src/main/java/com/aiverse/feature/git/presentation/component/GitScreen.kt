@@ -418,7 +418,7 @@ fun GitScreen(
                             loading = state.issuesLoading,
                             loaded = state.issuesLoaded,
                             filter = state.issuesFilter,
-                            isGitHub = state.isGitHub,
+                            platformSupported = state.isIssuePlatform,
                             hasToken = state.hasGitHubToken,
                             error = state.issuesError,
                             remoteUrl = state.remoteUrl,

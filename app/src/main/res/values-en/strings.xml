@@ -1773,8 +1773,8 @@
     <string name="git_no_issues">No issues</string>
     <string name="git_issues_loading">Loading issues…</string>
     <string name="git_issues_load_failed">Failed to load issues</string>
-    <string name="git_issues_not_github">Only GitHub repositories are supported</string>
-    <string name="git_issues_need_token">Open the key icon on the Git page → Credentials → + to add a github.com token</string>
+    <string name="git_issues_not_github">Issues are supported on GitHub / Gitee / GitCode only</string>
+    <string name="git_issues_need_token">Open the key icon on the Git page → Credentials → + to add a token for github.com / gitee.com / gitcode.com</string>
     <string name="git_issue_detail">Issue Details</string>
     <string name="git_issue_comments">%1$s comments</string>
     <string name="git_issue_opened_by">Opened by %1$s on %2$s</string>
@@ -1921,7 +1921,7 @@
     <string name="git_issue_create_success">Issue created</string>
     <string name="git_issue_create_failed">Failed to create issue</string>
     <string name="git_issue_ai_action">Ask AI to fix this issue</string>
-    <string name="git_issue_ai_prompt">Work on GitHub issue #%1$d &quot;%2$s&quot; (opened by %3$s). First call getIssue to read the full description and comments, then locate the relevant code and implement the fix. Run the relevant tests or build to confirm, create and push a branch, and finally call createPullRequest to open a pull request that references the issue.</string>
+    <string name="git_issue_ai_prompt">Work on issue #%1$s &quot;%2$s&quot; (opened by %3$s). First call getIssue to read the full description and comments, then locate the relevant code and implement the fix. Run the relevant tests or build to confirm, create and push a branch, and finally call createPullRequest to open a pull request that references the issue.</string>
     <string name="git_computing_diff">Computing diff...</string>
     <string name="git_status_clean">Working tree clean, no changes</string>
     <string name="git_commit_needs_identity">No commit identity configured. Set your name and email in “Credentials &amp; Identity”.</string>

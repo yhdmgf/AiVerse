@@ -1773,8 +1773,8 @@
     <string name="git_no_issues">暂无 issue</string>
     <string name="git_issues_loading">正在加载 issue…</string>
     <string name="git_issues_load_failed">issue 加载失败</string>
-    <string name="git_issues_not_github">此功能仅支持 GitHub 仓库</string>
-    <string name="git_issues_need_token">请打开 Git 页右上角钥匙 → 凭据 → +，添加 github.com 的 token</string>
+    <string name="git_issues_not_github">当前仓库不支持 issue（支持 GitHub / Gitee / GitCode）</string>
+    <string name="git_issues_need_token">请打开 Git 页右上角钥匙 → 凭据 → +，添加对应平台（github.com / gitee.com / gitcode.com）的 token</string>
     <string name="git_issue_detail">issue 详情</string>
     <string name="git_issue_comments">%1$s 条评论</string>
     <string name="git_issue_opened_by">由 %1$s 创建于 %2$s</string>
@@ -1921,7 +1921,7 @@
     <string name="git_issue_create_success">Issue 已创建</string>
     <string name="git_issue_create_failed">Issue 创建失败</string>
     <string name="git_issue_ai_action">让 AI 处理此 Issue</string>
-    <string name="git_issue_ai_prompt">请处理 GitHub issue #%1$d「%2$s」（创建者 %3$s）。先用 getIssue 读取完整描述与评论，定位相关代码并实现修复；完成后运行相关测试或构建确认，创建分支并提交、推送，最后用 createPullRequest 创建 Pull Request，并在说明里引用该 issue。</string>
+    <string name="git_issue_ai_prompt">请处理 issue #%1$s「%2$s」（创建者 %3$s）。先用 getIssue 读取完整描述与评论，定位相关代码并实现修复；完成后运行相关测试或构建确认，创建分支并提交、推送，最后用 createPullRequest 创建 Pull Request，并在说明里引用该 issue。</string>
     <string name="git_computing_diff">正在计算差异…</string>
     <string name="git_status_clean">工作区干净，无改动</string>
     <string name="git_commit_needs_identity">尚未配置提交署名，请在「凭据与署名」页填写用户名和邮箱</string>
