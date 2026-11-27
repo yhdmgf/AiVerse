@@ -178,12 +178,20 @@ internal fun ChatHeader(
     pluginHeaderEntries: List<PluginUiEntry> = emptyList(),
     pluginLanguageTag: String = "",
     onOpenPluginPage: (PluginPage) -> Unit = {},
-    onRunPluginAction: (PluginUiEntry) -> Unit = {}
+    onRunPluginAction: (PluginUiEntry) -> Unit = {},
+    /** 插件声明的顶栏着色；null=不铺色，保持内容渐隐的默认融合效果。 */
+    topBarColor: Color? = null
 ) {
-    // 顶栏不再有表面（issue #269）：删掉 Surface 底色与玻璃描边，任何主题下顶栏都不出现边框、
-    // 也不铺任何颜色（融合靠「不铺」不靠「铺得淡」）。滚过的消息改由内容层的顶部渐隐负责淡出
-    // （见 AIChatPanel 内容层 drawWithContent）。标题/图标/胶囊保持原色，状态栏留白不变。
-    Box(modifier = Modifier.fillMaxWidth()) {
+    // 顶栏不再有表面（issue #269）：删掉 Surface 底色与玻璃描边，默认不铺任何颜色（融合靠「不铺」不靠「铺得淡」）。
+    // 滚过的消息改由内容层的顶部渐隐负责淡出（见 AIChatPanel 内容层 drawWithContent）。
+    // 标题/图标/胶囊保持原色，状态栏留白不变。
+    // 仅当插件显式声明了 topBarColor 时才铺一层全强度纯色（不渐变、不随滚动淡出），
+    // 否则该插件字段会静默失效；null 时完全透明。此 Box 不参与 headerHeightPx 测量，加背景不影响测量。
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (topBarColor != null) Modifier.background(topBarColor) else Modifier)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

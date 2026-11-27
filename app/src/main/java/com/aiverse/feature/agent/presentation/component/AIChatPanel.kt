@@ -111,6 +111,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.R
+import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
@@ -1623,6 +1624,18 @@ fun AIChatPanel(
         }
     }
 
+    // 「在顶部」判定，与 isAtBottom 同一套写法：首条内容上沿停在视口上沿附近即算在顶。
+    // 列表未测量（visibleItemsInfo 为空）时一律返回 false，交给 fadeActive 走保守分支启用离屏。
+    val isAtTop by remember {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            val firstVisible = layout.visibleItemsInfo.firstOrNull()
+                ?: return@derivedStateOf false
+            if (!listState.canScrollBackward) return@derivedStateOf true
+            firstVisible.index == 0 && firstVisible.offset >= layout.viewportStartOffset - AUTO_SCROLL_TOLERANCE_PX
+        }
+    }
+
     LaunchedEffect(pointerDown, userScrollGesture, nestedFling, listState.isScrollInProgress) {
         if (!pointerDown && userScrollGesture && !nestedFling && !listState.isScrollInProgress) {
             delay(150)
@@ -2065,38 +2078,60 @@ fun AIChatPanel(
             // 内容层：消息列表延伸到屏幕底部，输入框悬浮其上，滚动时卡片可滑入输入框后面
             // 顶/底渐隐（issue #269）：用一个离屏层 + BlendMode.DstIn 同时擦除内容本身的顶部与底部，
             // 替代原先「顶栏渐变 scrim + 输入框颜色蒙版」两套铺色逻辑。顶栏与输入框是本 Column 的
-            // 兄弟节点、在其之后绘制，不会被擦除；离屏合成成本只付一次（不各包一层）。
+            // 兄弟节点、在其之后绘制，不会被擦除。
+            // P4：渐变的起止偏移（startY/endY）直接烘焙进 brush，draw 阶段不再新建 brush、只复用缓存。
+            // 注意 startY/endY 是 Brush.verticalGradient 的参数（DrawScope.drawRect 并无此参数），
+            // 因此这里在组合期用 LocalDensity 换算像素并缓存；顶栏实测高度 / 输入区留白变化时才重建。
+            val density = LocalDensity.current
+            // 顶部：屏幕顶端全透明 → 顶栏下沿(+一小段缓冲)恢复不透明，滚进来的内容越靠上越淡；
+            // 缓冲用密度 token（标准档 4~8dp 区间）避免硬边，不引入新私有 dp。
+            val headerPx = if (headerHeightPx > 0f) headerHeightPx
+            else with(density) { chatHeaderBottomReserveDp.toPx() }
+            // 渐隐到顶栏下沿 + 缓冲恢复不透明：缓冲值参与密度缩放，边界随顶栏实测高度变化重建。
+            val topEndPx = with(density) { headerPx + t.sm.toPx() }
+            val topFadeBrush = remember(topEndPx) {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0f),
+                    topEndPx to Color.Black.copy(alpha = 1f)
+                )
+            }
+            // P3：按需离屏。全屏 CompositingStrategy.Offscreen 每帧都要一块全屏缓冲，成本高。
+            // 滚动中恒启用，保证滚进顶/底带的内容始终被淡出；只有内容同时贴顶且贴底
+            //（无滚动空间 / 已滚到两端、没有内容落在渐隐带里）时才跳过离屏。
+            // 长对话停在中间时两端都有内容，fadeActive 仍为 true，这是正确行为，不是漏优化。
+            val fadeActive = headerHeightPx <= 0f || listState.isScrollInProgress || !isAtTop || !isAtBottom
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .graphicsLayer { if (fadeActive) compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
                         drawContent()
+                        if (!fadeActive) return@drawWithContent
                         if (size.height <= 0f) return@drawWithContent
-                        // 顶部：屏幕顶端全透明 → 顶栏下沿(+一小段缓冲)恢复不透明，滚进来的内容越靠上越淡；
-                        // 缓冲用密度 token（标准档 4~8dp 区间）避免硬边，不引入新私有 dp。
-                        val headerPx = if (headerHeightPx > 0f) headerHeightPx else chatHeaderBottomReserveDp.toPx()
-                        val topEnd = headerPx + t.sm.toPx()
+                        // 只画到渐隐带内，减少一次全屏 overdraw。
                         drawRect(
-                            brush = Brush.verticalGradient(
-                                listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 1f)),
-                                startY = 0f,
-                                endY = topEnd
-                            ),
+                            brush = topFadeBrush,
+                            size = Size(size.width, topEndPx.coerceAtMost(size.height)),
                             blendMode = BlendMode.DstIn
                         )
                         // 底部：擦除方向相反，输入框上沿仍不透明 → 屏幕最底(含导航栏/手势条)全透明，
                         // 滑入输入区的内容被擦除。范围沿用 inputBarReservePx（已含悬浮层实测高度 + 键盘跟随），
                         // 终点画到 size.height，导航栏那条区域落在全透段内，绝不露内容。
-                        val bottomStart = size.height - inputBarReservePx.toFloat()
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                listOf(Color.Black.copy(alpha = 1f), Color.Black.copy(alpha = 0f)),
-                                startY = bottomStart,
-                                endY = size.height
-                            ),
-                            blendMode = BlendMode.DstIn
-                        )
+                        // P2：小屏 + 键盘弹起 + 顶部横幅（上传/插件更新）同时展开时，inputBarReservePx 可能
+                        // 吃掉几乎整列高度。此时既不能留负数起点（渐变区间被拉满），也不能从 0 起画（整列
+                        // 被淡到几乎看不见），而是直接放弃底部渐隐：没有可读的正文区，渐隐也守不住任何内容。
+                        val bottomTop = size.height - inputBarReservePx.toFloat()
+                        if (bottomTop > topEndPx) {
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    bottomTop to Color.Black.copy(alpha = 1f),
+                                    size.height to Color.Black.copy(alpha = 0f)
+                                ),
+                                topLeft = Offset(0f, bottomTop),
+                                size = Size(size.width, size.height - bottomTop),
+                                blendMode = BlendMode.DstIn
+                            )
+                        }
                     }
             ) {
             // 消息流常驻子代理状态行（issue #43）：当前会话有子代理时始终可见，
@@ -2388,10 +2423,12 @@ fun AIChatPanel(
 
             // 悬浮顶栏（issue #194）：不再占用 Scaffold topBar 槽位，改为叠加在消息列表上方，
             // 列表顶部 contentPadding 已预留其高度，滚动时内容可从顶栏底下穿过（与输入框表现一致）。
-            // issue #269：顶栏不再铺任何颜色，也不再随滚动整体淡出。原先的渐变 scrim 与把整块顶栏
+            // issue #269：顶栏默认不铺任何颜色，也不再随滚动整体淡出。原先的渐变 scrim 与把整块顶栏
             // 淡到 0.4 的 headerAlpha 会发白发糊、标题跟着变淡，现已全部删除；顶栏标题/图标/胶囊
             // 始终保持原色，滚过的消息改由内容层的顶部渐隐负责淡出（见上方内容层 drawWithContent）。
             // 这里仅保留一个透明容器用于测量顶栏真实高度（headerHeightPx），驱动内容渐隐顶部边界。
+            // 可选着色：默认不铺色；仅当插件声明 topBarColor 时铺一层全强度纯色（不渐变、不随滚动淡出），
+            // 避免回到 issue #269 的发白蒙版。
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -2437,9 +2474,10 @@ fun AIChatPanel(
                 pluginHeaderEntries = headerPluginEntries,
                 pluginLanguageTag = pluginLanguageTag,
                 onOpenPluginPage = openPluginPage,
-                onRunPluginAction = runPluginAction
+                onRunPluginAction = runPluginAction,
+                topBarColor = LocalPluginUiStyle.current?.topBarColor
             )
-            } // 顶栏透明容器 Box 结束（issue #269：不再铺色，仅测量 headerHeightPx）
+            } // 顶栏透明容器 Box 结束（默认不铺色，仅测量 headerHeightPx；插件声明时才铺色）
 
             // 悬浮层：错误气泡 / 面板 / 输入框（原先的底部颜色蒙版已删，防透字改由内容层底部渐隐负责）
             val floatingPanelAlpha by animateFloatAsState(
