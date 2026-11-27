@@ -165,16 +165,20 @@ object PluginManifestParser {
             val license = readText(obj, "license", MAX_LICENSE)
             val engines = readEngines(obj)
             val runtime = readRuntime(obj)
-            val contributes = readContributes(obj)
+            val parsedContributes = readContributes(obj)
             val icon = readIcon(obj)
 
-            val needsRuntime = contributes != null && (
-                contributes.tools.isNotEmpty() || contributes.hooks.isNotEmpty() ||
-                    contributes.sessionSources.isNotEmpty() ||
-                    contributes.uiEntries.any { it.handler != null }
+            val needsRuntime = parsedContributes != null && (
+                parsedContributes.tools.isNotEmpty() || parsedContributes.hooks.isNotEmpty() ||
+                    parsedContributes.sessionSources.isNotEmpty() ||
+                    parsedContributes.uiEntries.any { it.handler != null }
                 )
             if (needsRuntime && runtime == null) missing("runtime")
             if (errors.isNotEmpty()) return ManifestParseResult.Failure(errors.toList())
+            // readContributes 只在「contributes 缺失」或「类型不对」时返回 null，两种情况都会先记录错误，
+            // 因此走到这里时 null 只可能是上面已返回的分支；显式兜底一次，让后续读取拿到非空类型。
+            val contributes = parsedContributes
+                ?: return ManifestParseResult.Failure(errors.toList())
 
             return ManifestParseResult.Success(
                 PluginManifest(
@@ -187,7 +191,7 @@ object PluginManifestParser {
                     description = requireNotNull(description),
                     license = requireNotNull(license),
                     pluginApi = requireNotNull(engines),
-                    skills = contributes?.skills ?: emptyList(),
+                    skills = contributes.skills,
                     agents = contributes.agents,
                     workspaceTools = contributes.workspaceTools,
                     uiEntries = contributes.uiEntries,
