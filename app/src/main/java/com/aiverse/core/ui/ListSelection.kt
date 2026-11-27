@@ -233,7 +233,7 @@ fun SelectionActionBar(
             )
             Text(
                 text = stringResource(R.string.common_selected_count, selectedCount),
-                style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

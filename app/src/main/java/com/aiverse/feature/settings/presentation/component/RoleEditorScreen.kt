@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,8 +61,13 @@ import com.aiverse.feature.agent.domain.prompt.PromptFragment
 import com.aiverse.feature.settings.presentation.RoleEditorViewModel
 import com.aiverse.feature.settings.presentation.RoleSaveState
 import compose.icons.FeatherIcons
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.aiverse.feature.workspace.presentation.WorkspaceViewModel
+import com.aiverse.feature.workspace.presentation.component.WorkspaceSelectionHost
 import compose.icons.feathericons.ArrowLeft
 import compose.icons.feathericons.ChevronDown
+import compose.icons.feathericons.Folder
+import compose.icons.feathericons.Plus
 import compose.icons.feathericons.UploadCloud
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,6 +102,10 @@ internal fun RoleEditorScreen(
     var workspaceDropdownExpanded by rememberSaveable { mutableStateOf(false) }
 
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
+    val workspaceViewModel: WorkspaceViewModel = hiltViewModel()
+    var showNewWorkspaceDialog by rememberSaveable { mutableStateOf(false) }
+    var newWorkspaceName by rememberSaveable { mutableStateOf("") }
+    var showWorkspaceDrawer by rememberSaveable { mutableStateOf(false) }
 
     // 绑定的工作区可能已在工作区管理里删除：加载完列表后若找不到对应项，回退为「不绑定」，
     // 避免下拉框继续显示失效名称、保存时又把失效绑带回去（issue #300）。
@@ -379,6 +389,20 @@ internal fun RoleEditorScreen(
                                 workspaceDropdownExpanded = false
                             }
                         )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(FeatherIcons.Plus, contentDescription = null, modifier = Modifier.size(t.scale(16)))
+                                    Spacer(Modifier.width(Spacing.xs))
+                                    Text(stringResource(R.string.workspace_new_workspace))
+                                }
+                            },
+                            onClick = {
+                                workspaceDropdownExpanded = false
+                                newWorkspaceName = ""
+                                showNewWorkspaceDialog = true
+                            }
+                        )
                         workspaces.forEach { ws ->
                             DropdownMenuItem(
                                 text = { Text(ws.displayLabel) },
@@ -389,10 +413,71 @@ internal fun RoleEditorScreen(
                             )
                         }
                     }
+                    TextButton(
+                        onClick = { showWorkspaceDrawer = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(FeatherIcons.Folder, contentDescription = null, modifier = Modifier.size(t.scale(16)))
+                        Spacer(Modifier.width(Spacing.xs))
+                        Text(stringResource(R.string.roles_workspace_manage))
+                    }
+                    Text(
+                        text = stringResource(R.string.roles_workspace_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
     }
+
+    if (showNewWorkspaceDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewWorkspaceDialog = false },
+            title = { Text(stringResource(R.string.workspace_new_workspace)) },
+            text = {
+                AppTextField(
+                    value = newWorkspaceName,
+                    onValueChange = { newWorkspaceName = it },
+                    label = stringResource(R.string.common_workspace),
+                    placeholder = stringResource(R.string.workspace_name_hint),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newWorkspaceName.trim()
+                        if (name.isNotEmpty()) {
+                            viewModel.createWorkspace(name) { created ->
+                                if (created != null) {
+                                    selectedWorkspaceId = created.name
+                                    newWorkspaceName = ""
+                                    showNewWorkspaceDialog = false
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.workspace_create_failed), Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                ) { Text(stringResource(R.string.common_create)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewWorkspaceDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+
+    // 入口复用输入栏的工作区抽屉：切换 / 新建 / 删除 / 外部目录都在同一套面板里完成（#302）。
+    WorkspaceSelectionHost(
+        visible = showWorkspaceDrawer,
+        onDismiss = { showWorkspaceDrawer = false },
+        viewModel = workspaceViewModel,
+        hasRunningSessions = { false },
+        onSwitchConfirmed = {}
+    )
 }
 
 /** 头像类型选择 chip。 */

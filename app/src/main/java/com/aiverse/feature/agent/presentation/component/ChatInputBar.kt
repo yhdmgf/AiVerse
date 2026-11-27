@@ -646,16 +646,19 @@ internal fun ChatInputBar(
                         var modeMenuExpanded by remember { mutableStateOf(false) }
                         Box {
                             // 点击高亮裁剪进按钮圆角，不再方块溢出容器。
-                            // 色块去掉后文字热区会缩小，用 touchTarget 保底，避免触控目标低于推荐值。
+                            // 高度收到 32dp 与右侧图标齐平；横向内距保留，点击区不至于只剩文字宽度。
                             PressableSurface(
                                 onClick = { modeMenuExpanded = !modeMenuExpanded },
                                 shape = RoundedCornerShape(Radius.xs),
-                                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
-                                modifier = Modifier.heightIn(min = densityTokens.touchTarget)
+                                // 外层 16dp + 内距 16dp，模式名左边缘落在 32dp；
+                                // TextFieldValue 版 TextField 不支持 contentPadding，改用同一左内距口径对齐正文。
+                                contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = 0.dp),
+                                // 与右侧 32dp 快捷图标齐平。
+                                modifier = Modifier.height(densityTokens.scale(32))
                             ) {
                                 Text(
                                     text = stringResource(currentMode.labelRes),
-                                    style = MaterialTheme.typography.labelMedium.copy(
+                                    style = MaterialTheme.typography.labelLarge.copy(
                                         color = modeTextColor
                                     )
                                 )
@@ -737,7 +740,7 @@ internal fun ChatInputBar(
                                 .padding(horizontal = Spacing.xs)
                                 .width(densityTokens.scale(1))
                                 .height(densityTokens.scale(14))
-                                .background(MaterialTheme.colorScheme.outlineVariant)
+                                .background(MaterialTheme.colorScheme.outline)
                         )
 
                         val capability = reasoningCapabilityOf(activeProvider, activeProvider?.effectiveModel.orEmpty(), modelMetadata)

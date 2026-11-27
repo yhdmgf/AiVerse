@@ -25,6 +25,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1772,17 +1773,26 @@ fun AIChatPanel(
         }.collect { calibrateToAnchor() }
     }
 
-    // 键盘几何变化信号旁路：键盘弹起/收起会改变视口高度，但常驻校准循环的激活信号只看
-    // busy / 拖拽，非输出态（键盘弹起时往往 idle）不会启动，视口变矮就把最后内容挤出安全区、
-    // 内容被顶到输入框之下。故只在 imeVisible 出现/消失的那一拍触发一次校准，不常驻运行。
-    // 前提保护：仅当原本在跟随（停在末尾附近）时才拉回锚点，正在翻历史（followBottom=false）
-    // 的用户不会被键盘强行拽回底部。
+    // 键盘几何变化信号旁路（#290）：统一为「拉起与回弹」。
+    // - 原本在底部跟随：键盘弹起 / 收起只校准到底部锚点，不改变阅读位置；
+    // - 正在翻历史（followBottom=false）：按键盘高度平移视口，键盘弹起内容整体上移、
+    //   收起再按同一 delta 回弹，避免输入框直接盖住当前阅读内容，也不强制滚到底。
+    // 常驻校准循环只认 busy / 拖拽，idle 时不会启动，所以这里单独监听 ime inset。
     LaunchedEffect(listState, messagesReady) {
         if (!messagesReady) return@LaunchedEffect
-        snapshotFlow { imeVisible }
+        var lastImeBottomPx = imeBottomPx
+        snapshotFlow { imeBottomPx }
             .distinctUntilChanged()
-            .collect {
-                if (followBottom && !userScrollGesture) calibrateToAnchor()
+            .collect { now ->
+                val delta = now - lastImeBottomPx
+                lastImeBottomPx = now
+                if (delta == 0) return@collect
+                if (followBottom && !userScrollGesture) {
+                    calibrateToAnchor()
+                } else if (!followBottom) {
+                    // LazyColumn 正 delta 向列表后方滚，内容整体上移；收起时负 delta 回弹。
+                    runCatching { listState.scrollBy(delta.toFloat()) }
+                }
             }
     }
 

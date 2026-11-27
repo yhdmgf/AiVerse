@@ -809,7 +809,7 @@ fun ProviderEditorScreen(
                         if (isSelectionMode) {
                             Text(
                                 stringResource(R.string.provider_models_selected_count, selectedModels.size),
-                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                                style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.weight(1f)
                             )
@@ -827,7 +827,7 @@ fun ProviderEditorScreen(
                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Text(stringResource(if (allSelected) R.string.provider_models_deselect_all else R.string.provider_models_select_all))
+                                Text(stringResource(if (allSelected) R.string.provider_models_deselect_all else R.string.provider_models_select_all), style = MaterialTheme.typography.labelMedium)
                             }
                             TextButton(
                                 onClick = {
@@ -840,7 +840,7 @@ fun ProviderEditorScreen(
                             ) {
                                 Icon(FeatherIcons.Play, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(Spacing.xs))
-                                Text(stringResource(R.string.provider_models_batch_test))
+                                Text(stringResource(R.string.provider_models_batch_test), style = MaterialTheme.typography.labelMedium)
                             }
                             TextButton(
                                 onClick = { showBatchDeleteConfirm = true },
@@ -851,7 +851,7 @@ fun ProviderEditorScreen(
                             ) {
                                 Icon(FeatherIcons.Trash2, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(Spacing.xs))
-                                Text(stringResource(R.string.provider_models_batch_delete))
+                                Text(stringResource(R.string.provider_models_batch_delete), style = MaterialTheme.typography.labelMedium)
                             }
                             TextButton(
                                 onClick = {
@@ -862,12 +862,12 @@ fun ProviderEditorScreen(
                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                Text(stringResource(R.string.common_cancel))
+                                Text(stringResource(R.string.common_cancel), style = MaterialTheme.typography.labelMedium)
                             }
                         } else {
                             Text(
                                 stringResource(R.string.provider_models_count, models.size),
-                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                                style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f)
                             )

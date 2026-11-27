@@ -49,6 +49,16 @@ class RoleEditorViewModel @Inject constructor(
     val workspaces: StateFlow<List<Workspace>> = workspaceRepository.workspaces
 
     /**
+     * 在角色编辑页直接新建工作区（#302）。委托 [WorkspaceRepository.createWorkspace]，
+     * 自动按当前本地 / 远程模式落盘；创建成功后回调新工作区，供下拉直接选中。
+     */
+    fun createWorkspace(rawName: String, onResult: (Workspace?) -> Unit) {
+        viewModelScope.launch {
+            onResult(workspaceRepository.createWorkspace(rawName))
+        }
+    }
+
+    /**
      * 保存角色。
      *
      * @param existing 编辑既有角色时传入（保留 id / 创建时间 / 内置标记 / 排序）；null 表示新建。

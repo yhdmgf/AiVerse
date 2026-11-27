@@ -236,6 +236,8 @@ fun ChatDrawerContent(
     onRename: (ChatSession, String) -> Unit,
     onTogglePin: (ChatSession) -> Unit,
     onExport: (ChatSession) -> Unit,
+    /** 批量导出选中会话：回调里由宿主打开一次 SAF，再打包成 zip。 */
+    onExportSessions: ((Set<String>) -> Unit)? = null,
     subSessionsByParent: Map<String, List<ChatSession>> = emptyMap(),
     browseState: FileBrowseState,
     fileTreePrefs: FileTreeDisplayPrefs = FileTreeDisplayPrefs.Default,
@@ -429,7 +431,7 @@ fun ChatDrawerContent(
                         Spacer(Modifier.width(Spacing.sm))
                         Text(
                             text = stringResource(R.string.chat_sessions_selected_count, selectedSessionIds.size),
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
@@ -460,6 +462,18 @@ fun ChatDrawerContent(
                             )
                         }
                         Spacer(Modifier.width(Spacing.xs))
+                        IconButton(
+                            onClick = { onExportSessions?.invoke(selectedSessionIds.toSet()) },
+                            enabled = selectedSessionIds.isNotEmpty() && onExportSessions != null,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = FeatherIcons.Download,
+                                contentDescription = stringResource(R.string.chat_batch_export),
+                                modifier = Modifier.size(18.dp),
+                                tint = if (selectedSessionIds.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            )
+                        }
                         IconButton(
                             onClick = { showBatchDeleteConfirm = true },
                             enabled = selectedSessionIds.isNotEmpty(),
@@ -1749,7 +1763,7 @@ private fun FileBrowserTab(
                 ) {
                     Text(
                         text = stringResource(R.string.file_browser_selected_count, selectedPaths.size),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = Spacing.xs)
                     )

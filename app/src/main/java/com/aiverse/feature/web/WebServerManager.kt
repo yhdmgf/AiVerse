@@ -8,7 +8,6 @@ import com.aiverse.feature.agent.data.repository.FavoriteRepository
 import com.aiverse.feature.agent.domain.mcp.McpManager
 import com.aiverse.feature.agent.domain.mention.FileMentionRepository
 import com.aiverse.feature.agent.domain.session.SessionUseCase
-import com.aiverse.feature.agent.domain.session.WorkspacePathResolver
 import com.aiverse.feature.agent.presentation.run.AgentRunManager
 import com.aiverse.feature.settings.domain.repository.AIProviderRepository
 import com.aiverse.feature.settings.data.repository.InputBarSettingsRepository
@@ -83,7 +82,6 @@ class WebServerManager @Inject constructor(
     private val agentRunManager: AgentRunManager,
     private val mcpManager: McpManager,
     private val roleDao: RoleDao,
-    private val workspacePathResolver: WorkspacePathResolver,
     private val inputBarSettingsRepository: InputBarSettingsRepository,
     private val authManager: WebAuthManager
 ) {
@@ -148,7 +146,7 @@ class WebServerManager @Inject constructor(
                             }
                             authRoutes(authManager, settingsRepository)
                             sessionRoutes(sessionDao, messageDao, messageBridge)
-                            sessionManageRoutes(sessionUseCase, workspaceRepository, roleDao, workspacePathResolver)
+                            sessionManageRoutes(sessionUseCase, workspaceRepository, roleDao)
                             streamingRoutes(agentRunManager)
                             roleRoutes(roleDao)
                             mcpRoutes(mcpManager)

@@ -1336,6 +1336,7 @@
     <string name="chat_delete_session_confirm">确定删除「%1$s」？该会话的所有消息都将被清除，且无法恢复。</string>
     <string name="chat_batch_select">批量选择</string>
     <string name="chat_batch_delete_title">删除所选会话</string>
+    <string name="chat_batch_export">导出</string>
     <string name="chat_batch_delete_confirm">确定删除选中的 %1$d 个会话？包含的所有消息都将被清除，且无法恢复。</string>
     <string name="chat_sessions_selected_count">已选 %1$d 个会话</string>
     <string name="chat_move_to_workspace">移动到工作区</string>
@@ -1472,6 +1473,8 @@
     <string name="chat_session_name">会话名</string>
     <string name="chat_export_session">导出会话</string>
     <string name="chat_export_session_done">会话已导出</string>
+    <string name="chat_export_sessions_done">已导出 %1$d 条会话</string>
+    <string name="chat_export_sessions_failed">批量导出失败</string>
     <string name="chat_export_session_failed">导出失败</string>
 
     <!-- Chat Input Bar -->
@@ -2745,6 +2748,7 @@
     <string name="workspace_delete">删除工作区</string>
     <string name="workspace_delete_confirm">删除「%1$s」？目录内所有文件与聊天记录都将删除，且无法恢复。</string>
     <string name="workspace_new_workspace">新建工作区</string>
+    <string name="workspace_create_failed">新建工作区失败，请重试</string>
     <string name="workspace_name_hint">例如 my-project</string>
     <string name="workspace_name_exists">已存在同名工作区</string>
     <string name="workspace_rename">重命名工作区</string>
@@ -3315,6 +3319,8 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
     <string name="roles_field_type">类型</string>
     <string name="roles_avatar_none">无</string>
     <string name="roles_field_workspace">绑定工作区</string>
+    <string name="roles_workspace_manage">管理工作区</string>
+    <string name="roles_workspace_hint">仅作推荐，新建会话仍落在当前工作区</string>
     <string name="roles_field_workspace_none">不绑定</string>
     <string name="roles_field_workspace_placeholder">选择工作区</string>
     <string name="roles_avatar_emoji">Emoji</string>
