@@ -957,7 +957,6 @@ fun AppNavigation(
             },
             workspaceName = currentWorkspace?.name.orEmpty(),
             currentRole = drawerRole,
-            roleWorkspaceName = drawerRole?.workspaceId.orEmpty(),
             onOpenRoleSwitcher = { roleSwitcherSignal++ },
             onAddLocalFolder = { uri ->
                 agentViewModel.addLocalFolder(uri) { ok ->
@@ -1165,22 +1164,29 @@ fun AppNavigation(
                                     },
                                     onOpenProviders = {
                                         navController.navigate("settings?section=providers&from=chat")
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     onOpenSearchProviders = {
                                         navController.navigate("settings?section=search_provider&from=chat")
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     onOpenMcp = {
                                         navController.navigate("settings?section=mcp&from=chat")
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     onOpenOptimizeModelSettings = {
                                         navController.navigate("settings?section=default_models&from=chat")
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     onOpenRoles = {
                                         navController.navigate("settings?section=roles&from=chat")
+                                        // 从角色抽屉点「管理」跳设置页时收起侧栏，避免设置页背后还压着一层抽屉。
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     pluginUpdateCount = pendingPluginUpdates.size,
                                     onOpenPlugins = {
                                         navController.navigate("settings?section=plugins&from=chat")
+                                        if (!permanentDrawer) scope.launch { drawerState.close() }
                                     },
                                     onDismissPluginUpdate = { pluginUpdateNotifier.dismiss() },
                                     onOpenInEditor = openFilePreview

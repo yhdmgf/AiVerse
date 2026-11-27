@@ -264,8 +264,6 @@ fun ChatDrawerContent(
     workspaceName: String = "",
     /** 当前会话绑定角色（已解析；null 表示默认角色未解析）。 */
     currentRole: Role? = null,
-    /** 角色绑定的工作区名；空表示跟随当前工作区。 */
-    roleWorkspaceName: String = "",
     /** 侧栏角色入口点击：打开角色切换抽屉。 */
     onOpenRoleSwitcher: () -> Unit = {},
     onAddLocalFolder: (Uri) -> Unit = {},
@@ -605,14 +603,12 @@ fun ChatDrawerContent(
         }
 
         SettingsGroup {
+            // 角色入口与收藏同一张卡片、同一种行样式，不再单独占一个分组框。
             DrawerRoleRow(
                 role = currentRole,
-                workspaceName = roleWorkspaceName,
                 onClick = onOpenRoleSwitcher
             )
-        }
-
-        SettingsGroup {
+            SettingsDivider()
             if (onOpenFavorites != null) {
                 SettingsRow(
                     icon = FeatherIcons.Bookmark,
@@ -2850,44 +2846,13 @@ private fun sessionGroupLabel(groupKey: String, anchorSession: ChatSession): Str
 @Composable
 private fun DrawerRoleRow(
     role: Role?,
-    workspaceName: String,
     onClick: () -> Unit
 ) {
-    val t = LocalUIDensityTokens.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.lg, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RoleAvatar(role = role, size = t.scale(28))
-        Spacer(modifier = Modifier.width(Spacing.md))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = role?.name ?: stringResource(R.string.chat_role_default),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = if (workspaceName.isBlank()) {
-                    stringResource(R.string.chat_role_workspace_follow)
-                } else {
-                    stringResource(R.string.chat_role_workspace_bound, workspaceName)
-                },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+    SettingsRow(
+        title = role?.name ?: stringResource(R.string.chat_role_default),
+        onClick = onClick,
+        leading = {
+            RoleAvatar(role = role, size = 20.dp)
         }
-        Icon(
-            imageVector = FeatherIcons.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp)
-        )
-    }
+    )
 }
