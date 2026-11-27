@@ -1902,7 +1902,10 @@ class AIAgentViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 FileLogger.w(TAG, "优化输入失败", e)
-                _optimizeEvents.tryEmit(OptimizeEvent.Failure(e.message ?: e.javaClass.simpleName))
+                // 失败提示只发给发起优化的会话：A 优化失败时已切到 B，不应在 B 弹「优化失败」。
+                if (_currentSessionId.value == id) {
+                    _optimizeEvents.tryEmit(OptimizeEvent.Failure(e.message ?: e.javaClass.simpleName))
+                }
             } finally {
                 // 仅当仍是当前 job 时清除标志：连点取消后新 job 接管，旧 job 的 finally 不误清。
                 if (optimizeJob == coroutineContext[Job]) {
