@@ -229,11 +229,14 @@ private fun ProtocolBadge(protocol: RemoteProtocol) {
 @Composable
 fun RemoteConnectionCard(
     conn: RemoteConnection,
+    showInFileTree: Boolean,
+    onToggleFileTree: (Boolean) -> Unit,
     onEdit: (RemoteConnection) -> Unit,
     onDelete: (RemoteConnection) -> Unit,
     dragModifier: Modifier = Modifier
 ) {
     val sortDescription = stringResource(R.string.remote_connection_sort_long_press)
+    val fileTreeDescription = stringResource(R.string.remote_file_tree_show_desc)
     SwipeToDeleteRow(
         onDelete = { onDelete(conn) },
         onClick = { onEdit(conn) }
@@ -271,6 +274,23 @@ fun RemoteConnectionCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
+                    )
+                }
+            }
+            if (conn.protocol == RemoteProtocol.SFTP) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = Spacing.xs)
+                ) {
+                    Text(
+                        text = stringResource(R.string.remote_file_tree_label),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AppSwitch(
+                        checked = showInFileTree,
+                        onCheckedChange = onToggleFileTree,
+                        modifier = Modifier.semantics { contentDescription = fileTreeDescription }
                     )
                 }
             }

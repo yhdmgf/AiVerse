@@ -926,6 +926,9 @@ fun AppNavigation(
                     if (!ok) toastFileOpFailed(context, R.string.file_browser_create_failed)
                 }
             },
+            onSearchFiles = { scope, query, onResult ->
+                agentViewModel.searchRemoteFiles(scope, query, onResult)
+            },
             onRenameEntry = { path, newName ->
                 agentViewModel.renameBrowseEntry(path, newName) { ok ->
                     if (!ok) toastFileOpFailed(context, R.string.file_browser_rename_failed)

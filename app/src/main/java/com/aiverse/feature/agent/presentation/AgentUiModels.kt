@@ -31,6 +31,15 @@ sealed interface FileTreeRoot {
     }
 
     /**
+     * 已配置的 SSH/SFTP 服务器，作为独立于执行模式的远程根。
+     * [connectionId] 只用于定位连接与虚拟路径，显示名取连接名称。
+     */
+    data class RemoteServer(
+        val connectionId: String,
+        override val label: String
+    ) : FileTreeRoot
+
+    /**
      * 当前容器根，对应容器内 `/`。
      * 图标与「容器与镜像」列表一致：[osId] 识别到系统时用该系统 logo，
      * 未识别时 [remote] 为真用服务器图标、为假用硬盘图标。
@@ -60,7 +69,9 @@ data class FileTreeNode(
     /** 展开该目录时读取子项失败（如权限不足）；工作区根读取失败走 [FileBrowseState.Error]。 */
     val hasError: Boolean = false,
     /** 被工作区根 .gitignore 命中：UI 以橙色弱化显示（类 VSCode）。 */
-    val ignored: Boolean = false
+    val ignored: Boolean = false,
+    /** 搜索结果的显示名覆盖（例如相对路径），为空时按根名/条目名显示。 */
+    val displayNameOverride: String? = null
 )
 
 /** 文件浏览剪切板：一次只能持有一项，复制或剪切后待粘贴。 */

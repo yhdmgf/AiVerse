@@ -22,17 +22,16 @@ import javax.inject.Singleton
 class DelegatingFileAccess @Inject constructor(
     private val modeHolder: ExecutionModeHolder,
     private val localFileAccess: LocalFileAccess,
-    private val remoteSftpFileAccess: RemoteSftpFileAccess
+    private val remoteSftpFileAccess: RemoteSftpFileAccess,
+    private val remoteServerFileAccess: RemoteServerFileAccess
 ) : FileAccessProvider {
 
-    private fun delegate(path: String): FileAccessProvider =
-        if (WorkspacePathMapper.isLocalFolderContainerPath(path) ||
-            modeHolder.currentMode() != ExecutionMode.REMOTE_SSH
-        ) {
-            localFileAccess
-        } else {
-            remoteSftpFileAccess
-        }
+    private fun delegate(path: String): FileAccessProvider = when {
+        RemoteServerPaths.isPath(path) -> remoteServerFileAccess
+        WorkspacePathMapper.isLocalFolderContainerPath(path) -> localFileAccess
+        modeHolder.currentMode() != ExecutionMode.REMOTE_SSH -> localFileAccess
+        else -> remoteSftpFileAccess
+    }
 
     override fun backendFor(path: String): FileAccessProvider = delegate(path)
 

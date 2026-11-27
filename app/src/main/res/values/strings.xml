@@ -2535,6 +2535,9 @@
     <string name="remote_add_connection">添加连接通道</string>
     <string name="remote_connection_name_hint">连接名称</string>
     <string name="remote_connection_sort_long_press">长按拖动排序</string>
+    <string name="remote_file_tree_show">在文件树显示</string>
+    <string name="remote_file_tree_label">文件树</string>
+    <string name="remote_file_tree_show_desc">作为独立 SFTP 根显示该服务器文件，不随执行模式切换</string>
     <string name="remote_host_address">主机地址</string>
     <string name="remote_port">端口</string>
     <string name="remote_password">密码</string>

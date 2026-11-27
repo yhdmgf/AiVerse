@@ -35,6 +35,22 @@ class SyncSettingsRepository @Inject constructor(
     )
     val sshGuideSeen: StateFlow<Boolean> = _sshGuideSeen.asStateFlow()
 
+    /** 勾选「在文件树显示」的 SFTP 连接 id 集合；默认不显示，由连接与同步页逐条开启。 */
+    private val _fileTreeConnectionIds = MutableStateFlow(
+        prefs.getStringSet("file_tree_connection_ids", emptySet()).orEmpty().toSet()
+    )
+    val fileTreeConnectionIds: StateFlow<Set<String>> = _fileTreeConnectionIds.asStateFlow()
+
+    fun setFileTreeVisible(connectionId: String, visible: Boolean) {
+        val updated = if (visible) {
+            _fileTreeConnectionIds.value + connectionId
+        } else {
+            _fileTreeConnectionIds.value - connectionId
+        }
+        prefs.edit { putStringSet("file_tree_connection_ids", updated) }
+        _fileTreeConnectionIds.value = updated
+    }
+
     fun setIgnoredPatterns(patterns: String) {
         prefs.edit { putString("ignored_patterns", patterns) }
         _ignoredPatterns.value = patterns
