@@ -873,7 +873,7 @@ class GitViewModel @Inject constructor(
     }
 
     private suspend fun loadPullCommentsFor(number: Long) {
-        val comments = issuesRepository.getComments(number).getOrDefault(emptyList())
+        val comments = issuesRepository.getComments(number.toString()).getOrDefault(emptyList())
         if (_state.value.pullDetailNumber != number) return
         _state.update { it.copy(pullComments = comments, pullCommentsLoading = false) }
     }
@@ -885,7 +885,7 @@ class GitViewModel @Inject constructor(
         if (text.isEmpty() || _state.value.pullActionBusy) return
         _state.update { it.copy(pullActionBusy = true) }
         viewModelScope.launch {
-            val result = issuesRepository.addComment(number, text)
+            val result = issuesRepository.addComment(number.toString(), text)
             if (result.isSuccess) {
                 _state.update { it.copy(pullActionBusy = false, toast = context.getString(R.string.git_pr_comment_success)) }
                 loadPullCommentsFor(number)

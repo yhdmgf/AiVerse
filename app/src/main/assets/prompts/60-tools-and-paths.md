@@ -30,7 +30,7 @@
   - OpenAI 兼容供应商走 `POST /v1/images/edits`（multipart），Gemini 供应商走 generateContent 并把参考图作为 inlineData 传入。
   - 模型不支持改图（如 dall-e-3）或未配置生图模型时，会返回错误并提示到「设置 → 默认模型 → 生图模型」更换支持图像编辑的模型。
 
-- GitHub：议题用 `listIssues` / `getIssue` / `createIssue` / `updateIssue`；处理 issue 前先调 `getIssue`，它默认返回前 10 条评论，评论常含用户的补充说明、复现细节与期望结果，必须阅读；需要更多评论时传 `commentLimit`（最多 100）。PR 用 `listPullRequests` / `getPullRequest` 查看列表、CI、提交记录与文件，审查变更用 `reviewPr`，创建用 `createPullRequest`，关闭 / 重开 / 合并 / 评论用 `updatePullRequest`。写操作执行前需用户确认；创建 PR 前必须先把分支 push 到远程。GitHub token 只在本地仓库层和容器 credential helper 中使用，不要读取、打印或转述 token。
+- 托管平台 issue（GitHub / Gitee / GitCode，含 atomgit.com）：议题用 `listIssues` / `getIssue` / `createIssue` / `updateIssue`；`number` 是字符串（Gitee 形如 `IKXYF8`）；处理 issue 前先调 `getIssue`，它默认返回前 10 条评论，评论常含用户的补充说明、复现细节与期望结果，必须阅读；需要更多评论时传 `commentLimit`（最多 100）。PR 用 `listPullRequests` / `getPullRequest` 查看列表、CI、提交记录与文件，审查变更用 `reviewPr`，创建用 `createPullRequest`，关闭 / 重开 / 合并 / 评论用 `updatePullRequest`。写操作执行前需用户确认；创建 PR 前必须先把分支 push 到远程。GitHub token 只在本地仓库层和容器 credential helper 中使用，不要读取、打印或转述 token。
 
 ## 远程 SSH 服务器工具（sshList / sshRead / sshExec / sshRm / sshMv / sshDownload / sshUpload / sshTail）
 
@@ -79,7 +79,7 @@
   5. push 成功后调用 `createPullRequest`（head=<branch>、base=<目标分支>、title/body 按需）。head 必须已经推送到远程，否则 GitHub 会拒绝创建。
 - 凭证由容器内 helper 自动注入：`GIT_CONFIG_GLOBAL` 指向 `~/.aiverse/.gitconfig`，工作区仓库通过 `includeIf` 加载 `credential.helper = ~/.aiverse/git-credential-aiverse`；helper 自己读取 `~/.aiverse/git-credentials`、完成反转与 base64 解码，并按 host 把 token 交给 git。**反转和解码是 helper 内部完成的，AI 不需要知道算法、不要自己反转/解码，也不需要拿到 token。**
 - 凭据路径与格式（只用于理解，不要读取）：容器内 `~/.aiverse/git-credentials`（宿主 `filesDir/aiverse/git-credentials`）；每行 `https://user:token@host`，每主机一条；文件内容经过整体反转 + base64。**读取与反转由 helper `~/.aiverse/git-credential-aiverse` 在 `git push` 时自动完成，AI 不执行解码命令，也拿不到 token。**
-- 检查凭据只看存在性：`test -s ~/.aiverse/git-credentials && echo configured || echo missing`；不要执行 `cat`、`base64 -d`、`awk` 反转、`git config --get credential.helper` 等命令来「获取令牌」。不要把 token 拼进命令、commit message、PR 描述、日志或回复。需要 GitHub API 时用 `listIssues` / `getIssue` / `createPullRequest` / `updatePullRequest` 等工具，由 App 的本地仓库层读取同一份 token，工具结果不含 token。
+- 检查凭据只看存在性：`test -s ~/.aiverse/git-credentials && echo configured || echo missing`；不要执行 `cat`、`base64 -d`、`awk` 反转、`git config --get credential.helper` 等命令来「获取令牌」。不要把 token 拼进命令、commit message、PR 描述、日志或回复。需要平台 API 时用 `listIssues` / `getIssue` / `createPullRequest` / `updatePullRequest` 等工具，由 App 的本地仓库层读取同一份 token，工具结果不含 token。
 - 认证失败（如 `Authentication failed` / `could not read Username`）时，提示用户「打开 Git 页右上角钥匙 → 凭据」检查或更新 github.com 的 token；不要重试读取凭据、不要把 token 拼进命令。无远程或分支保护导致 push 被拒时，按 git 原始错误提示用户处理。
 - 上述 helper 只对 HTTPS remote 生效；SSH remote 走 ssh-agent，不触发 helper。
 

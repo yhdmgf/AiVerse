@@ -163,7 +163,7 @@ Scrolling down near the bottom automatically loads earlier commits; once everyth
 
 ## Issues (since 1.0.0)
 
-The fourth tab on the Git page, "Issues", manages issues on the hosting platform (GitHub / GitLab, etc.) and requires the repository to be linked to the corresponding remote platform:
+The fourth tab on the Git page, "Issues", manages issues on the hosting platform. Supported: **GitHub / Gitee / GitCode (including atomgit.com)**. The repository must be linked to the corresponding remote and a token for that host (`github.com` / `gitee.com` / `gitcode.com`) must be configured:
 
 -   **List**: each row shows the issue number and title, with the creator's/assignee's avatar at the end of the row. The top provides:
 -   **Sort**: sort by newest, oldest, and other dimensions.
