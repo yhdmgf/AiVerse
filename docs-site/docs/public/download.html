@@ -3,10 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="下载 AiVerse 安卓客户端 —— 在手机上完成完整开发流程的 AI 编程与移动工作站。提供正式版、预览版与测试版通道，支持 GitHub 直连与国内镜像下载，覆盖 ARM64、ARMv7、x86_64 等常见架构。">
-<meta name="keywords" content="AiVerse,安卓 AI 编程,移动工作站,AI 编程助手,APK 下载">
-<link rel="canonical" href="https://www.aivapp.cn/download.html">
-<title>AiVerse 安卓客户端下载 - 在手机上进行 AI 编程的移动工作站</title>
+<title>下载 AiVerse</title>
 <style>
 /* =====================================================================
    设计基调：静谧编辑风 —— 暖纸色中性底、墨色主操作、衬线版本号做视觉锚点，
@@ -175,7 +172,7 @@ html.dark .icon-btn .i-moon{display:none}
 /* ---------- 左栏：上下文层（版本 / 更新日志） ---------- */
 .rail{display:flex;flex-direction:column;min-height:0;padding:var(--s-6) var(--s-5) var(--s-5) var(--s-6);background:var(--surface-2);border-right:1px solid var(--border)}
 .rail-brand{display:flex;align-items:center;gap:var(--s-2);font-weight:600;font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-6)}
-.rail h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.rail h2{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
 .rail .sub{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-5);max-width:34ch}
 .eyebrow{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
 .badge{display:inline-flex;align-items:center;height:20px;padding:0 var(--s-2);border-radius:var(--r-1);font-size:var(--fs-xs);font-weight:600;letter-spacing:0;text-transform:none}
@@ -286,6 +283,17 @@ html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128
 .pkg-desc{font-size:var(--fs-sm);color:var(--text-2);margin:var(--s-2) 0 var(--s-3)}
 .pkg-actions{display:flex;gap:var(--s-2)}
 .pkg-actions .btn{flex:1}
+/* 文件完整性校验：展示官方 md5/sha256 + 浏览器端算 sha256 比对 */
+.pkg-verify{margin-top:var(--s-2);display:flex;flex-direction:column;gap:var(--s-1)}
+.verify-btn{align-self:flex-start;background:none;border:1px dashed var(--border-strong);color:var(--text-2);border-radius:var(--r-sm);padding:6px 12px;font:inherit;font-size:12px;cursor:pointer;transition:.15s}
+.verify-btn:hover{color:var(--text);border-color:var(--text-2);background:var(--surface)}
+.verify-btn:disabled{opacity:.6;cursor:progress}
+.verify-result{font-size:12px;line-height:1.7;color:var(--text-2);word-break:break-all}
+.verify-result .sums{margin:2px 0}
+.verify-result .sums code{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:1px 6px;font-size:11px;color:var(--text)}
+.verify-result .vstatus{margin-top:var(--s-1)}
+.verify-result .vstatus.ok{color:#16a34a;font-weight:600}
+.verify-result .vstatus.bad{color:#dc2626;font-weight:600}
 .pkg:not(.is-rec) .btn{height:var(--ctl-h-sm)}
 .pkg-hint{margin-top:var(--s-2);font-size:var(--fs-xs);color:var(--text-2)}
 .pkg-hint b{color:var(--text)}
@@ -329,7 +337,7 @@ html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128
   .dl-panel{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);width:100%;height:min(92dvh,760px);border-radius:var(--r-3) var(--r-3) 0 0;border-bottom:0;transform:translateY(24px)}
   .rail{padding:var(--s-5) var(--s-5) var(--s-4);border-right:0;border-bottom:1px solid var(--border)}
   .rail-brand,.rail .sub,.notes-label{display:none}
-  .rail h1{display:none}
+  .rail h2{display:none}
   .ver-big{font-size:var(--fs-lg);min-height:28px}
   .release-note{display:none}
   .ops-bar{position:absolute;top:var(--s-2);right:var(--s-2);padding:0}
@@ -355,7 +363,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
  .dl-panel,.dl[data-open="true"] .dl-panel{width:100%;height:auto;min-height:calc(100dvh - 20px);max-height:none;border-radius:14px;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
  .rail{padding:22px 20px 16px}
  .rail-brand{display:flex!important;margin-bottom:10px}
- .rail h1{display:block!important;margin-bottom:4px}
+ .rail h2{display:block!important;margin-bottom:4px}
  .rail .sub{display:block!important;margin-bottom:12px}
  .ver-big{font-size:25px;min-height:30px}
  /* 移动端也显示更新公告，限高+内部滚动，避免挤占空间 */
@@ -371,7 +379,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 /* 独立下载页的视觉细节 */
 .rail{background:linear-gradient(155deg,var(--surface-2),var(--surface));}
 .rail-brand{letter-spacing:.02em}
-.rail h1{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
+.rail h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
 .eyebrow{letter-spacing:.07em;text-transform:uppercase}
 .ver-big{font-size:clamp(34px,4vw,48px);letter-spacing:-.045em}
 .ops-bar{padding:14px 16px 0}
@@ -382,7 +390,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 .pkg{border-radius:12px;padding:17px}
 .pkg.is-rec{border-color:var(--border-strong);box-shadow:0 5px 18px rgba(28,27,25,.055)}
 .pkg-name{letter-spacing:-.02em}
-@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h1{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
+@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h2{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
 
 /* =====================================================================
    测试版确认弹窗 .test-modal
@@ -438,7 +446,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     <!-- 左栏：上下文 -->
     <aside class="rail">
       <div class="rail-brand"><svg class="ic"><use href="#i-mark"/></svg>AiVerse</div>
-      <h1 id="dlTitle">下载 AiVerse</h1>
+      <h2 id="dlTitle">下载 AiVerse</h2>
       <p class="sub">在手机上完成完整开发流程的 AI 编程与移动工作站。</p>
 
       <div class="eyebrow" id="infoEyebrow"><span id="infoTitle">版本信息</span><span class="badge stable" id="channelBadge">正式版</span></div>
@@ -474,7 +482,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
           </div>
         </div>
 
-        <div class="group">
+        <div class="group" id="sourceGroup" hidden>
           <div class="group-label" id="lblSource">下载源</div>
           <div class="switch" id="sourceSwitch" role="radiogroup" aria-labelledby="lblSource">
             <div class="thumb"></div>
@@ -538,6 +546,9 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   // 测试版：独立仓库 yhdmgf/aiverse-beta，仅供内部使用
   var TEST_OWNER='yhdmgf', TEST_REPO='aiverse-beta';
   var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
+  // 本站 APK 签名签发接口（CDN URL 鉴权）：仅本站 /apk/ 下载走此流程，第三方渠道不签名。
+  // 签发端地址可按环境替换；前端只调接口拿签名链接，不实现签名算法、不接触密钥。
+  var SIGN_API='https://api.aivapp.cn/sign';
   // 双镜像：用户可手动选择镜像一/镜像二
   var MIRRORS=[
     {name:'镜像一', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/aiverse/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
@@ -686,8 +697,8 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   function mirrorUrl(idx,tag,key){ return MIRRORS[idx].build(tag,key); }
 
   /* ---------- 下载按钮结构：图标槽同时容纳 default / loading / success ---------- */
-  function dlBtn(cls,href,label){
-    return '<a class="btn '+cls+'" href="'+href+'" download>'
+  function dlBtn(cls,href,label,signFile){
+    return '<a class="btn '+cls+'" href="'+href+'" download'+(signFile?' data-sign="'+signFile+'"':'')+'>'
       +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
       +'<span class="btn-label">'+label+'</span></a>';
   }
@@ -718,14 +729,19 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         } else {
           html+=head+'<div class="pkg-actions">'+dlBtn(main,'https://gh.aivapp.cn/'+tgh,'镜像下载')+'</div></article>';
         }
-      } else if(state.source==='github'){
-        html+=head+'<div class="pkg-actions">'+dlBtn(main,ghUrl(tag,p.key),'GitHub 直连下载')+'</div></article>';
       } else {
-        // 镜像模式：每个包固定两个按钮（镜像一 / 镜像二），不做检测，直接可点
+        // 正式版/预览版：本站为主（/apk/，文件名与 GitHub Release 一致）+ GitHub 直连备用，不再使用镜像一/二
+        // 本站下载走签名：file 为本站相对路径，由签发端换签名临时链接
+        var siteFile='/apk/'+a.name;
+        var siteUrl='https://www.aivapp.cn'+siteFile;
         html+=head+'<div class="pkg-actions">'
-          +dlBtn(main,mirrorUrl(0,tag,p.key),'镜像一')
-          +dlBtn('btn-secondary',mirrorUrl(1,tag,p.key),'镜像二')
-          +'</div><div class="pkg-hint">默认使用镜像一，失败时可点 <b>镜像二</b></div></article>';
+          +dlBtn(main,siteUrl,'本站下载',siteFile)
+          +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub 直连')
+          +'</div>'
+          +'<div class="pkg-verify" data-file="'+siteFile+'">'
+            +'<button type="button" class="verify-btn">校验文件完整性</button>'
+            +'<div class="verify-result" hidden></div>'
+          +'</div></article>';
       }
     });
     if(!html) html=emptyState('该版本未找到安装包资源','这个版本没有附带可用的安装包，请切换通道或前往发布页查看。');
@@ -813,18 +829,16 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     var badge=$('channelBadge');
     badge.className='badge '+(isTest?'test':(isBeta?'beta':'stable'));
     badge.textContent=chName;
-    // 镜像提示：测试版仅一个 gh 镜像，正式版/预览版为镜像一/镜像二双镜像
+    // 正式版/预览版不再使用镜像，隐藏“下载源”切换；仅测试版显示并可切 GitHub 直连/镜像
+    $('sourceGroup').hidden=!isTest;
     var tip=$('mirrorTip');
-    if(state.source==='mirror'){
+    if(isTest && state.source==='mirror'){
       tip.hidden=false;
-      if(isTest){
-        $('mirrorTipText').innerHTML='测试版镜像为本站加速（gh.aivapp.cn），仅此一个镜像。';
-      } else {
-        $('mirrorTipText').innerHTML='镜像一为 GitCode，镜像二为本站加速。默认用 <b>镜像一</b>，失败时点 <b>镜像二</b>。';
-      }
+      $('mirrorTipText').innerHTML='测试版镜像为本站加速（gh.aivapp.cn），仅此一个镜像。';
     } else {
       tip.hidden=true;
     }
+    if(isTest) positionThumb($('sourceSwitch'),false);
 
     if(!rel){
       $('verBig').textContent = '暂无'+chName;
@@ -933,9 +947,38 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   $('pkgs').addEventListener('click',function(e){
     var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
     var label=b.querySelector('.btn-label'), old=label.textContent;
+    var signFile=b.getAttribute('data-sign');
     var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
     sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
-    b.classList.add('is-loading'); label.textContent='准备下载…';
+    b.classList.add('is-loading');
+    // 本站 APK：先调签发端拿签名临时链接再跳转；失败按文案提示并恢复按钮
+    if(signFile){
+      e.preventDefault();
+      label.textContent='正在准备下载…';
+      fetch(SIGN_API+'?file='+encodeURIComponent(signFile))
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){
+          if(!d || !d.url) throw new Error('no url');
+          window.location.href=d.url;
+          b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
+          $('sr').textContent='已开始下载';
+          setTimeout(function(){
+            b.classList.remove('is-success'); label.textContent=old;
+            sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
+          },2200);
+        })
+        .catch(function(){
+          b.classList.remove('is-loading'); b.classList.add('is-error');
+          label.textContent='下载链接生成失败，请稍后重试';
+          setTimeout(function(){
+            b.classList.remove('is-error'); label.textContent=old;
+            sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
+          },2800);
+        });
+      return;
+    }
+    // 第三方渠道：保持原生跳转，仅做加载/成功反馈
+    label.textContent='准备下载…';
     setTimeout(function(){
       b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
       $('sr').textContent='已开始下载';
@@ -944,6 +987,41 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
       },2200);
     },700);
+  });
+  /* ---------- 文件完整性校验：取官方哈希 + 浏览器端算 SHA-256 比对 ---------- */
+  $('pkgs').addEventListener('click',function(e){
+    var vb=e.target.closest('.verify-btn'); if(!vb) return;
+    e.preventDefault();
+    var wrap=vb.closest('.pkg-verify'), file=wrap.getAttribute('data-file');
+    var resultEl=wrap.querySelector('.verify-result');
+    vb.disabled=true; var vbOld=vb.textContent; vb.textContent='正在校验…';
+    resultEl.hidden=false; resultEl.innerHTML='<div class="vstatus">正在获取官方校验值…</div>';
+    var done=function(){ vb.disabled=false; vb.textContent=vbOld; };
+    if(!window.crypto||!crypto.subtle||!window.fetch){
+      resultEl.innerHTML='<div class="vstatus bad">当前浏览器不支持完整性校验，请使用现代浏览器。</div>';
+      done(); return;
+    }
+    // 1）取官方校验值（走签发端，同时拿到签名下载链接）
+    fetch(SIGN_API+'?file='+encodeURIComponent(file))
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(d){
+        if(!d||!d.sha256||!d.url) throw new Error('no hash');
+        resultEl.innerHTML='<div class="sums">MD5 <code>'+d.md5+'</code></div>'
+          +'<div class="sums">SHA-256 <code>'+d.sha256+'</code></div>'
+          +'<div class="vstatus">正在计算本地文件校验值，请稍候…</div>';
+        // 2）用签名链接取文件，浏览器端算 SHA-256 与官方值比对
+        return fetch(d.url).then(function(fr){ if(!fr.ok) throw new Error('HTTP '+fr.status); return fr.arrayBuffer(); })
+          .then(function(buf){ return crypto.subtle.digest('SHA-256',buf); })
+          .then(function(dig){
+            var hex=Array.prototype.map.call(new Uint8Array(dig),function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
+            var ok=(hex===d.sha256);
+            resultEl.insertAdjacentHTML('beforeend','<div class="vstatus '+(ok?'ok':'bad')+'">'+(ok?'✓ 校验通过：文件与官方发布一致':'✗ 校验失败：文件可能已损坏或被篡改')+'</div>');
+          });
+      })
+      .catch(function(err){
+        resultEl.innerHTML='<div class="vstatus bad">校验未完成：'+(err&&err.message?err.message:'请稍后重试')+'</div>';
+      })
+      .then(done,done);
   });
   // 空状态 / 错误状态内的操作
   $('pkgs').addEventListener('click',function(e){
