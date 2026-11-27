@@ -112,6 +112,7 @@ import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.SegmentedTabs
 import com.aiverse.core.ui.rememberImeBottomInset
+import com.aiverse.core.ui.RoleAvatar
 import com.aiverse.feature.settings.presentation.component.ModelSearchField
 import com.aiverse.feature.settings.presentation.component.SettingsDivider
 import com.aiverse.feature.settings.presentation.component.SettingsGroup
@@ -120,6 +121,7 @@ import com.aiverse.feature.settings.presentation.component.SettingsRow
 import com.aiverse.feature.settings.presentation.component.settingsPageBackground
 import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.feature.agent.domain.model.ChatSession
+import com.aiverse.feature.agent.domain.model.Role
 import com.aiverse.feature.agent.presentation.AgentUIState
 import com.aiverse.feature.agent.presentation.ChatSearchHit
 import com.aiverse.feature.agent.presentation.ChatSearchState
@@ -260,6 +262,12 @@ fun ChatDrawerContent(
     onCancelPasteOverwrite: () -> Unit,
     onClearClipboard: () -> Unit,
     workspaceName: String = "",
+    /** 当前会话绑定角色（已解析；null 表示默认角色未解析）。 */
+    currentRole: Role? = null,
+    /** 角色绑定的工作区名；空表示跟随当前工作区。 */
+    roleWorkspaceName: String = "",
+    /** 侧栏角色入口点击：打开角色切换抽屉。 */
+    onOpenRoleSwitcher: () -> Unit = {},
     onAddLocalFolder: (Uri) -> Unit = {},
     onRemoveLocalFolder: (String) -> Unit = {},
     onUploadFiles: (String, List<Uri>) -> Unit = { _, _ -> },
@@ -594,6 +602,14 @@ fun ChatDrawerContent(
                     )
                 }
             }
+        }
+
+        SettingsGroup {
+            DrawerRoleRow(
+                role = currentRole,
+                workspaceName = roleWorkspaceName,
+                onClick = onOpenRoleSwitcher
+            )
         }
 
         SettingsGroup {
@@ -2825,4 +2841,53 @@ private fun sessionGroupLabel(groupKey: String, anchorSession: ChatSession): Str
         stringResource(R.string.session_group_month_format),
         Locale.getDefault()
     ).format(Date(anchorSession.updatedAt))
+}
+
+/**
+ * 侧栏底部角色入口（issue #271）：头像 + 角色名 + 绑定工作区，点击打开角色切换抽屉。
+ * 只负责展示与点击，角色解析与切换仍复用顶栏原有的 RoleSheet。
+ */
+@Composable
+private fun DrawerRoleRow(
+    role: Role?,
+    workspaceName: String,
+    onClick: () -> Unit
+) {
+    val t = LocalUIDensityTokens.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.lg, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RoleAvatar(role = role, size = t.scale(28))
+        Spacer(modifier = Modifier.width(Spacing.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = role?.name ?: stringResource(R.string.chat_role_default),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (workspaceName.isBlank()) {
+                    stringResource(R.string.chat_role_workspace_follow)
+                } else {
+                    stringResource(R.string.chat_role_workspace_bound, workspaceName)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            imageVector = FeatherIcons.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+    }
 }

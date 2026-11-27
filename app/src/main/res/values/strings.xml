@@ -2310,6 +2310,8 @@
 
     <!-- Role (issue #110) -->
     <string name="chat_role_switcher">角色</string>
+    <string name="chat_role_workspace_bound">工作区 · %1$s</string>
+    <string name="chat_role_workspace_follow">跟随当前工作区</string>
     <string name="chat_role_default">默认角色</string>
     <string name="chat_role_manage">管理角色</string>
     <string name="chat_role_current">当前角色</string>

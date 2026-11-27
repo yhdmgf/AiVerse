@@ -2311,6 +2311,8 @@
 
     <!-- Role (issue #110) -->
     <string name="chat_role_switcher">Roles</string>
+    <string name="chat_role_workspace_bound">Workspace · %1$s</string>
+    <string name="chat_role_workspace_follow">Follow current workspace</string>
     <string name="chat_role_default">Default role</string>
     <string name="chat_role_manage">Manage roles</string>
     <string name="chat_role_current">Current role</string>
