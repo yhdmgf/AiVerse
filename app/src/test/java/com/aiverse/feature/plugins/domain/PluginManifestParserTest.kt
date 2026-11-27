@@ -283,6 +283,65 @@ class PluginManifestParserTest {
         )
     }
 
+    // ── 顶层 styleTokens 声明（contributes 优先，顶层兜底）──
+
+    /** 顶层 styleTokens、无其它贡献的最小清单。 */
+    private fun topLevelStyleTokensManifest(styleTokensJson: String) = """
+        {
+          "manifestVersion": 1,
+          "id": "demo.style",
+          "name": "Style",
+          "version": "1.0.0",
+          "publisher": "demo",
+          "repository": "https://example.com/demo/style",
+          "description": "Style demo",
+          "license": "MIT",
+          "engines": {"pluginApi": "^1.0.0"},
+          "styleTokens": $styleTokensJson
+        }
+    """.trimIndent()
+
+    @Test
+    fun topLevelStyleTokens_isParsed() {
+        val manifest = success(
+            topLevelStyleTokensManifest(
+                """{
+                    "cardRadius": 20,
+                    "userBubbleOpacity": 80,
+                    "bubbleUserColor": "primary"
+                }"""
+            )
+        )
+        val tokens = manifest.styleTokens
+        assertTrue(tokens != null)
+        assertEquals(20, tokens?.cardRadius)
+        assertEquals(80, tokens?.userBubbleOpacity)
+        assertEquals("primary", tokens?.bubbleUserColor)
+        assertEquals(1, manifest.contributionCount)
+    }
+
+    @Test
+    fun topLevelStyleTokens_contributesTakesPrecedence() {
+        val manifest = success(
+            """
+            {
+              "manifestVersion": 1,
+              "id": "demo.style",
+              "name": "Style",
+              "version": "1.0.0",
+              "publisher": "demo",
+              "repository": "https://example.com/demo/style",
+              "description": "Style demo",
+              "license": "MIT",
+              "engines": {"pluginApi": "^1.0.0"},
+              "styleTokens": { "cardRadius": 12 },
+              "contributes": { "styleTokens": { "cardRadius": 30 } }
+            }
+            """.trimIndent()
+        )
+        assertEquals(30, manifest.styleTokens?.cardRadius)
+    }
+
     @Test
     fun styleTokens_unknownSemanticColor_isRejected() {
         val result = parse(styleTokensManifest("""{ "iconColor": "neon" }"""))
