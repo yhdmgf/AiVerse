@@ -429,7 +429,7 @@ fun ChatDrawerContent(
                         Spacer(Modifier.width(Spacing.sm))
                         Text(
                             text = stringResource(R.string.chat_sessions_selected_count, selectedSessionIds.size),
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
@@ -1749,7 +1749,7 @@ private fun FileBrowserTab(
                 ) {
                     Text(
                         text = stringResource(R.string.file_browser_selected_count, selectedPaths.size),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = Spacing.xs)
                     )
