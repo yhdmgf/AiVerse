@@ -504,17 +504,39 @@ internal fun ModelSelectionSheet(
                     }
                 }
             } else {
+                // #292：与设置页供应商列表同一口径——有置顶时先「常用」区再「其他」区，
+                // 区内保持 sortOrder；搜索与折叠行为不变，搜索时仍强制展开。
+                val pinnedProviders = activeProviders.filter { it.pinned }
+                val isSectioned = pinnedProviders.isNotEmpty()
+                val orderedProviders = if (isSectioned) {
+                    pinnedProviders + activeProviders.filter { !it.pinned }
+                } else {
+                    activeProviders
+                }
+                val pinnedHeader = stringResource(R.string.provider_pinned_section)
+                val otherHeader = stringResource(R.string.provider_other_section)
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 360.dp, max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    activeProviders.forEach { provider ->
+                    var emittedPinnedHeader = false
+                    var emittedOtherHeader = false
+                    orderedProviders.forEach { provider ->
                         val filteredModels = provider.models.filter {
                             searchQuery.isBlank() || it.contains(searchQuery, ignoreCase = true)
                         }
                         if (filteredModels.isNotEmpty()) {
+                            // 分区标题只在当前区确实有可见提供商时插入，搜索过滤后不留空标题。
+                            if (isSectioned && provider.pinned && !emittedPinnedHeader) {
+                                item(key = "section_pinned") { ProviderSectionHeader(text = pinnedHeader) }
+                                emittedPinnedHeader = true
+                            }
+                            if (isSectioned && !provider.pinned && !emittedOtherHeader) {
+                                item(key = "section_other") { ProviderSectionHeader(text = otherHeader) }
+                                emittedOtherHeader = true
+                            }
                             // 搜索时强制展开，否则用折叠状态：用户搜到名字却看不到结果会很困惑。
                             val expanded = searchQuery.isNotBlank() || provider.id !in collapsedProviderIds
                             item(key = "header_${provider.id}") {
