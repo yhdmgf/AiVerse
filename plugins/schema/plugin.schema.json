@@ -100,6 +100,32 @@
       "additionalProperties": false,
       "properties": {
         "configPage": { "$ref": "#/$defs/packagePath" },
+        "styleTokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "纯装饰外观令牌：圆角 / 透明度 / 颜色。只改宿主组件长什么样，不改功能、布局、内容与数据；每个字段独立可选，按字段取第一个声明它的已启用插件的值，插件优先于使用者设置。",
+          "properties": {
+            "chatInputRadius": { "$ref": "#/$defs/styleRadius" },
+            "cardRadius": { "$ref": "#/$defs/styleRadius" },
+            "buttonRadius": { "$ref": "#/$defs/styleRadius" },
+            "fieldRadius": { "$ref": "#/$defs/styleRadius" },
+            "bubbleRadius": { "$ref": "#/$defs/styleRadius" },
+            "imageRadius": { "$ref": "#/$defs/styleRadius" },
+            "userBubbleOpacity": { "$ref": "#/$defs/styleOpacity" },
+            "assistantBubbleOpacity": { "$ref": "#/$defs/styleOpacity" },
+            "chatPanelOpacity": { "$ref": "#/$defs/styleOpacity" },
+            "bubbleUserColor": { "$ref": "#/$defs/styleColor" },
+            "bubbleUserTextColor": { "$ref": "#/$defs/styleColor" },
+            "topBarColor": { "$ref": "#/$defs/styleColor" },
+            "topBarTextColor": { "$ref": "#/$defs/styleColor" },
+            "drawerColor": { "$ref": "#/$defs/styleColor" },
+            "drawerTextColor": { "$ref": "#/$defs/styleColor" },
+            "iconColor": { "$ref": "#/$defs/styleColor" },
+            "chatInputMinHeight": { "$ref": "#/$defs/styleSize" },
+            "chatInputShadow": { "$ref": "#/$defs/styleShadow" }
+          }
+        },
         "skills": {
           "type": "array",
           "maxItems": 64,
@@ -369,6 +395,56 @@
         "^([Dd]efault|[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*)$": { "type": "string", "maxLength": 600 }
       },
       "additionalProperties": false
+    },
+    "styleRadius": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 48,
+      "description": "宿主组件圆角，单位 dp，取值 0–48。"
+    },
+    "styleOpacity": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 100,
+      "description": "不透明度，单位百分比，取值 10–100。"
+    },
+    "styleSize": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 160,
+      "description": "尺寸，单位 dp，取值 0–160。"
+    },
+    "styleShadow": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 40,
+      "description": "阴影，单位 dp，取值 0–40。"
+    },
+    "styleColor": {
+      "description": "颜色：宿主语义色名，或 #RRGGBB / #AARRGGBB 十六进制值。",
+      "oneOf": [
+        {
+          "enum": [
+            "primary",
+            "onPrimary",
+            "secondary",
+            "tertiary",
+            "surface",
+            "surfaceVariant",
+            "background",
+            "onSurface",
+            "onSurfaceVariant",
+            "outline",
+            "error",
+            "success",
+            "warning",
+            "info",
+            "cardSurface",
+            "pageBackground"
+          ]
+        },
+        { "type": "string", "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" }
+      ]
     }
   }
 }
