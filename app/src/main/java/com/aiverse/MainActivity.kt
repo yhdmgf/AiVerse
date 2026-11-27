@@ -1247,6 +1247,7 @@ fun AppNavigation(
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     initialSection = sectionArg,
+                    fromChat = fromChat,
                     onNavigateBack = {
                         navController.popBackStack()
                         // 从聊天快捷入口进设置页时，返回直接回聊天页，不弹抽屉。
