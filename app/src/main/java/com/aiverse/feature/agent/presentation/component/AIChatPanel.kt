@@ -2068,18 +2068,23 @@ fun AIChatPanel(
             // 顶/底渐隐（issue #269）：用一个离屏层 + BlendMode.DstIn 同时擦除内容本身的顶部与底部，
             // 替代原先「顶栏渐变 scrim + 输入框颜色蒙版」两套铺色逻辑。顶栏与输入框是本 Column 的
             // 兄弟节点、在其之后绘制，不会被擦除。
-            // P4：两个渐变 brush 只定义颜色停靠点、不带起止偏移（start/end 在 drawRect 传参），
-            // 与尺寸无关，可在组合期缓存复用，避免 draw 阶段每帧重新分配 brush。
-            val topFadeBrush = remember {
-                Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 1f)))
-            }
-            val bottomFadeBrush = remember {
-                Brush.verticalGradient(listOf(Color.Black.copy(alpha = 1f), Color.Black.copy(alpha = 0f)))
+            // P4：渐变的起止偏移（startY/endY）直接烘焙进 brush，draw 阶段不再新建 brush、只复用缓存。
+            // 注意 startY/endY 是 Brush.verticalGradient 的参数（DrawScope.drawRect 并无此参数），
+            // 因此这里在组合期用 LocalDensity 换算像素并缓存；顶栏实测高度 / 输入区留白变化时才重建。
+            val density = LocalDensity.current
+            // 顶部：屏幕顶端全透明 → 顶栏下沿(+一小段缓冲)恢复不透明，滚进来的内容越靠上越淡；
+            // 缓冲用密度 token（标准档 4~8dp 区间）避免硬边，不引入新私有 dp。
+            val headerPx = if (headerHeightPx > 0f) headerHeightPx
+            else with(density) { chatHeaderBottomReserveDp.toPx() }
+            val topFadeBrush = with(density) {
+                Brush.verticalGradient(
+                    0f to Color.Black.copy(alpha = 0f),
+                    (headerPx + t.sm.toPx()) to Color.Black.copy(alpha = 1f)
+                )
             }
             // P3：按需离屏。全屏 CompositingStrategy.Offscreen 每帧都要一块全屏缓冲，成本高。
             // 只在「确实要渐隐」时才离屏 + 画渐变：首帧未实测顶栏、滚动中、或内容停在顶/底渐隐带内。
             // 滚动中恒为 true，保证滚进顶/底带的内容始终被淡出，绝不漏渐隐（宁可多启用离屏）。
-            val headerPx = if (headerHeightPx > 0f) headerHeightPx else chatHeaderBottomReserveDp.toPx()
             val fadeActive = headerHeightPx <= 0f || listState.isScrollInProgress || !isAtTop || !isAtBottom
             Column(
                 modifier = Modifier
@@ -2089,25 +2094,19 @@ fun AIChatPanel(
                         drawContent()
                         if (!fadeActive) return@drawWithContent
                         if (size.height <= 0f) return@drawWithContent
-                        // 顶部：屏幕顶端全透明 → 顶栏下沿(+一小段缓冲)恢复不透明，滚进来的内容越靠上越淡；
-                        // 缓冲用密度 token（标准档 4~8dp 区间）避免硬边，不引入新私有 dp。
-                        val topEnd = headerPx + t.sm.toPx()
-                        drawRect(
-                            brush = topFadeBrush,
-                            startY = 0f,
-                            endY = topEnd,
-                            blendMode = BlendMode.DstIn
-                        )
+                        drawRect(brush = topFadeBrush, blendMode = BlendMode.DstIn)
                         // 底部：擦除方向相反，输入框上沿仍不透明 → 屏幕最底(含导航栏/手势条)全透明，
                         // 滑入输入区的内容被擦除。范围沿用 inputBarReservePx（已含悬浮层实测高度 + 键盘跟随），
                         // 终点画到 size.height，导航栏那条区域落在全透段内，绝不露内容。
-                        // P2：小屏 + 键盘弹起 + 顶部横幅（上传/插件更新）同时展开时，inputBarReservePx
-                        // 理论上可能超过本列高度，bottomStart 变负会把渐变区间拉满、整列被淡出，故兜底到 0f。
+                        // P2：渐变起点取「输入框上沿」= 本列底部往上 inputBarReservePx。小屏 + 键盘弹起 +
+                        // 顶部横幅（上传/插件更新）同时展开时，inputBarReservePx 理论上可能超过本列高度，
+                        // 起点变负会把渐变区间拉满、整列被淡出，故兜底到本列上沿（0f）。
                         val bottomStart = (size.height - inputBarReservePx.toFloat()).coerceAtLeast(0f)
                         drawRect(
-                            brush = bottomFadeBrush,
-                            startY = bottomStart,
-                            endY = size.height,
+                            brush = Brush.verticalGradient(
+                                bottomStart to Color.Black.copy(alpha = 1f),
+                                size.height to Color.Black.copy(alpha = 0f)
+                            ),
                             blendMode = BlendMode.DstIn
                         )
                     }
