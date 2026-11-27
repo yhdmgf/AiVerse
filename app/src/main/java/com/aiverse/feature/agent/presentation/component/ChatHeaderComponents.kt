@@ -201,8 +201,10 @@ internal fun ChatHeader(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = Spacing.sm, vertical = 8.dp),
+                    // 两行文字约 38dp；原 56dp 下限再叠 8dp 上下内距，副行下方会空出一圈。
+                    // 收到 50dp 下限 + 5dp 内距：内容仍完整，底部留白少 6dp。
+                    .heightIn(min = 50.dp)
+                    .padding(horizontal = Spacing.sm, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
@@ -691,13 +693,14 @@ private fun ContextUsageRing(
     )
     Box(
         modifier = Modifier
-            .size(t.scale(26))
+            // 点击区与顶栏 32dp 图标按钮统一；圆环仍保持 26dp，在热区内居中。
+            .size(t.scale(32))
             .clip(CircleShape)
             .clickable(onClick = onToggle)
             .semantics { contentDescription = usageLabel },
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.size(t.scale(26))) {
             val stroke = t.scale(3).toPx()
             val arcSize = size.minDimension - stroke
             val topLeft = androidx.compose.ui.geometry.Offset(stroke / 2f, stroke / 2f)
