@@ -147,6 +147,7 @@ import com.aiverse.feature.agent.presentation.hasVisibleContent
 import com.aiverse.feature.agent.presentation.StreamingAssistantMessage
 import com.aiverse.feature.agent.presentation.component.LocalChatFileAccess
 import com.aiverse.feature.agent.domain.model.Role
+import com.aiverse.feature.agent.domain.model.ReasoningEffort
 import com.aiverse.feature.agent.presentation.RoleSwitcherViewModel
 import com.aiverse.feature.agent.domain.model.InstalledApp
 import com.aiverse.feature.onboarding.domain.OnboardingStep
