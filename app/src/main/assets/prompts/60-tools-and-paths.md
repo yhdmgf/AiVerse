@@ -30,7 +30,7 @@
   - OpenAI 兼容供应商走 `POST /v1/images/edits`（multipart），Gemini 供应商走 generateContent 并把参考图作为 inlineData 传入。
   - 模型不支持改图（如 dall-e-3）或未配置生图模型时，会返回错误并提示到「设置 → 默认模型 → 生图模型」更换支持图像编辑的模型。
 
-- 托管平台 issue（GitHub / Gitee / GitCode，含 atomgit.com）：议题用 `listIssues` / `getIssue` / `createIssue` / `updateIssue`；`number` 是字符串（Gitee 形如 `IKXYF8`）；处理 issue 前先调 `getIssue`，它默认返回前 10 条评论，评论常含用户的补充说明、复现细节与期望结果，必须阅读；需要更多评论时传 `commentLimit`（最多 100）。PR 用 `listPullRequests` / `getPullRequest` 查看列表、CI、提交记录与文件，审查变更用 `reviewPr`，创建用 `createPullRequest`，关闭 / 重开 / 合并 / 评论用 `updatePullRequest`。写操作执行前需用户确认；创建 PR 前必须先把分支 push 到远程。GitHub token 只在本地仓库层和容器 credential helper 中使用，不要读取、打印或转述 token。
+- 托管平台 issue（GitHub / Gitee / GitCode，含 atomgit.com）：议题用 `listIssues` / `getIssue` / `createIssue` / `updateIssue`；`number` 是字符串（Gitee 形如 `IKXYF8`）；处理 issue 前先调 `getIssue`，它默认返回前 10 条评论，评论常含用户的补充说明、复现细节与期望结果，必须阅读；需要更多评论时传 `commentLimit`（最多 100）。PR 用 `listPullRequests` / `getPullRequest` 查看列表、CI、提交记录与文件，审查变更用 `reviewPr`，创建用 `createPullRequest`，关闭 / 重开 / 合并 / 评论用 `updatePullRequest`。CI 红灯后先调 `getFailedCheckLogs`（传 PR 编号或提交 SHA），它直接返回失败 job、失败步骤与日志尾部，不用让用户手工贴日志。写操作执行前需用户确认；创建 PR 前必须先把分支 push 到远程。平台 token 只在本地仓库层和容器 credential helper 中使用，不要读取、打印或转述 token。
 
 ## 远程 SSH 服务器工具（sshList / sshRead / sshExec / sshRm / sshMv / sshDownload / sshUpload / sshTail）
 
