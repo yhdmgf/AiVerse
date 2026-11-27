@@ -1167,7 +1167,7 @@ The priority is **plugin > user setting > default**: once a plugin declares a fi
 | `chatInputShadow` | Shadow | 0–40 dp | Chat input box shadow strength |
 | `userBubbleOpacity` | Opacity | 10–100 (%) | User bubble opacity |
 | `assistantBubbleOpacity` | Opacity | 10–100 (%) | AI reply bubble opacity |
-| `chatPanelOpacity` | Opacity | 10–100 (%) | Chat panel (top bar, input box, etc.) opacity |
+| `chatPanelOpacity` | Opacity | 10–100 (%) | Chat panel (input box, floating panels, bubbles, etc.) opacity |
 | `bubbleUserColor` | Color | Semantic token name / hex | User bubble background |
 | `bubbleUserTextColor` | Color | Semantic token name / hex | User bubble text color |
 | `topBarColor` | Color | Semantic token name / hex | Chat top bar background |

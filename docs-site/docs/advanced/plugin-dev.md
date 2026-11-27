@@ -542,7 +542,7 @@ definePlugin({ handlers: {
 | `chatInputShadow` | 阴影 | 0–40 dp | 聊天输入框阴影强度 |
 | `userBubbleOpacity` | 透明度 | 10–100（%） | 使用者气泡不透明度 |
 | `assistantBubbleOpacity` | 透明度 | 10–100（%） | AI 回复气泡不透明度 |
-| `chatPanelOpacity` | 透明度 | 10–100（%） | 聊天面板（顶栏、输入框等）不透明度 |
+| `chatPanelOpacity` | 透明度 | 10–100（%） | 聊天面板（输入框、悬浮面板、气泡等）不透明度 |
 | `bubbleUserColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡底色 |
 | `bubbleUserTextColor` | 颜色 | 语义令牌名 / 十六进制 | 使用者气泡文字颜色 |
 | `topBarColor` | 颜色 | 语义令牌名 / 十六进制 | 聊天顶栏底色 |

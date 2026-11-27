@@ -82,8 +82,6 @@ import androidx.compose.ui.unit.sp
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
-import com.aiverse.core.theme.LocalPluginUiStyle
-import com.aiverse.core.theme.chatPanelGlassOr
 import com.aiverse.core.theme.glassBorderOr
 import com.aiverse.core.theme.glassOr
 import java.util.Calendar
@@ -178,15 +176,10 @@ internal fun ChatHeader(
     onOpenPluginPage: (PluginPage) -> Unit = {},
     onRunPluginAction: (PluginUiEntry) -> Unit = {}
 ) {
-    Surface(
-        color = LocalPluginUiStyle.current?.topBarColor
-            ?: chatPanelGlassOr(MaterialTheme.semanticColors.surfaceGlass),
-        border = if (LocalSurfaceGlassStyle.current) {
-            BorderStroke(1.dp, MaterialTheme.semanticColors.surfaceGlassBorder)
-        } else {
-            null
-        }
-    ) {
+    // 顶栏不再有表面（issue #269）：删掉 Surface 底色与玻璃描边，任何主题下顶栏都不出现边框、
+    // 也不铺任何颜色（融合靠「不铺」不靠「铺得淡」）。滚过的消息改由内容层的顶部渐隐负责淡出
+    // （见 AIChatPanel 内容层 drawWithContent）。标题/图标/胶囊保持原色，状态栏留白不变。
+    Box(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
