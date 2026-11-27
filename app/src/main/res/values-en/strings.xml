@@ -2746,6 +2746,7 @@
     <string name="workspace_delete">Delete Workspace</string>
     <string name="workspace_delete_confirm">Delete "%1$s"? All files in the directory and its chats will be deleted; cannot be undone.</string>
     <string name="workspace_new_workspace">New Workspace</string>
+    <string name="workspace_create_failed">Create workspace failed, please retry</string>
     <string name="workspace_name_hint">e.g. my-project</string>
     <string name="workspace_name_exists">A workspace with this name already exists</string>
     <string name="workspace_rename">Rename Workspace</string>
@@ -3316,6 +3317,8 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
     <string name="roles_field_type">Type</string>
     <string name="roles_avatar_none">None</string>
     <string name="roles_field_workspace">Bound Workspace</string>
+    <string name="roles_workspace_manage">Manage workspaces</string>
+    <string name="roles_workspace_hint">Recommendation only; new sessions still follow the current workspace</string>
     <string name="roles_field_workspace_none">None</string>
     <string name="roles_field_workspace_placeholder">Select workspace</string>
     <string name="roles_avatar_emoji">Emoji</string>
