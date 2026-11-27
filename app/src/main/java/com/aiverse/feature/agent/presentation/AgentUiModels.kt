@@ -69,7 +69,9 @@ data class FileTreeNode(
     /** 展开该目录时读取子项失败（如权限不足）；工作区根读取失败走 [FileBrowseState.Error]。 */
     val hasError: Boolean = false,
     /** 被工作区根 .gitignore 命中：UI 以橙色弱化显示（类 VSCode）。 */
-    val ignored: Boolean = false
+    val ignored: Boolean = false,
+    /** 搜索结果的显示名覆盖（例如相对路径），为空时按根名/条目名显示。 */
+    val displayNameOverride: String? = null
 )
 
 /** 文件浏览剪切板：一次只能持有一项，复制或剪切后待粘贴。 */

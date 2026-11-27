@@ -16,7 +16,9 @@ The "Files" page is an in-place expanding, indented file tree with **two default
 
 Each root can be collapsed and expanded independently, and there is a refresh button at the top right.
 
-At the top of the file tree is a **breadcrumb navigation** (`workspace / subdirectory / …`; tapping a non-final segment folds back to that level and collapses the deeper ones). The "⋯" menu on the right gathers: new file, new folder, import (pick files from the system file picker into the workspace root), search (filter currently visible nodes by file name), show/hide hidden files, edit mode, refresh, and sorting by name / size / modification time.
+At the top of the file tree is a **breadcrumb navigation** (`workspace / subdirectory / …`; tapping a non-final segment folds back to that level and collapses the deeper ones). The "⋯" menu on the right gathers: new file, new folder, import (pick files from the system file picker into the workspace root), search (filter currently visible nodes by file name for the workspace/container, or recursively search the server for an SSH root), show/hide hidden files, edit mode, refresh, and sorting by name / size / modification time. **New file / new folder** at the top applies to the currently focused directory: select any root or subdirectory first and the new entry lands there.
+
+The SSH server root row itself cannot be renamed or deleted, to avoid deleting the whole `/`; files and directories below it can be created, renamed, deleted, copied, and moved normally.
 
 -   Tapping a directory expands or collapses it in place; tapping a file opens the editing page directly (images and install packages — see "Images and Install Packages" below) — no need to drill down and back level by level.
 -   Directories are listed before files, and within each kind they are sorted by name.

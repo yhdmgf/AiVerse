@@ -1203,6 +1203,53 @@ class AIAgentViewModel @Inject constructor(
         }
     }
 
+    /**
+     * SSH 根的递归文件名搜索。
+     *
+     * 普通文件树只过滤「已展开」节点；远程根默认折叠且不可能全展开，所以单独走
+     * [FileAccessProvider.listFilesRecursive] 在后台按文件名匹配。只返回文件（不返回目录），
+     * 深度与数量都设上限，避免一次搜索把整台服务器扫穿。
+     */
+    fun searchRemoteFiles(
+        scope: String,
+        query: String,
+        onResult: (List<FileTreeNode>) -> Unit
+    ) {
+        val keyword = query.trim()
+        if (keyword.isEmpty()) {
+            onResult(emptyList())
+            return
+        }
+        viewModelScope.launch {
+            val hits = withContext(Dispatchers.IO) {
+                runCatching {
+                    fileAccess.listFilesRecursive(scope, maxDepth = 12)
+                        .asSequence()
+                        .filter { rel ->
+                            rel.substringAfterLast('/').contains(keyword, ignoreCase = true)
+                        }
+                        .take(300)
+                        .map { rel ->
+                            val name = rel.substringAfterLast('/')
+                            FileTreeNode(
+                                entry = FileEntry(
+                                    name = name,
+                                    isDirectory = false,
+                                    size = 0,
+                                    lastModified = 0
+                                ),
+                                path = childPathPrefix(scope) + rel,
+                                depth = 0,
+                                displayNameOverride = rel
+                            )
+                        }
+                        .toList()
+                }.getOrElse { emptyList() }
+            }
+            onResult(hits)
+        }
+    }
+
     // region 文件复制 / 剪切 / 粘贴
 
     /** 文件浏览剪切板：复制或剪切后暂存源条目，供粘贴到其它目录。 */

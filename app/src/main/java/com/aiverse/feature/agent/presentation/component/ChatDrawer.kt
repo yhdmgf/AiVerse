@@ -149,6 +149,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.feature.agent.presentation.FileTreeRoot
 import com.aiverse.feature.workspace.domain.FileAccessProvider
+import com.aiverse.feature.workspace.domain.RemoteServerPaths
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.core.ui.ChevronRotationStyle
@@ -253,6 +254,7 @@ fun ChatDrawerContent(
     onRefreshBrowse: () -> Unit,
     onCreateFile: (String, String) -> Unit,
     onCreateFolder: (String, String) -> Unit,
+    onSearchFiles: (String, String, (List<FileTreeNode>) -> Unit) -> Unit = { _, _, onResult -> onResult(emptyList()) },
     onRenameEntry: (String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     onCopyEntry: (String, String) -> Unit,
@@ -555,6 +557,7 @@ fun ChatDrawerContent(
                     onRefresh = onRefreshBrowse,
                     onCreateFile = onCreateFile,
                     onCreateFolder = onCreateFolder,
+                    onSearchFiles = onSearchFiles,
                     onRenameEntry = onRenameEntry,
                     onDeleteEntry = onDeleteEntry,
                     onCopyEntry = onCopyEntry,
@@ -1201,6 +1204,7 @@ private fun FileBrowserTab(
     onRefresh: () -> Unit,
     onCreateFile: (String, String) -> Unit,
     onCreateFolder: (String, String) -> Unit,
+    onSearchFiles: (String, String, (List<FileTreeNode>) -> Unit) -> Unit = { _, _, onResult -> onResult(emptyList()) },
     onRenameEntry: (String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     onCopyEntry: (String, String) -> Unit,
@@ -1242,8 +1246,29 @@ private fun FileBrowserTab(
     // 搜索：⋯ 菜单打开后按文件名过滤当前可见节点
     var searchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    // 面包屑焦点目录：默认工作区根，展开工作区目录时跟随，点上级折回
+    // 面包屑焦点目录：默认工作区根，展开任意根/目录时跟随，点上级折回
     var focusPath by remember { mutableStateOf(workspaceRoot) }
+    // SSH 根搜索是递归的，结果异步回来；工作区/容器仍用下面本地过滤。
+    var remoteSearchHits by remember { mutableStateOf<List<FileTreeNode>>(emptyList()) }
+    var remoteSearchLoading by remember { mutableStateOf(false) }
+    val remoteSearchScope = focusPath.takeIf { it.startsWith(RemoteServerPaths.PREFIX) }
+    val remoteSearchActive = searchActive && searchQuery.isNotBlank() && remoteSearchScope != null
+    LaunchedEffect(searchActive, searchQuery, remoteSearchScope) {
+        if (!remoteSearchActive || remoteSearchScope == null) {
+            remoteSearchHits = emptyList()
+            remoteSearchLoading = false
+            return@LaunchedEffect
+        }
+        val requested = searchQuery
+        remoteSearchLoading = true
+        onSearchFiles(remoteSearchScope, requested) { hits ->
+            // 查询已变时丢弃旧结果，避免慢函数返回覆盖新搜索。
+            if (searchQuery == requested) {
+                remoteSearchHits = hits
+                remoteSearchLoading = false
+            }
+        }
+    }
     // 上传时记住长按的目标目录；系统选择器回调时目标目录行可能已被刷新，不能用菜单节点。
     var uploadTarget by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -1342,9 +1367,13 @@ private fun FileBrowserTab(
             }
         }
     }
-    // 搜索过滤后的可见节点（仅按名称过滤；隐藏文件由显示偏好在后端过滤）
-    val visibleNodes = browseNodes.filter { node ->
-        searchQuery.isBlank() || node.displayName.contains(searchQuery, ignoreCase = true)
+    // 搜索过滤后的可见节点：SSH 根递归搜索用异步结果，其余只按名称过滤当前可见节点。
+    val visibleNodes = if (remoteSearchActive) {
+        remoteSearchHits
+    } else {
+        browseNodes.filter { node ->
+            searchQuery.isBlank() || node.displayName.contains(searchQuery, ignoreCase = true)
+        }
     }
     // 多选「全选/取消全选」：对当前可见的所有文件（非目录）切换选择
     fun toggleSelectAll() {
@@ -1433,7 +1462,7 @@ private fun FileBrowserTab(
                             leadingIcon = { Icon(FeatherIcons.FilePlus, contentDescription = null, modifier = Modifier.size(18.dp)) },
                             onClick = {
                                 showRootMenu = false
-                                creating = CreateTarget(workspaceRoot, CreateKind.FILE)
+                                creating = CreateTarget(focusPath, CreateKind.FILE)
                             }
                         )
                         DropdownMenuItem(
@@ -1441,7 +1470,7 @@ private fun FileBrowserTab(
                             leadingIcon = { Icon(FeatherIcons.FolderPlus, contentDescription = null, modifier = Modifier.size(18.dp)) },
                             onClick = {
                                 showRootMenu = false
-                                creating = CreateTarget(workspaceRoot, CreateKind.FOLDER)
+                                creating = CreateTarget(focusPath, CreateKind.FOLDER)
                             }
                         )
                         DropdownMenuItem(
@@ -1646,13 +1675,24 @@ private fun FileBrowserTab(
                                         inSelectionMode -> toggleSelect(node)
                                         node.entry.isDirectory -> {
                                             onToggleExpand(node.path)
-                                            // 展开工作区目录时，面包屑跟随到该目录
-                                            if (node.path.startsWith(workspaceRoot)) focusPath = node.path
+                                            // 焦点跟随任意根/目录：顶部「新建」与 SSH 搜索都按当前焦点作用域。
+                                            focusPath = node.path
                                         }
-                                        else -> onOpenFile(node.path)
+                                        else -> {
+                                            // 文件：焦点回到所在目录，顶部新建仍落在同一目录。
+                                            focusPath = node.path.substringBeforeLast('/').ifEmpty { node.path }
+                                            onOpenFile(node.path)
+                                        }
                                     }
                                 },
-                                onLongClick = { menuNode = node },
+                                onLongClick = {
+                                    focusPath = if (node.entry.isDirectory) {
+                                        node.path
+                                    } else {
+                                        node.path.substringBeforeLast('/').ifEmpty { node.path }
+                                    }
+                                    menuNode = node
+                                },
                                 onToggleSelect = { toggleSelect(node) },
                                 modifier = Modifier.animateItem(
                                     fadeInSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
@@ -1665,7 +1705,14 @@ private fun FileBrowserTab(
                 }
             }
         }
-        if (state is FileBrowseState.Success && searchActive && searchQuery.isNotBlank() && visibleNodes.isEmpty()) {
+        if (state is FileBrowseState.Success && remoteSearchLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                DrawerProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        } else if (state is FileBrowseState.Success && searchActive && searchQuery.isNotBlank() && visibleNodes.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -2489,7 +2536,7 @@ private fun FileTreeIconVector(vector: ImageVector, decorationColor: Color?, tin
 private val FileTreeIgnoredColor = Color(0xFFCC8844)
 
 /** 文件树一行的显示名：根节点用根标签（工作区根 `workspace` / 当前容器名），其余用条目名。 */
-private val FileTreeNode.displayName: String get() = root?.label ?: entry.name
+private val FileTreeNode.displayName: String get() = displayNameOverride ?: root?.label ?: entry.name
 
 /** 插件会话合成一个不落库的 [ChatSession]，仅供 [ChatSessionRow] 渲染（标题/时间）。 */
 private fun PluginSessionSummary.asChatSession(): ChatSession = PluginSessionUiMapper.toChatSession(this)
