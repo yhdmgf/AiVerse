@@ -29,7 +29,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +40,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -72,13 +73,10 @@ import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.workspace.domain.FileAccessProvider
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.ChevronRight
-import compose.icons.feathericons.Download
 import compose.icons.feathericons.FileText
 import compose.icons.feathericons.Image
 import compose.icons.feathericons.Maximize
 import compose.icons.feathericons.Music
-import compose.icons.feathericons.Plus
-import compose.icons.feathericons.Share2
 import compose.icons.feathericons.Video
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -103,9 +101,9 @@ internal fun MessageAttachmentList(
     attachments: List<AgentAttachment>,
     /** 紧凑行（工具卡片缩略图行）还是内联大卡（消息气泡图片画廊大图 / 视频内联播放器）。 */
     compact: Boolean = false,
-    onClick: ((AgentAttachment) -> Unit)? = null,
-    /** 消息气泡里「插入聊天」动作回调；工具卡片不传。仅非 compact 时图片大卡展示该动作。 */
-    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+    /** 当前消息是否为用户发送：图片 / 视频卡下方的文件名与路径按发送方对齐。 */
+    isUser: Boolean = false,
+    onClick: ((AgentAttachment) -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -117,8 +115,8 @@ internal fun MessageAttachmentList(
             MessageAttachmentRow(
                 attachment = attachment,
                 compact = compact,
-                onClick = onClick,
-                onInsertAttachment = onInsertAttachment
+                isUser = isUser,
+                onClick = onClick
             )
         }
     }
@@ -128,8 +126,8 @@ internal fun MessageAttachmentList(
 private fun MessageAttachmentRow(
     attachment: AgentAttachment,
     compact: Boolean = false,
-    onClick: ((AgentAttachment) -> Unit)? = null,
-    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+    isUser: Boolean = false,
+    onClick: ((AgentAttachment) -> Unit)? = null
 ) {
     val t = LocalUIDensityTokens.current
     // 附件媒体类型：音频改内联语音条（不弹播放器），视频在消息气泡改内联播放器（issue #238）。
@@ -152,14 +150,15 @@ private fun MessageAttachmentRow(
         )
         return
     }
-    // 消息气泡（compact=false）里图片 / 视频改内联大卡：图片画廊大图（横图封顶 4:3、竖图自然比例 +
-    // 操作条），视频内联播放器（只做播放 + 全屏入口）。工具卡片（compact=true）保持原缩略图行，行为不变。
+    // 消息气泡（compact=false）里图片 / 视频改内联大卡：图片按自身比例定高（宽图 3:1 不再留大片空白）
+    // + 下方文件名/路径，视频内联播放器 + 下方文件名/路径；保存/分享/插入收进消息「更多」菜单。
+    // 工具卡片（compact=true）保持原缩略图行，行为不变。
     if (!compact && attachment.isImage) {
-        LargeImageAttachment(attachment = attachment, onInsertAttachment = onInsertAttachment)
+        LargeImageAttachment(attachment = attachment, isUser = isUser)
         return
     }
     if (!compact && isVideo) {
-        InlineVideoAttachment(attachment = attachment)
+        InlineVideoAttachment(attachment = attachment, isUser = isUser)
         return
     }
     CompactAttachmentRow(attachment = attachment, onClick = onClick)
@@ -265,11 +264,13 @@ private sealed interface LargeImageLoad {
 }
 
 /**
- * 消息气泡里的图片内联大卡（issue #238）：
- * - 横图（宽高比 ≥ 4:3）封顶 4:3（卡高 = 卡宽 × 3/4），[ContentScale.Fit] 居中留边；
+ * 消息气泡里的图片内联大卡（issue #238 / #304）：
+ * - 宽图（宽高比 ≥ 4:3）按自身比例定高（3:1 就是卡宽 ÷ 3），不再统一按 4:3 留出上下大片空白；
+ *   超宽全景图有最小高度，[ContentScale.Fit] 居中留边、不裁切；
  * - 竖图 / 长截图（宽高比 < 4:3）按自然比例显示，最大高上限按 UIDensityTokens.scale 缩放（约 400dp）
  *   防长截图顶满屏，不裁切。
- * 点击大图走内置全屏查看器（[LocalImageViewer]）；下方操作条提供「保存到相册 / 分享 / 插入聊天」。
+ * 点击大图走内置全屏查看器（[LocalImageViewer]）；保存 / 分享 / 插入聊天收进消息「更多」菜单，
+ * 不再在图片下方常驻独立操作行。图片下方固定展示文件名与容器路径。
  *
  * 大图独立解码链：不走 44dp 缩略图（[ThumbnailCache]），按卡宽采样解码（[decodeSampledBitmap]），
  * 宽高比经 [readImageSize] 只读边界，不申请像素内存。
@@ -277,7 +278,7 @@ private sealed interface LargeImageLoad {
 @Composable
 private fun LargeImageAttachment(
     attachment: AgentAttachment,
-    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+    isUser: Boolean = false
 ) {
     val viewer = LocalImageViewer.current
     val t = LocalUIDensityTokens.current
@@ -303,7 +304,7 @@ private fun LargeImageAttachment(
             } else {
                 4f / 3f
             }
-            val displayHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400))
+            val displayHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400), t.scale(120))
             val maxEdgePx = with(density) { maxOf(cardWidth, displayHeight).toPx() }.toInt()
             val bitmap = withContext(Dispatchers.IO) { decodeSampledBitmap(file.absolutePath, maxEdgePx) }
             value = if (bitmap != null) LargeImageLoad.Ready(bitmap, size) else LargeImageLoad.Failed
@@ -325,8 +326,8 @@ private fun LargeImageAttachment(
                     } else {
                         4f / 3f
                     }
-                    // 横图封顶 4:3；竖图 / 长截图自然比例但封顶（约 400dp），防顶满屏且不裁切。
-                    val cardHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400))
+                    // 宽图按自身比例定高（超宽给下限），竖图 / 长截图自然比例但封顶（约 400dp），防顶满屏且不裁切。
+                    val cardHeight = largeImageCardHeight(cardWidth, aspect, t.scale(400), t.scale(120))
                     Surface(
                         shape = RoundedCornerShape(t.imageCorner),
                         color = chatMutedSurfaceColor(),
@@ -357,11 +358,7 @@ private fun LargeImageAttachment(
                             }
                         }
                     }
-                    // 操作条：保存到相册 / 分享 / 插入聊天（仅消息气泡有插入回调时展示）。
-                    AttachmentActionRow(
-                        attachment = attachment,
-                        onInsertAttachment = onInsertAttachment
-                    )
+                    MediaAttachmentCaption(attachment = attachment, isUser = isUser)
                 }
             }
         }
@@ -369,14 +366,15 @@ private fun LargeImageAttachment(
 }
 
 /**
- * 内联大卡显示高度：横图（宽高比 ≥ 4:3）封顶 4:3（卡高 = 卡宽 × 3/4），[ContentScale.Fit] 居中留边；
- * 竖图 / 长截图（宽高比 < 4:3）按自然比例（卡高 = 卡宽 / aspect），但不超过 [maxHeight]（约 400dp），
- * 防长截图顶满屏且不裁切。采样口径（[LargeImageAttachment] 的 maxEdge）与渲染卡高共用这一份，
- * 避免解码分辨率与显示高度脱节（竖图按卡宽采样会被 Fit 轻微放大发虚）。
+ * 内联大卡显示高度（issue #304）：
+ * - 宽图（宽高比 ≥ 4:3）按自身比例（卡高 = 卡宽 / aspect），3:1 的图就是卡宽的 1/3；
+ *   极宽全景图（如 10:1）卡高会被压得很薄，这里给 [minHeight] 下限，图仍按 Fit 居中、两侧留白不裁切；
+ * - 竖图 / 长截图（宽高比 < 4:3）按自然比例，但不超过 [maxHeight]（约 400dp），防长截图顶满屏。
+ * 采样口径（[LargeImageAttachment] 的 maxEdge）与渲染卡高共用这一份，保证解码 >= 显示、不虚也不超采。
  */
-private fun largeImageCardHeight(cardWidth: Dp, aspect: Float, maxHeight: Dp): Dp =
+private fun largeImageCardHeight(cardWidth: Dp, aspect: Float, maxHeight: Dp, minHeight: Dp): Dp =
     if (aspect >= 4f / 3f) {
-        cardWidth * 3f / 4f
+        (cardWidth / aspect).coerceAtLeast(minHeight)
     } else {
         (cardWidth / aspect).coerceAtMost(maxHeight)
     }
@@ -394,7 +392,10 @@ private sealed interface InlineVideoLoad {
  * 默认不自动播放，用户点 ▶ 才播；失败时回退紧凑行（仍可点开全屏播放器重试）。
  */
 @Composable
-private fun InlineVideoAttachment(attachment: AgentAttachment) {
+private fun InlineVideoAttachment(
+    attachment: AgentAttachment,
+    isUser: Boolean = false
+) {
     val mediaViewer = LocalMediaViewer.current
     val t = LocalUIDensityTokens.current
     val fileAccess = LocalChatFileAccess.current
@@ -408,38 +409,41 @@ private fun InlineVideoAttachment(attachment: AgentAttachment) {
     when (val loaded = state) {
         InlineVideoLoad.Failed -> CompactAttachmentRow(attachment = attachment, onClick = null)
         else -> {
-            Surface(
-                shape = RoundedCornerShape(t.imageCorner),
-                color = Color.Black,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(t.scale(200))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Surface(
+                    shape = RoundedCornerShape(t.imageCorner),
+                    color = Color.Black,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (loaded is InlineVideoLoad.Ready) {
-                        InlineVideoPlayer(file = loaded.file)
-                    } else {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-                    }
-                    // 全屏入口：复用应用内播放器（内含 FIT↔FILL 全屏切换），不再重复造全屏。
-                    IconButton(
-                        onClick = { mediaViewer.show(request) },
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(Spacing.sm)
+                            .fillMaxWidth()
+                            .height(t.scale(200))
                     ) {
-                        Icon(
-                            imageVector = FeatherIcons.Maximize,
-                            contentDescription = stringResource(R.string.chat_attachment_fullscreen),
-                            tint = Color.White
-                        )
+                        if (loaded is InlineVideoLoad.Ready) {
+                            InlineVideoPlayer(file = loaded.file)
+                        } else {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
+                        // 全屏入口：复用应用内播放器（内含 FIT↔FILL 全屏切换），不再重复造全屏。
+                        IconButton(
+                            onClick = { mediaViewer.show(request) },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(Spacing.sm)
+                        ) {
+                            Icon(
+                                imageVector = FeatherIcons.Maximize,
+                                contentDescription = stringResource(R.string.chat_attachment_fullscreen),
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
+                MediaAttachmentCaption(attachment = attachment, isUser = isUser)
             }
         }
     }
@@ -476,117 +480,93 @@ private fun InlineVideoPlayer(file: File) {
 }
 
 /**
- * 图片大卡操作条：保存到相册（[saveImageToGallery]）、分享（系统分享面板）、插入聊天（[onInsertAttachment]）。
- * 保存 / 分享在组件内用 [LocalContext] + [rememberCoroutineScope] + [LocalChatFileAccess] 处理；
- * 文件失效时先经文件访问抽象重取（[resolveLocalFile]）。
+ * 图片 / 视频内联卡下方的固定说明：文件名 + 容器路径（issue #304）。
+ * 与紧凑附件行同一口径（[attachment.containerPath]），用户消息按发送方右对齐，助手消息左对齐。
  */
 @Composable
-private fun AttachmentActionRow(
+private fun MediaAttachmentCaption(
     attachment: AgentAttachment,
-    onInsertAttachment: ((AgentAttachment) -> Unit)? = null
+    isUser: Boolean = false
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val fileAccess = LocalChatFileAccess.current
-    Row(
+    val textAlign = if (isUser) TextAlign.End else TextAlign.Start
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.lg)
+            .padding(horizontal = Spacing.xs),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        AttachmentActionChip(
-            icon = FeatherIcons.Download,
-            label = stringResource(R.string.chat_attachment_save)
-        ) {
-            scope.launch {
-                val local = withContext(Dispatchers.IO) { resolveLocalFile(attachment, fileAccess) }
-                if (local == null) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.chat_attachment_save_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@launch
-                }
-                val ok = saveImageToGallery(context, local, attachment.mimeType)
-                val messageRes = when {
-                    ok -> R.string.chat_attachment_saved
-                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> R.string.chat_attachment_save_unsupported
-                    else -> R.string.chat_attachment_save_failed
-                }
-                Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT).show()
-            }
-        }
-        AttachmentActionChip(
-            icon = FeatherIcons.Share2,
-            label = stringResource(R.string.chat_attachment_share)
-        ) {
-            scope.launch {
-                val uri = withContext(Dispatchers.IO) {
-                    val local = resolveLocalFile(attachment, fileAccess) ?: return@withContext null
-                    val shareable = if (isShareableFile(context, local)) local else copyToShareCache(context, local)
-                    shareable?.let {
-                        runCatching {
-                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it)
-                        }.getOrNull()
-                    }
-                }
-                if (uri == null) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.chat_open_file_unshareable),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@launch
-                }
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = shareableMimeType(attachment.mimeType, attachment.fileName)
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                runCatching {
-                    context.startActivity(Intent.createChooser(send, context.getString(R.string.chat_attachment_share)))
-                }
-            }
-        }
-        if (onInsertAttachment != null) {
-            AttachmentActionChip(
-                icon = FeatherIcons.Plus,
-                label = stringResource(R.string.chat_attachment_insert_chat)
-            ) {
-                onInsertAttachment(attachment)
-            }
-        }
+        Text(
+            text = attachment.fileName,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth()
+        )
+        val path = attachment.containerPath.ifBlank { attachment.fileName }
+        Text(
+            text = path,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
-/** 操作条单项：小图标 + 文字，轻量可点。 */
-@Composable
-private fun AttachmentActionChip(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
+/**
+ * 保存图片到相册（消息「更多」菜单用）。文件失效时经 [resolveLocalFile] 按 containerPath 重取；
+ * Toast 文案区分成功 / 低版本不支持 / 其他失败。
+ */
+internal suspend fun saveImageAttachment(
+    context: Context,
+    attachment: AgentAttachment,
+    fileAccess: FileAccessProvider
 ) {
-    val t = LocalUIDensityTokens.current
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(t.rMdLarge))
-            .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.xs, vertical = Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(t.scale(16))
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    val local = withContext(Dispatchers.IO) { resolveLocalFile(attachment, fileAccess) }
+    if (local == null) {
+        Toast.makeText(context, context.getString(R.string.chat_attachment_save_failed), Toast.LENGTH_SHORT).show()
+        return
+    }
+    val ok = saveImageToGallery(context, local, attachment.mimeType)
+    val messageRes = when {
+        ok -> R.string.chat_attachment_saved
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> R.string.chat_attachment_save_unsupported
+        else -> R.string.chat_attachment_save_failed
+    }
+    Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT).show()
+}
+
+/** 分享图片 / 视频（消息「更多」菜单用）；不可分享的位置先拷进 cacheDir 再经 FileProvider 授权。 */
+internal suspend fun shareAttachment(
+    context: Context,
+    attachment: AgentAttachment,
+    fileAccess: FileAccessProvider
+) {
+    val uri = withContext(Dispatchers.IO) {
+        val local = resolveLocalFile(attachment, fileAccess) ?: return@withContext null
+        val shareable = if (isShareableFile(context, local)) local else copyToShareCache(context, local)
+        shareable?.let {
+            runCatching {
+                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it)
+            }.getOrNull()
+        }
+    }
+    if (uri == null) {
+        Toast.makeText(context, context.getString(R.string.chat_open_file_unshareable), Toast.LENGTH_SHORT).show()
+        return
+    }
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = shareableMimeType(attachment.mimeType, attachment.fileName)
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(send, context.getString(R.string.chat_attachment_share)))
     }
 }
 
