@@ -190,7 +190,6 @@ import com.aiverse.feature.agent.domain.permission.ToolPermissionPolicyEngine
 import com.aiverse.feature.agent.domain.subagent.SubAgentEvent
 import com.aiverse.feature.agent.domain.subagent.SubAgentDigest
 import com.aiverse.feature.agent.domain.subagent.SubAgentEventType
-import com.aiverse.feature.agent.domain.session.WorkspacePathResolver
 import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import com.aiverse.feature.agent.domain.workflow.AgentEvent
@@ -273,7 +272,6 @@ class AIAgentViewModel @Inject constructor(
     val ttsController: TtsController,
     val installedAppRepository: InstalledAppRepository,
     private val roleDao: RoleDao,
-    private val workspacePathResolver: WorkspacePathResolver,
     private val workspaceRepository: WorkspaceRepository,
     private val remoteRepository: RemoteRepository,
     private val syncSettingsRepository: com.aiverse.feature.settings.data.repository.SyncSettingsRepository,
@@ -3952,22 +3950,11 @@ class AIAgentViewModel @Inject constructor(
     }
 
     /**
-     * 新建会话并选中，返回 id。仅 [newSession] 走这里：角色绑定工作区时，会话可能落到非当前工作区，
-     * 故同步切换 repository 侧（工作区选择器/文件树，持久化）与 agent 侧（侧边栏过滤）两套当前工作区真相源。
-     * 先切工作区再选中，避免 combine 保存器短暂写入 (sid, 旧区) 的错误中间态。
+     * 新建会话并选中，返回 id。新建会话一律落在传入的当前工作区：
+     * 角色绑定只作为推荐值展示，不再改写会话落点（#309 弱绑定）。
      */
     private suspend fun createAndSelectSession(workspacePath: String): String {
         val id = createAndUpsertSession(workspacePath)
-        // 以落库 entity 为单一事实源，拿到会话实际归属路径（可能已被 resolveForRole 改写）。
-        val actual = sessionUseCase.getSessionById(id)?.workspacePath
-        if (!actual.isNullOrBlank() && actual != _currentWorkspace.value) {
-            // 反查工作区名，命中且可用则切 repository 侧，让选择器/文件树一并跟过去。
-            workspaceRepository.workspaces.value
-                .firstOrNull { it.path == actual && it.available }
-                ?.let { runCatching { workspaceRepository.selectWorkspace(it.name) } }
-            // agent 侧无条件切，保证侧边栏过滤一致（name 反查失败时也兜底）。
-            setWorkspace(actual)
-        }
         updateSelectedSessionId(id)
         return id
     }
@@ -3985,11 +3972,10 @@ class AIAgentViewModel @Inject constructor(
             ReasoningEffort.MEDIUM.name
         }
         val roleId = defaultRoleSettingsRepository.getDefaultRoleId()
-        // 角色绑定了工作区时，将会话归入该工作区（issue #240）；未绑定或工作区不可用则回退传入的 workspacePath。
-        // 解析逻辑（含未加载时序与悬挂引用处理）统一收口到 WorkspacePathResolver，与 Web API 等多端共用。
-        val resolvedPath = workspacePathResolver.resolveForRole(roleId, workspacePath)
+        // 角色绑定工作区降级为推荐值：新建会话一律跟当前工作区，不再被绑定拽走（#309）。
+        // 角色与工作区两个入口互不干扰；需要换区由用户自己切工作区。
         return sessionUseCase.newSessionEntity(
-            workspacePath = resolvedPath,
+            workspacePath = workspacePath,
             providerId = providerId,
             model = model,
             reasoningEffort = effort,
