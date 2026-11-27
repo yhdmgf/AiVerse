@@ -41,7 +41,7 @@ In an app that supports the system file picker, choose AiVerse to access two dir
 
 When the AI references code in the conversation, it writes the path as a clickable link (`file path:line number`, underlined). Tapping such a link opens the editing page directly, and links with line numbers also scroll automatically to that line and try to **keep it near the middle of the screen** (when the target line is near the beginning or end of the file, it may sit at the edge due to the scroll range). Once you scroll after opening, automatic positioning is handed back to you and the view is no longer pulled back to the target line.
 
-Files in the workspace, the AI configuration directory (`~/.aiverse/...`), and container system files (`/etc/...`, `/root/...`) are supported, and they can be opened under a remote SSH workspace as well. Links to ordinary web addresses are unaffected and still open in the system browser.
+Files in the workspace, the AI configuration directory (`~/.aiverse/...`), and container system files (`/etc/...`, `/root/...`) are supported, and they can be opened under a remote SSH workspace as well. Links to ordinary web addresses are unaffected and still open in the system browser; bare domains such as `www.example.com` and `example.cn` are automatically prefixed with `https://` and handed to the browser, while source suffixes such as `README.md` and `script.sh` still open as files.
 
 Tapping a path or directory that doesn't exist, or a file over the size limit, shows the corresponding failure message on the editing page.
 

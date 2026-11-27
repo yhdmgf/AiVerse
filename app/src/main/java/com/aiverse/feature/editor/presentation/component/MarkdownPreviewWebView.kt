@@ -75,7 +75,9 @@ fun MarkdownPreviewWebView(
                 ): WebResourceResponse? {
                     // 预览环境断外网：只放行虚拟 origin（assetLoader）。开 JS 后附件脚本可能主动 fetch/加外部子资源，
                     // 若放行外部 host 会把预览内容外联泄露；这里对外部 host 一律回空 404，与「外链一律拦下」一致。
-                    if (request.url.host != MarkdownPreviewViewModel.ASSET_HOST) {
+                    // 但主文档是 loadDataWithBaseURL 的 data: URL（host 为空），页内还会用 data:/blob:/about:
+                    // 子资源；这些不属于外网请求，必须放行，否则会把主文档自身也回 404（issue #298）。
+                    if (isPreviewRequestBlocked(request.url.scheme, request.url.host)) {
                         FileLogger.w(TAG, "预览拦截外联请求: ${request.url}")
                         return WebResourceResponse(
                             "text/plain", "utf-8", 404, "Not Found", emptyMap(),
@@ -131,6 +133,20 @@ fun MarkdownPreviewWebView(
 
 private fun webViewThemeRes(dark: Boolean): Int =
     if (dark) R.style.Theme_AICode_WebView_Dark else R.style.Theme_AICode_WebView
+
+/**
+ * 预览 WebView 的请求拦截判定：是否应回 404。
+ *
+ * 只拦真正的网络请求：https 仅放行内置 assetLoader 的虚拟 host，http 及其它协议一律拦下；
+ * data:/blob:/about: 是页面自身内容（主文档本身就是 data: URL），必须交回 WebView 原生处理。
+ * 放在组件外并只接收 scheme/host，便于单测覆盖，避免回归成把主文档也拦掉（issue #298）。
+ */
+internal fun isPreviewRequestBlocked(scheme: String?, host: String?): Boolean =
+    when (scheme?.lowercase()) {
+        "data", "blob", "about" -> false
+        "https" -> host != MarkdownPreviewViewModel.ASSET_HOST
+        else -> true
+    }
 
 private const val BG_DARK = 0xFF0D1117.toInt()
 private const val BG_LIGHT = 0xFFFFFFFF.toInt()

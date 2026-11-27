@@ -1709,7 +1709,7 @@ private class FileAwareUriHandler(
     override fun openUri(uri: String) {
         val filePath = asChatFilePath(uri)
         if (filePath == null) {
-            delegate.openUri(uri)
+            delegate.openUri(normalizeBrowserUri(uri))
             return
         }
         val (path, line) = splitPathAndLine(filePath)
@@ -1730,6 +1730,52 @@ private val OPAQUE_URL_SCHEME = Regex(
     RegexOption.IGNORE_CASE
 )
 
+/**
+ * 常见网页顶级域名。GFM 会把裸写的 `www.example.com` 自动识别成链接，但这类链接没有
+ * `http(s)://` scheme；若直接当文件路径，就会打开一个不存在的空文件（用户反馈的误判）。
+ * `.md`/`.sh`/`.py` 等同时是国家级域名却更常作为源码后缀，统一排除，避免把 `README.md`
+ * 当成网址。列表覆盖常见站点后缀，未收录的新 TLD 仍可按显式 scheme 正常打开。
+ */
+private val WEB_TLDS = setOf(
+    "com", "cn", "net", "org", "io", "dev", "app", "ai", "info", "biz",
+    "me", "co", "uk", "us", "jp", "hk", "tw", "sg", "de", "fr", "ru", "au", "ca", "in",
+    "edu", "gov", "mil", "top", "xyz", "site", "tech", "online", "cloud", "store", "shop",
+    "art", "blog", "wiki", "news", "live", "tv", "cc", "vip", "pro", "work", "world",
+    "space", "website", "fun", "science", "group", "club", "design", "studio", "link",
+    "host", "zone", "email", "network", "digital", "agency", "media", "ltd", "plus"
+)
+
+/** 同时是网页 TLD、但更常作为文件后缀的尾缀，必须优先按文件处理。 */
+private val FILE_EXTENSIONS_THAT_ARE_TLDS = setOf(
+    "md", "markdown", "sh", "bash", "zsh", "py", "rs", "kt", "kts", "ts", "tsx",
+    "js", "jsx", "java", "go", "rb", "php", "cs", "c", "h", "cpp", "hpp", "swift",
+    "json", "jsonc", "yaml", "yml", "toml", "ini", "conf", "cfg", "properties", "xml",
+    "html", "htm", "css", "txt", "text", "log", "csv", "sql", "gradle", "env",
+    "gitignore", "lock", "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico",
+    "pdf", "apk", "zip", "tar", "gz", "rar", "7z", "mp3", "mp4", "mov", "webm"
+)
+
+/**
+ * 裸写网址判定：无 scheme、host 至少两段、末段是常见网页 TLD（或显式 `www.` 开头）。
+ * 带路径的 `example.com/docs` 也按网址；真正的相对文件路径通常首段不带域名后缀，
+ * 不会命中。`.md` 等源码后缀优先判文件，避免误伤 `README.md`、`script.sh`。
+ */
+private fun looksLikeBareWebUrl(uri: String): Boolean {
+    if (HIERARCHICAL_SCHEME.containsMatchIn(uri) || OPAQUE_URL_SCHEME.containsMatchIn(uri)) return false
+    val authority = uri.substringBefore('/').substringBefore('?').substringBefore('#')
+    if (authority.isBlank() || authority.contains(' ')) return false
+    val host = authority.substringBefore(':')
+    val labels = host.split('.')
+    if (labels.size < 2 || labels.any { it.isBlank() }) return false
+    val tld = labels.last().lowercase()
+    if (tld in FILE_EXTENSIONS_THAT_ARE_TLDS) return false
+    return host.startsWith("www.", ignoreCase = true) || tld in WEB_TLDS
+}
+
+/** 裸写网址补成 https，交给系统浏览器；已有 scheme 的链接原样返回。 */
+internal fun normalizeBrowserUri(uri: String): String =
+    if (looksLikeBareWebUrl(uri)) "https://$uri" else uri
+
 private val TRAILING_LINE = Regex("^(.*):(\\d+)$")
 
 /** 文件树里点击即在内置查看器预览的图片格式（与 sendFile 的图片判定一致）。 */
@@ -1745,6 +1791,7 @@ internal fun asChatFilePath(uri: String): String? {
         hierarchical == "file" -> android.net.Uri.decode(uri.removePrefix("file://"))
         hierarchical != null -> null // http/https/content 等交给系统
         OPAQUE_URL_SCHEME.containsMatchIn(uri) -> null // mailto/tel 等
+        looksLikeBareWebUrl(uri) -> null // GFM 自动链接的裸域名（如 www.baidu.com）交给浏览器
         else -> uri // 容器绝对路径或相对工作区路径，含 `notes.md:12` 这种纯文件名
     }
 }

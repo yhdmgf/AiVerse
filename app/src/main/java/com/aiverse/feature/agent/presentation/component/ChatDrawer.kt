@@ -2848,8 +2848,14 @@ private fun DrawerRoleRow(
     role: Role?,
     onClick: () -> Unit
 ) {
+    val workspaceName = role?.workspaceId.orEmpty()
     SettingsRow(
         title = role?.name ?: stringResource(R.string.chat_role_default),
+        subtitle = if (workspaceName.isBlank()) {
+            stringResource(R.string.chat_role_workspace_follow)
+        } else {
+            stringResource(R.string.chat_role_workspace_bound, workspaceName)
+        },
         onClick = onClick,
         leading = {
             RoleAvatar(role = role, size = 20.dp)

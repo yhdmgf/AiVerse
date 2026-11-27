@@ -93,6 +93,12 @@ internal fun RoleDetailSection(role: Role) {
                     if (role.isBuiltin) R.string.roles_badge_builtin else R.string.roles_badge_custom
                 )
             )
+            SettingsDivider()
+            InfoRow(
+                label = stringResource(R.string.roles_field_workspace),
+                value = role.workspaceId?.takeIf { it.isNotBlank() }
+                    ?: stringResource(R.string.chat_role_workspace_follow)
+            )
         }
 
         SettingsGroupHeader(text = stringResource(R.string.roles_field_identity))

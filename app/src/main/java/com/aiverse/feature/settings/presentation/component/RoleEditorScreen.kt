@@ -97,6 +97,16 @@ internal fun RoleEditorScreen(
 
     val workspaces by viewModel.workspaces.collectAsStateWithLifecycle()
 
+    // 绑定的工作区可能已在工作区管理里删除：加载完列表后若找不到对应项，回退为「不绑定」，
+    // 避免下拉框继续显示失效名称、保存时又把失效绑带回去（issue #300）。
+    LaunchedEffect(workspaces) {
+        if (workspaces.isNotEmpty() && selectedWorkspaceId.isNotBlank() &&
+            workspaces.none { it.name == selectedWorkspaceId }
+        ) {
+            selectedWorkspaceId = ""
+        }
+    }
+
     val avatarKind = runCatching { AvatarKind.valueOf(avatarKindName) }.getOrDefault(AvatarKind.NONE)
 
     val context = LocalContext.current
