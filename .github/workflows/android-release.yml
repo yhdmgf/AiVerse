@@ -297,3 +297,35 @@ jobs:
           prerelease: ${{ needs.prepare.outputs.prerelease }}
           name: "v${{ needs.prepare.outputs.full }}"
           tag_name: "v${{ needs.prepare.outputs.full }}"
+      # 正式版与 RC（prerelease=true）共用本工作流：GitHub Release 发布成功后再把三架构 APK
+      # 推送到分发 API。密钥只从仓库 Secret 读取，不落到日志/代码里。
+      - name: 上传三架构 APK 到分发 API
+        env:
+          APK_UPLOAD_KEY: ${{ secrets.APK_UPLOAD_KEY }}
+          FULL: ${{ needs.prepare.outputs.full }}
+        run: |
+          set -euo pipefail
+          test -n "$APK_UPLOAD_KEY" || { echo "缺少 APK_UPLOAD_KEY secret"; exit 1; }
+
+          UNIVERSAL="dist/AiVerse-universal-v${FULL}.apk"
+          ARM64="dist/AiVerse-arm64-v${FULL}.apk"
+          X86_64="dist/AiVerse-x86_64-v${FULL}.apk"
+          for f in "$UNIVERSAL" "$ARM64" "$X86_64"; do
+            test -s "$f" || { echo "缺少 APK: $f"; exit 1; }
+          done
+
+          # 上传接口按示例使用固定的三个文件名；Release 资产仍保留带版本号的文件名。
+          mkdir -p upload
+          cp "$UNIVERSAL" upload/app-universal.apk
+          cp "$ARM64" upload/app-arm64.apk
+          cp "$X86_64" upload/app-x86_64.apk
+
+          curl --fail-with-body --retry 3 --retry-delay 5 --max-time 600 \
+            -X POST "https://api.aivapp.cn/apk/upload" \
+            -H "X-Apk-Key: ${APK_UPLOAD_KEY}" \
+            -F "files[]=@upload/app-universal.apk;type=application/vnd.android.package-archive" \
+            -F "files[]=@upload/app-arm64.apk;type=application/vnd.android.package-archive" \
+            -F "files[]=@upload/app-x86_64.apk;type=application/vnd.android.package-archive"
+
+          echo "三架构 APK 已上传：$FULL" >> "$GITHUB_STEP_SUMMARY"
+
