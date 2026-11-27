@@ -1,3 +1,16 @@
+export interface WorkspaceDto {
+  name: string;
+  label: string;
+  path: string;
+  type: "INTERNAL" | "EXTERNAL_LOCAL" | "REMOTE" | string;
+  available: boolean;
+}
+
+export interface WorkspaceListDto {
+  current: string | null;
+  workspaces: WorkspaceDto[];
+}
+
 export interface SessionDto {
   id: string;
   title: string;

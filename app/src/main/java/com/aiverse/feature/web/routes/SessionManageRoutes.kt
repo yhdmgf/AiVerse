@@ -30,12 +30,30 @@ fun Route.sessionManageRoutes(
     roleDao: RoleDao
 ) {
     route("/api/sessions") {
-        // 新建会话：workspacePath 缺省跟随当前工作区。
+        // 新建会话：workspaceName 绑定指定项目；也兼容旧的 workspacePath。
         post {
             val req = runCatching { call.receive<CreateSessionRequest>() }.getOrNull()
                 ?: CreateSessionRequest()
-            val workspace = req.workspacePath?.takeIf { it.isNotBlank() }
+            val requestedName = req.workspaceName?.trim()?.takeIf { it.isNotBlank() }
+            val requestedPath = req.workspacePath?.trim()?.takeIf { it.isNotBlank() }
+            val requestedWorkspace = when {
+                requestedName != null -> workspaceRepository.workspaces.value
+                    .firstOrNull { it.name == requestedName && it.available }
+                requestedPath != null -> workspaceRepository.workspaces.value
+                    .firstOrNull { it.path == requestedPath && it.available }
+                else -> null
+            }
+            if (requestedName != null && requestedWorkspace == null) {
+                call.respond(HttpStatusCode.NotFound, ApiResponse(ok = false, error = "workspace not found or unavailable"))
+                return@post
+            }
+            val workspace = requestedWorkspace?.path
+                ?: requestedPath
                 ?: workspaceRepository.currentPath()
+            // 网页端切项目后，App 的全局工作区同步切换：文件工具、Bash、文件树都跟会话一致。
+            if (requestedWorkspace != null) {
+                workspaceRepository.selectWorkspace(requestedWorkspace.name)
+            }
             val effort = req.reasoningEffort?.let { resolveReasoningEffort(it) }
             if (req.reasoningEffort != null && effort == null) {
                 call.respond(HttpStatusCode.BadRequest, ApiResponse(ok = false, error = "invalid reasoningEffort"))

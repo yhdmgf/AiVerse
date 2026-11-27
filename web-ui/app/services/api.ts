@@ -7,6 +7,7 @@ import type {
   ModelInfoDto,
   RoleDto,
   SessionDto,
+  WorkspaceListDto,
 } from "~/types/core";
 
 const TOKEN_KEY = "aiverse-token";
@@ -58,16 +59,33 @@ export async function login(password: string): Promise<string> {
   return token;
 }
 
-export async function listSessions(): Promise<SessionDto[]> {
-  return api.get("sessions").json();
+export async function listSessions(workspacePath?: string | null): Promise<SessionDto[]> {
+  return api
+    .get("sessions", {
+      searchParams: workspacePath ? { workspace: workspacePath } : undefined,
+    })
+    .json();
 }
 
-export async function createSession(): Promise<SessionDto> {
-  return api.post("sessions").json();
+export async function createSession(workspaceName?: string | null): Promise<SessionDto> {
+  return api.post("sessions", { json: workspaceName ? { workspaceName } : {} }).json();
 }
 
 export async function getSession(id: string): Promise<SessionDto> {
   return api.get(`sessions/${id}`).json();
+}
+
+/** 打开会话时把 App 全局工作区切到会话所属项目。 */
+export async function activateSession(id: string): Promise<SessionDto> {
+  return api.post(`sessions/${id}/activate`).json();
+}
+
+export async function listWorkspaces(): Promise<WorkspaceListDto> {
+  return api.get("workspaces").json();
+}
+
+export async function selectWorkspace(name: string): Promise<void> {
+  await api.post("workspaces/select", { json: { name } });
 }
 
 export async function listMessages(sessionId: string): Promise<MessageDto[]> {

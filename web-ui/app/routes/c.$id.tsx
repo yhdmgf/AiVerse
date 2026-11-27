@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import {
+  activateSession,
   getSession,
   listFiles,
   listMessages,
   listModels,
   listRoles,
+  listWorkspaces,
   sendMessage,
   setReasoningEffort,
   setSessionModel,
@@ -291,6 +293,7 @@ function RoleMenu({ sessionId }: { sessionId: string }) {
 
 export default function Chat() {
   const { id } = useParams();
+  const queryClient = useQueryClient();
   const [streaming, setStreaming] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [input, setInput] = useState("");
@@ -309,6 +312,26 @@ export default function Chat() {
     enabled: !!id,
     retry: false,
   });
+
+  const { data: workspaceData } = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: listWorkspaces,
+  });
+  const workspaceLabel = workspaceData?.workspaces.find(
+    (w) => w.path === session?.workspacePath,
+  )?.label;
+
+  // 直接打开 URL 或从别的项目点进来时，把服务端当前工作区切到本会话的目录；
+  // 否则 @ 文件列表和 Bash/文件工具会继续用上一个项目。
+  useEffect(() => {
+    if (!id) return;
+    activateSession(id)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+        queryClient.invalidateQueries({ queryKey: ["files"] });
+      })
+      .catch((e) => console.error(e));
+  }, [id, queryClient]);
 
   const { data: messages, isLoading, refetch } = useQuery({
     queryKey: ["messages", id],
@@ -436,6 +459,7 @@ export default function Chat() {
     typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
   const subtitle = [
+    workspaceLabel,
     session?.model,
     session?.mode,
     id ? `#${id.slice(0, 8)}` : null,
