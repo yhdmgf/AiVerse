@@ -1240,6 +1240,7 @@ class AIAgentViewModel @Inject constructor(
                                 ),
                                 path = childPathPrefix(scope) + rel,
                                 depth = 0,
+                                isExpanded = false,
                                 displayNameOverride = rel
                             )
                         }
