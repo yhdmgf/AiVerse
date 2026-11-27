@@ -78,7 +78,6 @@ import com.aiverse.core.tts.ReadProgress
 import com.aiverse.core.ui.ChevronRotationStyle
 import com.aiverse.core.ui.ContentWidth
 import com.aiverse.core.ui.ExpandableChevronIcon
-import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.AgentUIMessage
 import com.aiverse.feature.agent.presentation.hasVisibleContent
 import com.aiverse.feature.agent.presentation.MessageRole
@@ -263,8 +262,6 @@ internal fun AgentMessageItem(
     /** 整轮回复仍在进行中（AI 多步工具调用尚未全部完成）：整轮期间隐藏所有消息的朗读按钮，
      *  待整轮结束才显示，避免中间步骤消息被误判为已完成而提前挂出喇叭。 */
     turnBusy: Boolean = false,
-    /** 消息气泡里图片大卡的「插入聊天」动作回调；工具卡片 / 非图片附件不传即不展示该动作。 */
-    onInsertAttachment: ((AgentAttachment) -> Unit)? = null,
 ) {
     if (message.isCompactionMarker) {
         // 压缩内部锚点不再渲染分隔线：摘要卡片已提供压缩反馈，避免与卡片重复。
@@ -504,7 +501,7 @@ internal fun AgentMessageItem(
                     MessageAttachmentList(
                         attachments = message.attachments,
                         compact = false,
-                        onInsertAttachment = onInsertAttachment
+                        isUser = isUser
                     )
                 }
                 // 气泡下方的元信息行（工具消息不显示）：用户消息每条都常驻「时间 + 复制/回退/更多」，
@@ -525,7 +522,12 @@ internal fun AgentMessageItem(
                 }
                 val durationText = taskDurationMs?.let { formatTaskDuration(it) }
                 val hasMeta = isUser || tokenStats != null || cacheHitRate != null || durationText != null
-                val actionsVisible = isUser || showActions
+                // 图片 / 视频消息即使不是最新一条助手回复，也要保留「更多」入口：
+                // 保存 / 分享 / 插入聊天已收进更多菜单（#304），历史图片不能因此失去操作入口。
+                val hasImageAttachments = message.attachments.any { it.isImage }
+                val messageActionsVisible = isUser || showActions
+                val imageActionsVisible = !isUser && hasImageAttachments && onMoreClick != null
+                val actionsVisible = messageActionsVisible || imageActionsVisible
                 // 不再用 turnBusy（整轮级）门控：流式期间它对所有历史消息恒为 true，会把已完成的
                 // 历史回复的朗读按钮一并隐藏。messageInProgress 已是本条消息级门控（生成中才隐藏），
                 // 中间步骤消息生成时同样被它挡住，不会提前挂出喇叭；完成后即可正常显示。
@@ -611,7 +613,7 @@ internal fun AgentMessageItem(
                             emitted = true
                         }
                         // 助手消息的复制按钮排在「更多选项」左边（统计信息之后）
-                        if (!isUser && actionsVisible && hasContent) {
+                        if (!isUser && messageActionsVisible && hasContent) {
                             if (emitted) Spacer(Modifier.width(t.xs))
                             copyButton()
                             emitted = true

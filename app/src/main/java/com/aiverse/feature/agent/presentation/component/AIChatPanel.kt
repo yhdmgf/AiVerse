@@ -2019,16 +2019,7 @@ fun AIChatPanel(
                     reasoningDurationMs = reasoningDurations[message.id],
                     taskDurationMs = taskDurations[message.id],
                     turnUsage = turnUsages[message.id],
-                    entryDelayMs = messageEntryDelays[message.id],
-                    // 图片大卡「插入聊天」：读盘 + base64 放 IO 线程（远程临时副本可能已失效，
-                    // toPendingAttachment 内部会按 containerPath 兜底），完成后写入当前会话待发送列表。
-                    onInsertAttachment = { attachment ->
-                        scope.launch {
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                viewModel.addPendingAttachment(attachment.toPendingAttachment())
-                            }
-                        }
-                    }
+                    entryDelayMs = messageEntryDelays[message.id]
                 )
                 // Issue #55/#237：失败错误落在对应消息下方（仅分块末块渲染一次），随消息流滚动；
                 // #237 起该 messageId 也可能是「触发失败的用户消息」id（见 AgentUIState.Error.messageId）。
@@ -2699,7 +2690,23 @@ fun AIChatPanel(
                         Toast.makeText(context, context.getString(R.string.favorites_added), Toast.LENGTH_SHORT).show()
                     },
                     onForkClick = { viewModel.forkFromMessage(message.id) },
-                    onDeleteClick = { viewModel.deleteMessage(message.id) }
+                    onDeleteClick = { viewModel.deleteMessage(message.id) },
+                    // 图片操作从图片卡下方搬到「更多」菜单（#304）：与复制 / 重试 / 更多同级。
+                    onSaveImage = { attachment ->
+                        scope.launch { saveImageAttachment(context, attachment, viewModel.fileAccess) }
+                    },
+                    onShareImage = { attachment ->
+                        scope.launch { shareAttachment(context, attachment, viewModel.fileAccess) }
+                    },
+                    onInsertImage = { attachment ->
+                        // 读盘 + base64 放 IO 线程（远程临时副本可能已失效，
+                        // toPendingAttachment 内部会按 containerPath 兜底），完成后写入当前会话待发送列表。
+                        scope.launch {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                viewModel.addPendingAttachment(attachment.toPendingAttachment())
+                            }
+                        }
+                    }
                 )
             }
 

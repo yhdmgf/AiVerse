@@ -1054,6 +1054,7 @@
     <string name="chat_attachment_save">保存到相册</string>
     <string name="chat_attachment_share">分享</string>
     <string name="chat_attachment_insert_chat">插入聊天</string>
+    <string name="chat_attachment_actions_section">图片操作</string>
     <string name="chat_attachment_saved">已保存到相册</string>
     <string name="chat_attachment_save_failed">保存失败，请重试</string>
     <string name="chat_attachment_save_unsupported">保存失败，仅支持 Android 10 及以上系统</string>

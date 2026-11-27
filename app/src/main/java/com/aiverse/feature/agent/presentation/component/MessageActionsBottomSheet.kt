@@ -26,13 +26,17 @@ import androidx.compose.ui.unit.dp
 import com.aiverse.R
 import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
+import com.aiverse.feature.agent.presentation.AgentAttachment
 import com.aiverse.feature.agent.presentation.AgentUIMessage
 import com.aiverse.feature.agent.presentation.hasVisibleContent
 import compose.icons.FeatherIcons
 import compose.icons.feathericons.Bookmark
 import compose.icons.feathericons.Copy
+import compose.icons.feathericons.Download
 import compose.icons.feathericons.Edit2
 import compose.icons.feathericons.GitBranch
+import compose.icons.feathericons.Plus
+import compose.icons.feathericons.Share2
 import compose.icons.feathericons.Trash2
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,7 +48,11 @@ internal fun MessageActionsBottomSheet(
     onCopyClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     onForkClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    /** 图片 / 视频的保存、分享、插入聊天（issue #304）：从消息「更多」进入，不再在图片下方常驻操作行。 */
+    onSaveImage: ((AgentAttachment) -> Unit)? = null,
+    onShareImage: ((AgentAttachment) -> Unit)? = null,
+    onInsertImage: ((AgentAttachment) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -67,6 +75,56 @@ internal fun MessageActionsBottomSheet(
             )
 
             Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // 图片操作（issue #304）：原来贴在图片卡片下方的一行「保存 / 分享 / 插入聊天」
+            // 收进这里，和复制 / 编辑 / 更多同级，用户消息与 AI 回复同一套规则。
+            val imageAttachments = message.attachments.filter { it.isImage }
+            if (imageAttachments.isNotEmpty() &&
+                (onSaveImage != null || onShareImage != null || onInsertImage != null)
+            ) {
+                Text(
+                    text = stringResource(R.string.chat_attachment_actions_section),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                )
+                imageAttachments.forEach { attachment ->
+                    if (onSaveImage != null) {
+                        MessageActionItem(
+                            icon = FeatherIcons.Download,
+                            title = stringResource(R.string.chat_attachment_save),
+                            subtitle = attachment.fileName,
+                            onClick = {
+                                onDismiss()
+                                onSaveImage(attachment)
+                            }
+                        )
+                    }
+                    if (onShareImage != null) {
+                        MessageActionItem(
+                            icon = FeatherIcons.Share2,
+                            title = stringResource(R.string.chat_attachment_share),
+                            subtitle = attachment.fileName,
+                            onClick = {
+                                onDismiss()
+                                onShareImage(attachment)
+                            }
+                        )
+                    }
+                    if (onInsertImage != null) {
+                        MessageActionItem(
+                            icon = FeatherIcons.Plus,
+                            title = stringResource(R.string.chat_attachment_insert_chat),
+                            subtitle = attachment.fileName,
+                            onClick = {
+                                onDismiss()
+                                onInsertImage(attachment)
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(Spacing.xs))
+            }
 
             // 编辑消息
             MessageActionItem(
@@ -128,6 +186,7 @@ internal fun MessageActionsBottomSheet(
 private fun MessageActionItem(
     icon: ImageVector,
     title: String,
+    subtitle: String? = null,
     isDestructive: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -147,10 +206,20 @@ private fun MessageActionItem(
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(Spacing.md))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = color
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = color
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }

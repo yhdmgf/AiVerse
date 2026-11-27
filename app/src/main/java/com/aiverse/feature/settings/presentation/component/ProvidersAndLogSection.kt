@@ -106,10 +106,37 @@ internal fun ProvidersSection(
     val otherProviders = remember(providers) { providers.filter { !it.pinned } }
     val isSectioned = pinnedProviders.isNotEmpty()
     val lazyListState = rememberLazyListState()
-    // 拖拽排序仅在「无置顶」的单列表下启用：一旦分区（有常用专区），分区 header 会让 LazyColumn
-    // 索引与 providers 列表错位，且置顶本身已是排序手段，故分区态禁用全局拖拽，避免索引错乱。
+    // 无置顶时是单列表，LazyColumn 索引与 providers 一一对应；有置顶后列表变成
+    // 「常用标题 + 常用区 + 其他标题 + 其他区」，Lazy 索引带上了两个 header 的偏移。
+    // 拖拽只在同一分区内生效：把分区内的局部位置换算回 providers 的全局索引，
+    // 再交给上层重排，跨区拖动（落到 header 或另一区）直接忽略，避免把置顶项拖进其他区。
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        if (!isSectioned) onReorder(from.index, to.index)
+        if (!isSectioned) {
+            onReorder(from.index, to.index)
+            return@rememberReorderableLazyListState
+        }
+        val pinnedStart = 1
+        val pinnedEnd = pinnedStart + pinnedProviders.size - 1
+        val otherStart = pinnedEnd + 2
+        val otherEnd = otherStart + otherProviders.size - 1
+        val (sectionFrom, sectionTo, isPinned) = when {
+            from.index in pinnedStart..pinnedEnd && to.index in pinnedStart..pinnedEnd ->
+                Triple(from.index - pinnedStart, to.index - pinnedStart, true)
+            from.index in otherStart..otherEnd && to.index in otherStart..otherEnd ->
+                Triple(from.index - otherStart, to.index - otherStart, false)
+            else -> return@rememberReorderableLazyListState
+        }
+        val section = if (isPinned) pinnedProviders else otherProviders
+        if (sectionFrom !in section.indices || sectionTo !in section.indices) {
+            return@rememberReorderableLazyListState
+        }
+        val fromProvider = section[sectionFrom]
+        val toProvider = section[sectionTo]
+        val globalFrom = providers.indexOfFirst { it.id == fromProvider.id }
+        val globalTo = providers.indexOfFirst { it.id == toProvider.id }
+        if (globalFrom >= 0 && globalTo >= 0 && globalFrom != globalTo) {
+            onReorder(globalFrom, globalTo)
+        }
     }
     val hapticFeedback = LocalHapticFeedback.current
     // 非拖拽态阴影跟随 SettingsGroup 规则（浅色玻璃 0 / 否则 elevationSm），拖拽态升到 elevationMd。
@@ -162,7 +189,7 @@ internal fun ProvidersSection(
                         onToggleSelect = { selection.toggle(provider.id) },
                         onTogglePin = onTogglePin,
                         reorderableState = reorderableState,
-                        enableDrag = false,
+                        enableDrag = true,
                         hapticFeedback = hapticFeedback,
                         restElevation = restElevation
                     )
@@ -182,7 +209,7 @@ internal fun ProvidersSection(
                         onToggleSelect = { selection.toggle(provider.id) },
                         onTogglePin = onTogglePin,
                         reorderableState = reorderableState,
-                        enableDrag = false,
+                        enableDrag = true,
                         hapticFeedback = hapticFeedback,
                         restElevation = restElevation
                     )
@@ -280,7 +307,7 @@ internal fun ProviderSectionHeader(text: String) {
 
 /**
  * 单张提供商卡片：包 [ReorderableItem] 支持长按拖拽排序，内里是 [ProviderItem]。
- * [enableDrag] 为 false 时（分区态）不接拖拽把手，仅保留点击 / 左滑 / 星标置顶。
+ * [enableDrag] 为 false 时不接拖拽把手，仅保留点击 / 左滑 / 星标置顶（多选态由上层关闭）。
  */
 @Composable
 private fun LazyItemScope.ProviderCard(

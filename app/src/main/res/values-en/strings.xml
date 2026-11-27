@@ -1054,6 +1054,7 @@
     <string name="chat_attachment_save">Save to gallery</string>
     <string name="chat_attachment_share">Share</string>
     <string name="chat_attachment_insert_chat">Insert into chat</string>
+    <string name="chat_attachment_actions_section">Image actions</string>
     <string name="chat_attachment_saved">Saved to gallery</string>
     <string name="chat_attachment_save_failed">Save failed, please retry</string>
     <string name="chat_attachment_save_unsupported">Save failed; only Android 10+ is supported</string>
