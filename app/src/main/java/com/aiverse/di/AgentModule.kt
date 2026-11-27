@@ -45,6 +45,7 @@ import com.aiverse.feature.git.domain.tool.CreateGitHubIssueTool
 import com.aiverse.feature.git.domain.tool.CreateGitHubPullRequestTool
 import com.aiverse.feature.git.domain.tool.GetGitHubIssueTool
 import com.aiverse.feature.git.domain.tool.GetGitHubPullRequestTool
+import com.aiverse.feature.git.domain.tool.GetFailedCheckLogsTool
 import com.aiverse.feature.git.domain.tool.ListGitHubIssuesTool
 import com.aiverse.feature.git.domain.tool.ListGitHubPullRequestsTool
 import com.aiverse.feature.git.domain.tool.UpdateGitHubIssueTool
@@ -438,7 +439,8 @@ object AgentModule {
         listGitHubPullRequestsTool: ListGitHubPullRequestsTool,
         getGitHubPullRequestTool: GetGitHubPullRequestTool,
         createGitHubPullRequestTool: CreateGitHubPullRequestTool,
-        updateGitHubPullRequestTool: UpdateGitHubPullRequestTool
+        updateGitHubPullRequestTool: UpdateGitHubPullRequestTool,
+        getFailedCheckLogsTool: GetFailedCheckLogsTool
     ): ToolRegistry {
         return ToolRegistry().apply {
             register("readFile", readFileTool)
@@ -489,6 +491,7 @@ object AgentModule {
             register("getPullRequest", getGitHubPullRequestTool)
             register("createPullRequest", createGitHubPullRequestTool)
             register("updatePullRequest", updateGitHubPullRequestTool)
+            register("getFailedCheckLogs", getFailedCheckLogsTool)
         }
     }
 
