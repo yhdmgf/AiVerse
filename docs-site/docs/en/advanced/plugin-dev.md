@@ -1170,7 +1170,7 @@ The priority is **plugin > user setting > default**: once a plugin declares a fi
 | `chatPanelOpacity` | Opacity | 10–100 (%) | Chat panel (input box, floating panels, bubbles, etc.) opacity |
 | `bubbleUserColor` | Color | Semantic token name / hex | User bubble background |
 | `bubbleUserTextColor` | Color | Semantic token name / hex | User bubble text color |
-| `topBarColor` | Color | Semantic token name / hex | Chat top bar background |
+| `topBarColor` | Color | Semantic token name / hex | Optional chat top bar tint, no fill by default |
 | `topBarTextColor` | Color | Semantic token name / hex | Chat top bar title color |
 | `drawerColor` | Color | Semantic token name / hex | Drawer background |
 | `drawerTextColor` | Color | Semantic token name / hex | Drawer item text color |
