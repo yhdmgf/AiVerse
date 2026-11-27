@@ -3943,41 +3943,43 @@ class AIAgentViewModel @Inject constructor(
             onResult(false)
             return@launch
         }
-        val temp = runCatching { File.createTempFile("aiverse-sessions-", ".zip", context.cacheDir) }.getOrNull()
-        if (temp == null) {
-            onResult(false)
-            return@launch
-        }
-        try {
-            val allSessions = sessions.value + subSessionsByParent.value.values.flatten()
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(temp))).use { zip ->
-                var index = 0
-                sessionIds.forEach { id ->
-                    val title = allSessions.firstOrNull { it.id == id }?.title.orEmpty()
-                    val safeTitle = title.trim()
-                        .replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_")
-                        .trim('_')
-                        .take(60)
-                        .ifBlank { "session" }
-                    index++
-                    val entryName = "AiVerse-session-${safeTitle}-${id.take(8)}-${index}.tar.gz"
-                    zip.putNextEntry(ZipEntry(entryName))
-                    try {
-                        backupManager.exportSession(id, zip)
-                    } finally {
-                        runCatching { zip.closeEntry() }
+        // viewModelScope 默认 Main：建临时包、写 zip、整包拷到 SAF 输出流都必须在 IO 线程，
+        // 否则会话/消息一多就会卡 UI，极端情况触发 ANR。结果回调再切回主线程。
+        val success = withContext(Dispatchers.IO) {
+            val temp = runCatching { File.createTempFile("aiverse-sessions-", ".zip", context.cacheDir) }.getOrNull()
+                ?: return@withContext false
+            try {
+                val allSessions = sessions.value + subSessionsByParent.value.values.flatten()
+                ZipOutputStream(BufferedOutputStream(FileOutputStream(temp))).use { zip ->
+                    var index = 0
+                    sessionIds.forEach { id ->
+                        val title = allSessions.firstOrNull { it.id == id }?.title.orEmpty()
+                        val safeTitle = title.trim()
+                            .replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_")
+                            .trim('_')
+                            .take(60)
+                            .ifBlank { "session" }
+                        index++
+                        val entryName = "AiVerse-session-${safeTitle}-${id.take(8)}-${index}.tar.gz"
+                        zip.putNextEntry(ZipEntry(entryName))
+                        try {
+                            backupManager.exportSession(id, zip)
+                        } finally {
+                            runCatching { zip.closeEntry() }
+                        }
                     }
                 }
+                FileInputStream(temp).use { it.copyTo(output) }
+                true
+            } catch (e: Exception) {
+                FileLogger.e("AIAgentViewModel", "exportSessions failed", e)
+                false
+            } finally {
+                runCatching { temp.delete() }
+                runCatching { output.close() }
             }
-            FileInputStream(temp).use { it.copyTo(output) }
-            onResult(true)
-        } catch (e: Exception) {
-            FileLogger.e("AIAgentViewModel", "exportSessions failed", e)
-            onResult(false)
-        } finally {
-            runCatching { temp.delete() }
-            runCatching { output.close() }
         }
+        onResult(success)
     }
 
     private suspend fun ensureSession(): String {
