@@ -44,6 +44,27 @@ class ChatFileLinkTest {
         assertNull(asChatFilePath("MAILTO:dev@example.com"))
     }
 
+    @Test
+    fun bare_web_domains_go_to_browser() {
+        // GFM 自动链接的裸域名没有 scheme，不能当工作区文件打开。
+        assertNull(asChatFilePath("www.baidu.com"))
+        assertNull(asChatFilePath("baidu.com"))
+        assertNull(asChatFilePath("example.cn"))
+        assertNull(asChatFilePath("example.com/docs"))
+        assertEquals("https://www.baidu.com", normalizeBrowserUri("www.baidu.com"))
+        assertEquals("https://example.com/docs", normalizeBrowserUri("example.com/docs"))
+        assertEquals("https://example.com", normalizeBrowserUri("https://example.com"))
+        assertEquals("mailto:dev@example.com", normalizeBrowserUri("mailto:dev@example.com"))
+    }
+
+    @Test
+    fun code_suffixes_that_are_also_tlds_stay_file_paths() {
+        // .md/.sh/.py 等既是国家顶级域名又是常见源码后缀，必须仍按文件处理。
+        assertEquals("README.md", asChatFilePath("README.md"))
+        assertEquals("script.sh", asChatFilePath("script.sh"))
+        assertEquals("main.py", asChatFilePath("main.py"))
+    }
+
     // ---------- splitPathAndLine ----------
 
     @Test
