@@ -629,6 +629,11 @@ fun SettingsScreen(
     var showAssistantBubbleStyleSheet by remember { mutableStateOf(false) }
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showResetTokenStats by remember { mutableStateOf(false) }
+    var showLogLevelSheet by remember { mutableStateOf(false) }
+    var showLogShareMenu by remember { mutableStateOf(false) }
+    var showLogMoreMenu by remember { mutableStateOf(false) }
+    var showLogPathDialog by remember { mutableStateOf(false) }
+    var clearLogsConfirmCurrentOnly by remember { mutableStateOf<Boolean?>(null) }
 
     // 主题包导出：exportRequest 计数器作触发器，exportedThemeJson 存导出结果（null = 未触发 / 失败）。
     var exportRequest by remember { mutableStateOf(0) }
@@ -1239,8 +1244,118 @@ fun SettingsScreen(
                             }
                         }
                         SettingsSection.Log -> {
+                            Box {
+                                IconButton(onClick = { showLogShareMenu = true }) {
+                                    Icon(
+                                        FeatherIcons.Share2,
+                                        contentDescription = stringResource(R.string.log_share),
+                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showLogShareMenu,
+                                    onDismissRequest = { showLogShareMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.log_share_current)) },
+                                        leadingIcon = {
+                                            Icon(FeatherIcons.FileText, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        enabled = logViewerState.selectedFileName != null,
+                                        onClick = {
+                                            showLogShareMenu = false
+                                            viewModel.prepareShareCurrentLog(
+                                                onReady = { intent ->
+                                                    context.startActivity(
+                                                        Intent.createChooser(intent, context.getString(R.string.log_share_chooser))
+                                                    )
+                                                },
+                                                onError = { msg ->
+                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.log_share_all_zip)) },
+                                        leadingIcon = {
+                                            Icon(FeatherIcons.Box, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        onClick = {
+                                            showLogShareMenu = false
+                                            viewModel.prepareShareAllLogs(
+                                                onReady = { intent ->
+                                                    context.startActivity(
+                                                        Intent.createChooser(intent, context.getString(R.string.log_share_chooser))
+                                                    )
+                                                },
+                                                onError = { msg ->
+                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                             IconButton(onClick = { viewModel.refreshLogs() }) {
-                                Icon(FeatherIcons.RefreshCw, contentDescription = stringResource(R.string.settings_refresh_logs))
+                                Icon(
+                                    FeatherIcons.RefreshCw,
+                                    contentDescription = stringResource(R.string.settings_refresh_logs),
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { showLogMoreMenu = true }) {
+                                    Icon(
+                                        FeatherIcons.MoreHorizontal,
+                                        contentDescription = stringResource(R.string.log_more_actions),
+                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showLogMoreMenu,
+                                    onDismissRequest = { showLogMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.log_path_info)) },
+                                        leadingIcon = {
+                                            Icon(FeatherIcons.Info, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        onClick = {
+                                            showLogMoreMenu = false
+                                            showLogPathDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.log_clear_current)) },
+                                        leadingIcon = {
+                                            Icon(FeatherIcons.Trash2, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        enabled = logViewerState.files.isNotEmpty(),
+                                        onClick = {
+                                            showLogMoreMenu = false
+                                            clearLogsConfirmCurrentOnly = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.log_clear_all), color = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = {
+                                            Icon(
+                                                FeatherIcons.Trash2,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showLogMoreMenu = false
+                                            clearLogsConfirmCurrentOnly = false
+                                        }
+                                    )
+                                }
                             }
                         }
                         SettingsSection.TokenStats -> {
@@ -1736,10 +1851,16 @@ fun SettingsScreen(
                 )
                 SettingsSection.Log -> LogSection(
                     current = logLevel,
-                    onSelect = { viewModel.setLogLevel(it) },
+                    onOpenLevelSheet = { showLogLevelSheet = true },
                     state = logViewerState,
+                    onSelectSource = { viewModel.selectLogSource(it) },
                     onSelectFile = { viewModel.selectLogFile(it) },
-                    onClearFilter = { viewModel.refreshLogs(filterServerName = null) },
+                    onDeleteFile = { viewModel.deleteLogFile(it) },
+                    onSelectLevelFilter = { viewModel.setLogLevelFilter(it) },
+                    onSelectTagFilter = { viewModel.setLogTagFilter(it) },
+                    onClearMcpFilter = { viewModel.refreshLogs(filterServerName = null) },
+                    onLoadEarlier = { viewModel.loadEarlierLogs() },
+                    onLoadAiDetail = { viewModel.loadAiBlockDetail(it) },
                     onRefresh = { viewModel.refreshLogs(silent = true) }
                 )
                 SettingsSection.Permissions -> PermissionsSection(
@@ -1828,6 +1949,8 @@ fun SettingsScreen(
                     onSelectModelPage = { viewModel.setModelStatsPage(it) },
                     onSelectFilterProvider = { viewModel.setFilterProviderId(it) },
                     onSelectFilterModel = { viewModel.setFilterModel(it) },
+                    onSelectFilterCallKind = { viewModel.setFilterCallKind(it) },
+                    onSelectFilterCallStatus = { viewModel.setFilterCallStatus(it) },
                     onClearFilters = { viewModel.clearTokenStatsFilters() }
                 )
                 SettingsSection.WebServer -> WebServerSettingsSection(
@@ -2177,8 +2300,68 @@ fun SettingsScreen(
         )
     }
 
-    skillToDelete?.let { target ->
-        val deleting = target.name in skillDeleting
+    if (showLogLevelSheet) {
+        LogLevelSheet(
+            current = logLevel,
+            onSelect = {
+                viewModel.setLogLevel(it)
+                showLogLevelSheet = false
+            },
+            onDismiss = { showLogLevelSheet = false }
+        )
+    }
+
+    if (showLogPathDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogPathDialog = false },
+            title = { Text(stringResource(R.string.log_path_info)) },
+            text = { Text(stringResource(R.string.log_path_info_body, context.packageName)) },
+            confirmButton = {
+                TextButton(onClick = { showLogPathDialog = false }) {
+                    Text(stringResource(R.string.common_got_it))
+                }
+            }
+        )
+    }
+
+    clearLogsConfirmCurrentOnly?.let { currentOnly ->
+        AlertDialog(
+            onDismissRequest = { clearLogsConfirmCurrentOnly = null },
+            title = {
+                Text(
+                    stringResource(
+                        if (currentOnly) R.string.log_clear_current else R.string.log_clear_all
+                    )
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (currentOnly) R.string.log_clear_current_confirm else R.string.log_clear_all_confirm
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearLogs(currentSourceOnly = currentOnly)
+                    clearLogsConfirmCurrentOnly = null
+                    Toast.makeText(context, R.string.log_cleared, Toast.LENGTH_SHORT).show()
+                }) {
+                    Text(
+                        text = stringResource(R.string.common_delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearLogsConfirmCurrentOnly = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
+
+    skillToDelete?.let { target ->        val deleting = target.name in skillDeleting
         // 删除进行中保持弹窗（转圈），完成后才关闭，避免无反馈地“突然消失”。
         var deleteStarted by remember(target) { mutableStateOf(false) }
         LaunchedEffect(deleteStarted, deleting) {
