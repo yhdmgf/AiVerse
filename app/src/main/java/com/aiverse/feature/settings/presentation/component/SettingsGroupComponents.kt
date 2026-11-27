@@ -295,7 +295,9 @@ internal fun SettingsRow(
     subtitle: String? = null,
     enabled: Boolean = true,
     showEndChevron: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 自定义左侧内容（如带底色的头像）；给出时优先于 [icon]，缩进与图标行一致。 */
+    leading: (@Composable () -> Unit)? = null
 ) {
     val baseModifier = modifier
         .fillMaxWidth()
@@ -305,7 +307,10 @@ internal fun SettingsRow(
         modifier = baseModifier.alpha(if (enabled) 1f else 0.5f),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (icon != null) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(Spacing.md))
+        } else if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
