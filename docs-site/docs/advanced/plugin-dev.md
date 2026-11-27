@@ -334,11 +334,13 @@ demo-kit/
 | `chat.session.menu` | 会话长按菜单 | `page` 或 `handler` |
 | `files.tree.menu` | 文件树文件/目录长按菜单 | 只接受 `handler`（动作） |
 | `editor.selection.menu` | 代码编辑器选中文本后的浮动菜单 | 只接受 `handler`（动作） |
-| `backup.data` | 备份页「选择导出数据」组末尾 | 只接受数据选项 |
+| `backup.data` | 备份页「选择导出数据」组末尾（当前宿主未接入） | 只接受数据选项 |
 
 `settings.*` 槽位只接受页面入口；`files.tree.menu` 与 `editor.selection.menu` 是动作型槽位，只接受 `handler`；`backup.data` 只接受数据选项（只写 `id` / `title` / `icon`，不能写 `page` / `handler` / `confirm`）。入口排序由宿主决定，插件不能指定插入位置。
 
-**宿主渲染范围**：当前已渲染 `settings.general` / `settings.ai` / `settings.environment` / `settings.permissions` / `settings.data` / `settings.help`，以及聊天页的 `chat.header.menu`（顶栏「更多」菜单底部）和 `chat.welcome`（空态建议区）。`drawer.footer`、`chat.session.menu`、`files.tree.menu`、`editor.selection.menu`、`backup.data` 已在清单中解析并通过安装校验，但宿主尚未渲染入口；这些槽位暂不会出现在界面上，后续版本再接入。
+**宿主渲染范围**：12 个界面槽位已全部接入。`settings.general` / `settings.ai` / `settings.environment` / `settings.permissions` / `settings.data` / `settings.help` 出现在对应设置分组末尾；`drawer.footer` 在侧栏底部；`chat.header.menu` 在聊天顶栏「更多」菜单底部；`chat.welcome` 在聊天空态建议区；`chat.session.menu` 在会话长按菜单；`files.tree.menu` 在文件树长按菜单；`editor.selection.menu` 在代码编辑器选中文本后的浮动菜单。入口只在插件启用时出现：`page` 入口打开插件页面，`handler` 入口执行动作，动作返回 `{message}` 时宿主用 toast 显示。
+
+`backup.data` 是数据槽，清单解析和安装校验已支持，但宿主目前没有可挂载的数据导出项，所以声明后不会出现在备份页；等接入备份导出时再启用。
 
 ### hooks
 
@@ -486,7 +488,7 @@ definePlugin({ handlers: {
 ```
 
 - **shizuku**：授权后插件可在 Android 系统直接执行命令（页面桥 `shizuku.exec` / 进程 `host.shizuku.exec`）。系统中的 Shizuku 服务须正在运行。
-- **backup**：授权后可接收 `backup.export.before` / `backup.import.finished` 事件，并在 `backup.data` 槽位声明一个数据选项。
+- **backup**：授权后可接收 `backup.export.before` / `backup.import.finished` 事件，并在 `backup.data` 槽位声明一个数据选项；该槽位目前只做清单校验，宿主尚未提供可挂载的导出项。
 - **modelAccess**：授权后插件可调用使用者已配置的 AI 供应商（进程 `host.model.*`、页面 `aicode.model.*`）。声明本身不授予 Key 读取权限——请求经宿主适配器发出，会计入对应渠道的用量。未声明时调用返回 `MODEL_ACCESS_NOT_DECLARED`。
 - **overlay**：声明系统浮层，`surfaces` 至少 1 个、最多 3 个。每个 surface：
 

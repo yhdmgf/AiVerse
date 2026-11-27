@@ -737,13 +737,15 @@ Accepts only `handler` (action)
 
 `backup.data`
 
-End of the "Choose export data" group on the backup page
+End of the "Choose export data" group on the backup page (not wired in the host yet)
 
 Accepts only data options
 
 `settings.*` slots accept only page entries; `files.tree.menu` and `editor.selection.menu` are action-type slots and accept only `handler`; `backup.data` accepts only data options (write only `id` / `title` / `icon`, not `page` / `handler` / `confirm`). Entry ordering is decided by the host; plugins cannot specify an insertion position.
 
-**Host rendering status:** The host currently renders `settings.general` / `settings.ai` / `settings.environment` / `settings.permissions` / `settings.data` / `settings.help`, plus `chat.header.menu` (bottom of the chat top bar's "More" menu) and `chat.welcome` (empty-state suggestions area). `drawer.footer`, `chat.session.menu`, `files.tree.menu`, `editor.selection.menu`, and `backup.data` are parsed and accepted at install time, but the host does not render entries for them yet.
+**Host rendering status:** All 12 UI slots are wired. `settings.general` / `settings.ai` / `settings.environment` / `settings.permissions` / `settings.data` / `settings.help` appear at the end of their settings groups; `drawer.footer` at the bottom of the drawer; `chat.header.menu` at the bottom of the chat top bar's "More" menu; `chat.welcome` in the empty-state suggestions area; `chat.session.menu` in the session long-press menu; `files.tree.menu` in the file-tree long-press menu; and `editor.selection.menu` in the floating menu after selecting text in the code editor. Entries appear only while the plugin is enabled: page entries open the plugin page, handler entries run the action, and `{message}` is shown as a toast.
+
+`backup.data` is a data slot. The manifest parser and install validation accept it, but the host has no data-export mount yet, so declaring it does not add anything to the backup page.
 
 ### hooks
 
@@ -1076,7 +1078,7 @@ json
 ```
 
 -   **shizuku**: once authorized, the plugin can execute commands directly in the Android system (page bridge `shizuku.exec` / process `host.shizuku.exec`). The system's Shizuku service must be running.
--   **backup**: once authorized, it can receive the `backup.export.before` / `backup.import.finished` events and declare one data option in the `backup.data` slot.
+-   **backup**: once authorized, it can receive the `backup.export.before` / `backup.import.finished` events and declare one data option in the `backup.data` slot. That slot is manifest-validated only; the host does not expose a data-export mount yet.
 -   **modelAccess**: once authorized, the plugin can call the user's configured AI providers (process `host.model.*`, page `aicode.model.*`). The declaration itself doesn't grant key-read permission — requests are sent through the host's adapter and count against that channel's usage. When not declared, calls return `MODEL_ACCESS_NOT_DECLARED`.
 -   **overlay**: declares a system overlay; `surfaces` needs at least 1 and at most 3 entries. Each surface:
 
