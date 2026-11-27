@@ -235,6 +235,18 @@ internal enum class SettingsSection(@param:StringRes val titleRes: Int) {
     PhoneControlAppRules(R.string.phone_app_rules),
 }
 
+/** 路由参数 → 初始分区；空串或未知值落回设置主菜单。 */
+private fun String.toInitialSettingsSection(): SettingsSection? = when (this) {
+    "providers" -> SettingsSection.Providers
+    "plugins" -> SettingsSection.Plugins
+    "mcp" -> SettingsSection.Mcp
+    "phoneControl" -> SettingsSection.PhoneControl
+    "search_provider" -> SettingsSection.SearchProvider
+    "default_models" -> SettingsSection.DefaultModels
+    "roles" -> SettingsSection.Roles
+    else -> null
+}
+
 /**
  * 分区层级：0 首页菜单，1 一级分区，2 分区里再翻一层的详情 / 编辑页，3 详情页之上的编辑页。
  *
@@ -274,6 +286,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
     initialSection: String = "",
+    fromChat: Boolean = false,
     onStopAllAndCloseTerminal: () -> Unit = {},
     onRerunOnboarding: () -> Unit = {},
     onboardingStep: OnboardingStep? = null,
@@ -472,20 +485,12 @@ fun SettingsScreen(
     }
 
     var section by remember {
-        mutableStateOf(
-            when (initialSection) {
-                "providers" -> SettingsSection.Providers
-                // 首页「插件有更新 → 去安装」直接落到插件分区；之前漏了这一档，
-                // 所以点进去只会停在设置主菜单。
-                "plugins" -> SettingsSection.Plugins
-                "mcp" -> SettingsSection.Mcp
-                "phoneControl" -> SettingsSection.PhoneControl
-                "search_provider" -> SettingsSection.SearchProvider
-                "default_models" -> SettingsSection.DefaultModels
-                "roles" -> SettingsSection.Roles
-                else -> SettingsSection.Menu
-            }
-        )
+        mutableStateOf(initialSection.toInitialSettingsSection() ?: SettingsSection.Menu)
+    }
+    // 聊天页长按图标直达某个设置分区时，该分区就是这次设置页的入口根：
+    // 返回应直接退出设置页，而不是先落到设置主菜单（issue #303）。
+    val directEntryRoot = remember(initialSection, fromChat) {
+        if (fromChat) initialSection.toInitialSettingsSection() else null
     }
     var logReturnSection by remember { mutableStateOf(SettingsSection.Menu) }
     var phoneControlGrantReturn by remember { mutableStateOf(SettingsSection.PhoneControl) }
@@ -652,7 +657,9 @@ fun SettingsScreen(
     // 返回目标：null 表示没有上一层，返回动作交还上层导航（退出设置页）。
     // 大屏左菜单常驻，一级分区页没有「上一层」——回菜单只会得到一个空占位。
     // 返回键与顶栏返回箭头共用这一份判定，不再各写一套（之前两处不一致，镜像下载页返回会直接跳回菜单）。
-    val parentSection: SettingsSection? = when (section) {
+    val parentSection: SettingsSection? = if (directEntryRoot != null && section == directEntryRoot) {
+        null
+    } else when (section) {
         SettingsSection.Menu -> null
         SettingsSection.ProviderEditor -> SettingsSection.Providers
         SettingsSection.Log -> logReturnSection.takeUnless { expanded && it == SettingsSection.Menu }
