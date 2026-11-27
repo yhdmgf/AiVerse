@@ -454,7 +454,26 @@ object PluginManifestParser {
         )
 
         private fun readContributes(obj: JsonObject): Contributes? {
-            val raw = obj["contributes"] ?: return null.also { missing("contributes") }
+            // contributes 可整体缺省（例如只有顶层 styleTokens 的纯外观插件，见 #273/#271 测试）：
+            // 缺省时按空贡献处理，不记错误；只有类型不对才算清单非法。
+            val raw = obj["contributes"] ?: return Contributes(
+                skills = emptyList(),
+                agents = emptyList(),
+                workspaceTools = emptyList(),
+                uiEntries = emptyList(),
+                tools = emptyList(),
+                hooks = emptyList(),
+                mcp = emptyList(),
+                providers = emptyList(),
+                sessionSources = emptyList(),
+                shizuku = null,
+                ssh = null,
+                overlay = null,
+                backup = null,
+                modelAccess = null,
+                configPage = null,
+                styleTokens = null
+            )
             val contributes = raw as? JsonObject ?: return null.also { invalid("contributes") }
             var ok = true
             contributes.keys.filter {
