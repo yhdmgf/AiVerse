@@ -41,7 +41,8 @@ data class GitHubComment(
  * GitHub REST API 的 JSON 得到，纯数据、无 Android 依赖。
  */
 data class GitHubIssue(
-    val number: Long,
+    /** issue 编号。GitHub/GitCode 多为数字字符串，Gitee 是 IKXYF8 这类业务编号。 */
+    val number: String,
     val title: String,
     val body: String? = null,
     /** "open" / "closed"。 */

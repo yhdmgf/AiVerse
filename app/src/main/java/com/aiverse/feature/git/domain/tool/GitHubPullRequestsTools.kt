@@ -110,7 +110,7 @@ class GetGitHubPullRequestTool @Inject constructor(
         val pr = result.getOrThrow()
         val checks = repository.getChecks(pr.head.sha).getOrNull()
         // PR 评论与 issue 评论共用 /issues/{number}/comments 接口。
-        val comments = issuesRepository.getComments(number).getOrDefault(emptyList())
+        val comments = issuesRepository.getComments(number.toString()).getOrDefault(emptyList())
         val commits = repository.listPullRequestCommits(number).getOrDefault(emptyList())
         val files = repository.listPullRequestFiles(number).getOrDefault(emptyList())
         val gson = Gson()
@@ -315,7 +315,7 @@ class UpdateGitHubPullRequestTool @Inject constructor(
                 val body = args["body"]?.jsonPrimitive?.contentOrNull?.trim()
                     ?: return ToolResult.Error("comment 缺少必需参数：body", "MISSING_BODY")
                 if (body.isBlank()) return ToolResult.Error("body 不能为空", "INVALID_BODY")
-                issuesRepository.addComment(number, body).fold(
+                issuesRepository.addComment(number.toString(), body).fold(
                     onSuccess = { comment ->
                         ToolResult.Success(
                             JsonObject(mapOf("comment" to Json.parseToJsonElement(gson.toJson(comment))))

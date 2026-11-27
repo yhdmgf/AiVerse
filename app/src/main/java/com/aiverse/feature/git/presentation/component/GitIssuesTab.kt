@@ -87,7 +87,7 @@ internal fun sortIssues(issues: List<GitHubIssue>, sort: String): List<GitHubIss
 /**
  * GitHub issue 列表 tab：顶部 open/closed 过滤 + 排序，下方 issue 列表。
  * 支持多选批量操作（长按进入多选，顶部批量栏批量关闭/加标签）。
- * 非 GitHub 仓库或无 token 时展示对应提示态，不做任何写操作。
+ * 非受支持平台或无 token 时展示对应提示态，不做任何写操作。
  */
 @Composable
 internal fun IssuesTab(
@@ -95,21 +95,21 @@ internal fun IssuesTab(
     loading: Boolean,
     loaded: Boolean,
     filter: String,
-    isGitHub: Boolean,
+    platformSupported: Boolean,
     hasToken: Boolean,
     error: String?,
     remoteUrl: String,
     listState: LazyListState,
     sort: String = "newest",
     selectionMode: Boolean = false,
-    selected: Set<Long> = emptySet(),
+    selected: Set<String> = emptySet(),
     bulkBusy: Boolean = false,
     onLoad: () -> Unit = {},
     onFilterChange: (String) -> Unit,
-    onOpenIssue: (Long) -> Unit,
+    onOpenIssue: (String) -> Unit,
     onSortChange: (String) -> Unit = {},
     onToggleSelectionMode: () -> Unit = {},
-    onToggleSelection: (Long) -> Unit = {},
+    onToggleSelection: (String) -> Unit = {},
     onClearSelection: () -> Unit = {},
     onSelectAll: () -> Unit = {},
     onBulkClose: () -> Unit = {},
@@ -120,7 +120,7 @@ internal fun IssuesTab(
 ) {
     // remoteUrl 变化（如切换仓库）时懒加载；仅 GitHub 且有 token 时触发。
     LaunchedEffect(remoteUrl) {
-        if (isGitHub && hasToken && !loaded && !loading) onLoad()
+        if (platformSupported && hasToken && !loaded && !loading) onLoad()
     }
 
     // 批量加标签弹窗的输入状态。
@@ -135,7 +135,7 @@ internal fun IssuesTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (isGitHub && hasToken) {
+        if (platformSupported && hasToken) {
             if (selectionMode) {
                 BulkActionBar(
                     selectedCount = selected.size,
@@ -185,7 +185,7 @@ internal fun IssuesTab(
         }
 
         when {
-            !isGitHub -> EmptyState(stringResource(R.string.git_issues_not_github))
+            !platformSupported -> EmptyState(stringResource(R.string.git_issues_not_github))
             !hasToken -> EmptyState(stringResource(R.string.git_issues_need_token))
             loading -> IssueLoading()
             error != null -> IssueError(onRetry = onLoad)

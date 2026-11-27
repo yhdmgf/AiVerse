@@ -5,7 +5,9 @@ import com.aiverse.feature.git.domain.model.GitHubComment
 import com.aiverse.feature.git.domain.model.GitHubIssue
 import com.aiverse.feature.git.domain.model.GitHubMilestone
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonArray
+import com.google.gson.JsonNull
+import com.google.gson.JsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,33 +19,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * 从 Git remote URL 解析 GitHub 的 owner/repo。
- *
- * 支持 `https://github.com/owner/repo.git`、`https://github.com/owner/repo`、`git@github.com:owner/repo.git`
- * 三种形式；非 GitHub 仓库或格式无法解析时返回 null。
- */
+/** 从 Git remote URL 解析 GitHub 的 owner/repo（保留给 PR 等仅 GitHub 的功能使用）。 */
 internal fun parseGithubRepoUrl(url: String): Pair<String, String>? {
-    val trimmed = url.trim().trimEnd('/')
-    if (trimmed.isEmpty()) return null
-
-    // SSH 形式：git@github.com:owner/repo.git
-    Regex("""^git@github\.com:([^/]+)/(.+?)(?:\.git)?$""").find(trimmed)?.let { m ->
-        val owner = m.groupValues[1]
-        val repo = m.groupValues[2].removeSuffix(".git")
-        if (owner.isNotBlank() && repo.isNotBlank()) return owner to repo
-        return null
-    }
-
-    // HTTPS 形式：https://github.com/owner/repo(.git)
-    val withoutScheme = trimmed.removePrefix("https://").removePrefix("http://")
-    if (!withoutScheme.startsWith("github.com/")) return null
-    val parts = withoutScheme.removePrefix("github.com/").removeSuffix(".git").split("/")
-    if (parts.size < 2) return null
-    val owner = parts[0]
-    val repo = parts[1]
-    if (owner.isBlank() || repo.isBlank()) return null
-    return owner to repo
+    val parsed = parseIssueRepo(url) ?: return null
+    if (parsed.first != IssuePlatform.GITHUB) return null
+    return parsed.second to parsed.third
 }
 
 /** GitHub issue 请求失败（网络、HTTP 状态码、解析、目标不合法）。 */
@@ -67,7 +47,7 @@ internal suspend fun resolveGitHubTarget(
  * 执行一次 GitHub API 请求。GET 无 body；POST/PATCH 带 [jsonBody]；PUT/DELETE 无 body（部分返回 204 空体）。
  * 非 2xx 时抛 [GitHubIssuesException]（含状态码与响应体）。
  *
- * 供 issue 与 PR 两个仓库共用，保证认证头、Accept 与错误格式一致。
+ * 供 PR 仓库使用（issue 仓库已改为多平台，见 [executeIssueRequest]）。
  */
 internal fun executeGitHubRequest(
     client: OkHttpClient,
@@ -100,12 +80,12 @@ internal fun executeGitHubRequest(
 }
 
 /**
- * 从 GitHub REST API 拉取当前仓库的 issue 列表、详情，并执行 issue 写操作。
+ * 从当前仓库读取 issue 列表、详情，并执行 issue 写操作。
  *
- * 每次请求实时解析当前 remote 的 owner/repo 并读取 github.com 的 token；host 非 github.com
- * 或无 token 时返回 [Result.failure]。网络在 [Dispatchers.IO] 执行，失败统一走失败结果。
- * 写操作（create/edit/close/comment/label/assignee/milestone/lock）仅 GitHub 且有 token 时执行，
- * 由上层工具层负责 ASK 权限确认，本类不做静默远端写入。
+ * 平台由 remote URL 决定：GitHub / Gitee / GitCode（含 atomgit.com）。GitHub 用 Bearer，
+ * Gitee 与 GitCode 用 access_token；字段差异由 [parseIssue] 等映射函数归一化。
+ * issue 编号统一用字符串（Gitee 的 IKXYF8，GitHub/GitCode 的数字也按字符串处理）。
+ * 写操作由上层工具层负责 ASK 权限确认，本类不做静默远端写入。
  */
 @Singleton
 class GitHubIssuesRepository @Inject constructor(
@@ -114,65 +94,35 @@ class GitHubIssuesRepository @Inject constructor(
     private val gitRepository: GitRepository
 ) {
     private companion object {
-        const val GITHUB_HOST = "github.com"
-        const val API_BASE = "https://api.github.com/repos"
         const val PER_PAGE = 100
     }
 
     private val gson = Gson()
 
-    /** 当前仓库的 GitHub issue 列表（已过滤掉 Pull Request 项）。 */
+    /** 当前仓库的 issue 列表（已过滤掉 Pull Request 项）。 */
     suspend fun listIssues(state: String = "open"): Result<List<GitHubIssue>> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues?state=$state&per_page=$PER_PAGE"
-                val body = execute(url, token)
-                val type = object : TypeToken<List<GitHubIssue>>() {}.type
-                val issues: List<GitHubIssue> = gson.fromJson(body, type)
-                Result.success(issues.filter { !it.isPullRequest })
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val body = execute(target, "/issues?state=$state&per_page=$PER_PAGE&sort=created&direction=desc")
+            val array = parseJsonElement(gson, body) as? JsonArray ?: JsonArray()
+            Result.success(parseIssues(array, target).filter { !it.isPullRequest })
         }
 
-    /** 单条 GitHub issue 详情。 */
-    suspend fun getIssue(number: Long): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number"
-                val body = execute(url, token)
-                Result.success(gson.fromJson(body, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+    /** 单条 issue 详情。 */
+    suspend fun getIssue(number: String): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val body = execute(target, "/issues/$number")
+            Result.success(parseIssue(parseJsonElement(gson, body), target))
         }
 
     /** 单条 issue 的评论列表。 */
-    suspend fun getComments(number: Long): Result<List<GitHubComment>> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number/comments?per_page=$PER_PAGE"
-                val body = execute(url, token)
-                val type = object : TypeToken<List<GitHubComment>>() {}.type
-                Result.success(gson.fromJson(body, type))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+    suspend fun getComments(number: String): Result<List<GitHubComment>> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val body = execute(target, "/issues/$number/comments?per_page=$PER_PAGE")
+            val array = parseJsonElement(gson, body) as? JsonArray ?: JsonArray()
+            Result.success(parseComments(array))
         }
 
     /** 创建 issue；labels/assignees 为名称/login 列表，均可为 null。 */
@@ -182,272 +132,215 @@ class GitHubIssuesRepository @Inject constructor(
         labels: List<String>? = null,
         assignees: List<String>? = null
     ): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val payload = HashMap<String, Any>()
-                payload["title"] = title
-                if (!body.isNullOrBlank()) payload["body"] = body
-                if (!labels.isNullOrEmpty()) payload["labels"] = labels
-                if (!assignees.isNullOrEmpty()) payload["assignees"] = assignees
-                val url = "$API_BASE/$owner/$repo/issues"
-                val resp = execute(url, token, method = "POST", jsonBody = gson.toJson(payload))
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply {
+                addProperty("title", title)
+                if (!body.isNullOrBlank()) addProperty("body", body)
+                when (target.platform) {
+                    IssuePlatform.GITHUB -> {
+                        if (!labels.isNullOrEmpty()) add("labels", gson.toJsonTree(labels))
+                        if (!assignees.isNullOrEmpty()) add("assignees", gson.toJsonTree(assignees))
+                    }
+                    else -> {
+                        // Gitee / GitCode：labels 逗号分隔，assignee 单值。
+                        if (!labels.isNullOrEmpty()) addProperty("labels", labels.joinToString(","))
+                        assignees?.firstOrNull()?.let { addProperty("assignee", it) }
+                    }
+                }
             }
+            val resp = execute(target, "/issues", method = "POST", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
     /** 编辑 issue 的标题/正文（null 表示不改）。 */
     suspend fun editIssue(
-        number: Long,
+        number: String,
         title: String? = null,
         body: String? = null
     ): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val payload = HashMap<String, Any>()
-                title?.let { payload["title"] = it }
-                body?.let { payload["body"] = it }
-                val url = "$API_BASE/$owner/$repo/issues/$number"
-                val resp = execute(url, token, method = "PATCH", jsonBody = gson.toJson(payload))
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply {
+                title?.let { addProperty("title", it) }
+                body?.let { addProperty("body", it) }
             }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
-    /** 设置 issue 状态：\"open\" / \"closed\"；可选传 [stateReason]（"completed"/"not_planned"）写入 state_reason。 */
-    suspend fun setIssueState(number: Long, state: String, stateReason: String? = null): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number"
-                val body = if (stateReason != null) {
-                    gson.toJson(mapOf("state" to state, "state_reason" to stateReason))
-                } else {
-                    gson.toJson(mapOf("state" to state))
+    /** 设置 issue 状态："open" / "closed"；stateReason 仅 GitHub 生效。 */
+    suspend fun setIssueState(number: String, state: String, stateReason: String? = null): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply {
+                addProperty("state", state)
+                if (stateReason != null && target.platform == IssuePlatform.GITHUB) {
+                    addProperty("state_reason", stateReason)
                 }
-                val resp = execute(url, token, method = "PATCH", jsonBody = body)
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
             }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
-    /** 关闭 issue；可选传 [stateReason]（"completed"/"not_planned"）写入 state_reason。 */
-    suspend fun closeIssue(number: Long, stateReason: String? = null): Result<GitHubIssue> =
+    /** 关闭 issue。 */
+    suspend fun closeIssue(number: String, stateReason: String? = null): Result<GitHubIssue> =
         setIssueState(number, "closed", stateReason)
 
     /** 重开 issue。 */
-    suspend fun reopenIssue(number: Long): Result<GitHubIssue> = setIssueState(number, "open")
+    suspend fun reopenIssue(number: String): Result<GitHubIssue> = setIssueState(number, "open")
 
     /** 添加评论，返回创建的评论。 */
-    suspend fun addComment(number: Long, body: String): Result<GitHubComment> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number/comments"
-                val resp = execute(url, token, method = "POST", jsonBody = gson.toJson(mapOf("body" to body)))
-                Result.success(gson.fromJson(resp, GitHubComment::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+    suspend fun addComment(number: String, body: String): Result<GitHubComment> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply { addProperty("body", body) }
+            val resp = execute(target, "/issues/$number/comments", method = "POST", jsonBody = gson.toJson(payload))
+            Result.success(parseComment(parseJsonElement(gson, resp)))
         }
 
     /** 编辑评论，返回更新后的评论。 */
     suspend fun editComment(commentId: Long, body: String): Result<GitHubComment> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/comments/$commentId"
-                val resp = execute(url, token, method = "PATCH", jsonBody = gson.toJson(mapOf("body" to body)))
-                Result.success(gson.fromJson(resp, GitHubComment::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply { addProperty("body", body) }
+            val resp = execute(target, "/issues/comments/$commentId", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseComment(parseJsonElement(gson, resp)))
         }
 
     /** 删除评论。 */
     suspend fun deleteComment(commentId: Long): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/comments/$commentId"
-                execute(url, token, method = "DELETE")
-                Result.success(Unit)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            execute(target, "/issues/comments/$commentId", method = "DELETE")
+            Result.success(Unit)
         }
 
     /** 为 issue 追加标签（按名称），返回更新后的 issue。 */
-    suspend fun addLabels(number: Long, labels: List<String>): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number/labels"
-                val resp = execute(url, token, method = "POST", jsonBody = gson.toJson(labels))
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+    suspend fun addLabels(number: String, labels: List<String>): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            if (target.platform == IssuePlatform.GITHUB) {
+                val resp = execute(
+                    target,
+                    "/issues/$number/labels",
+                    method = "POST",
+                    jsonBody = gson.toJson(labels)
+                )
+                return@runCatchingIo Result.success(parseIssue(parseJsonElement(gson, resp), target))
             }
+            // Gitee / GitCode 没有标签子资源：读出当前标签后整体 PATCH 合并。
+            val current = parseIssue(parseJsonElement(gson, execute(target, "/issues/$number")), target)
+            val merged = (current.labels.map { it.name } + labels).distinct()
+            val payload = JsonObject().apply { addProperty("labels", merged.joinToString(",")) }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
     /** 从 issue 移除单个标签（按名称），返回更新后的 issue。 */
-    suspend fun removeLabel(number: Long, label: String): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
+    suspend fun removeLabel(number: String, label: String): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            if (target.platform == IssuePlatform.GITHUB) {
                 val encoded = java.net.URLEncoder.encode(label, "UTF-8").replace("+", "%20")
-                val url = "$API_BASE/$owner/$repo/issues/$number/labels/$encoded"
-                val resp = execute(url, token, method = "DELETE")
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+                val resp = execute(target, "/issues/$number/labels/$encoded", method = "DELETE")
+                return@runCatchingIo Result.success(parseIssue(parseJsonElement(gson, resp), target))
             }
+            val current = parseIssue(parseJsonElement(gson, execute(target, "/issues/$number")), target)
+            val remaining = current.labels.map { it.name }.filter { it != label }
+            val payload = JsonObject().apply { addProperty("labels", remaining.joinToString(",")) }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
-    /** 仓库贡献者（含 committer 与协作者）的 login 列表，供受理人选择。 */
+    /** 仓库贡献者 login 列表，供受理人选择；取不到时返回空列表。 */
     suspend fun getContributors(): Result<List<String>> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/contributors?per_page=$PER_PAGE"
-                val body = execute(url, token)
-                val type = object : TypeToken<List<Map<String, Any?>>>() {}.type
-                val list: List<Map<String, Any?>> = gson.fromJson(body, type)
-                Result.success(list.mapNotNull { it["login"] as? String }.filter { it.isNotBlank() })
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val body = execute(target, "/contributors?per_page=$PER_PAGE")
+            val array = parseJsonElement(gson, body) as? JsonArray ?: JsonArray()
+            val logins = array.mapNotNull { item ->
+                (item as? JsonObject)?.get("login")?.takeIf { it.isJsonPrimitive }?.asString
+            }.filter { it.isNotBlank() }
+            Result.success(logins)
         }
 
-    /** 设置 issue 受理人（按 login 列表，空列表表示清空），返回更新后的 issue。 */
-    suspend fun setAssignees(number: Long, assignees: List<String>): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number"
-                val resp = execute(url, token, method = "PATCH", jsonBody = gson.toJson(mapOf("assignees" to assignees)))
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+    /** 设置 issue 受理人（空列表表示清空），返回更新后的 issue。 */
+    suspend fun setAssignees(number: String, assignees: List<String>): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply {
+                if (target.platform == IssuePlatform.GITHUB) {
+                    add("assignees", gson.toJsonTree(assignees))
+                } else {
+                    addProperty("assignee", assignees.firstOrNull().orEmpty())
+                }
             }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
-    /** 仓库里程碑列表（open + closed），供设置里程碑。 */
+    /** 仓库里程碑列表（open + closed）。 */
     suspend fun getMilestones(): Result<List<GitHubMilestone>> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/milestones?state=all&per_page=$PER_PAGE"
-                val body = execute(url, token)
-                val type = object : TypeToken<List<GitHubMilestone>>() {}.type
-                Result.success(gson.fromJson(body, type))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val body = execute(target, "/milestones?state=all&per_page=$PER_PAGE")
+            val array = parseJsonElement(gson, body) as? JsonArray ?: JsonArray()
+            Result.success(parseMilestones(array))
         }
 
-    /** 设置 issue 里程碑（null 表示清除），返回更新后的 issue。 */
-    suspend fun setMilestone(number: Long, milestoneNumber: Long?): Result<GitHubIssue> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number"
-                val payload = HashMap<String, Any?>()
-                payload["milestone"] = milestoneNumber
-                val resp = execute(url, token, method = "PATCH", jsonBody = gson.toJson(payload))
-                Result.success(gson.fromJson(resp, GitHubIssue::class.java))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+    /** 设置 issue 里程碑（null 表示清除）。 */
+    suspend fun setMilestone(number: String, milestoneNumber: Long?): Result<GitHubIssue> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            val payload = JsonObject().apply {
+                if (milestoneNumber == null) add("milestone", JsonNull.INSTANCE)
+                else addProperty("milestone", milestoneNumber)
             }
+            val resp = execute(target, "/issues/$number", method = "PATCH", jsonBody = gson.toJson(payload))
+            Result.success(parseIssue(parseJsonElement(gson, resp), target))
         }
 
-    /** 锁定（locked=true）/解锁（locked=false）issue，限制非协作者讨论。 */
-    suspend fun setIssueLock(number: Long, locked: Boolean): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            try {
-                val target = resolveTarget()
-                if (target == null) return@withContext errorResult()
-                val (owner, repo, token) = target
-                val url = "$API_BASE/$owner/$repo/issues/$number/lock"
-                execute(url, token, method = if (locked) "PUT" else "DELETE")
-                Result.success(Unit)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
+    /** 锁定/解锁 issue。Gitee / GitCode 没有对应接口，按成功处理，避免打断用户操作。 */
+    suspend fun setIssueLock(number: String, locked: Boolean): Result<Unit> =
+        runCatchingIo {
+            val target = resolveTarget() ?: return@runCatchingIo errorResult()
+            if (target.platform == IssuePlatform.GITHUB) {
+                execute(target, "/issues/$number/lock", method = if (locked) "PUT" else "DELETE")
             }
+            Result.success(Unit)
         }
 
-    /** 当前仓库是否配置了 GitHub token（供 ViewModel 计算 [hasGitHubToken] 状态）。 */
-    suspend fun hasGitHubToken(): Boolean =
-        credentialRepository.findForHost(GITHUB_HOST)?.token?.isNotBlank() == true
+    /** 当前仓库是否配置了对应平台的访问令牌（GitHub / Gitee / GitCode）。 */
+    suspend fun hasGitHubToken(): Boolean {
+        val platform = parseIssueRepo(gitRepository.getRepoUrl())?.first ?: return false
+        return platform.hosts.any { host ->
+            credentialRepository.findForHost(host)?.token?.isNotBlank() == true
+        }
+    }
 
-    /** 解析当前 remote 为 (owner, repo, token)；非 GitHub 或无 token 返回 null。 */
-    private suspend fun resolveTarget(): Triple<String, String, String>? =
-        resolveGitHubTarget(gitRepository, credentialRepository)?.let { Triple(it.owner, it.repo, it.token) }
+    private suspend fun resolveTarget(): IssueTarget? =
+        resolveIssueTarget(gitRepository, credentialRepository)
 
-    /** 统一失败结果（非 GitHub / 无 token 时），错误信息仅用于日志与通用失败态，不直接展示给用户。 */
     private fun errorResult(): Result<Nothing> =
-        Result.failure(GitHubIssuesException("GitHub issues unavailable: repository is not GitHub or token is missing"))
+        Result.failure(GitHubIssuesException("issue unavailable: unsupported platform or token is missing"))
 
-    /** 执行一次 GitHub API 请求，错误统一为 [GitHubIssuesException]。 */
     private fun execute(
-        url: String,
-        token: String,
+        target: IssueTarget,
+        path: String,
         method: String = "GET",
         jsonBody: String? = null
-    ): String = executeGitHubRequest(client, url, token, method, jsonBody)
+    ): String = executeIssueRequest(client, target, path, method, jsonBody)
+
+    /** 统一 IO 调度与异常包装：取消透传，其余异常转失败结果。 */
+    private suspend fun <T> runCatchingIo(block: suspend () -> Result<T>): Result<T> =
+        withContext(Dispatchers.IO) {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 }

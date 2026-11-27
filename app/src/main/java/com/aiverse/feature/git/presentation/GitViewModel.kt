@@ -16,7 +16,9 @@ import com.aiverse.feature.git.domain.GitHubIssuesRepository
 import com.aiverse.feature.git.domain.GitHubPullRequestsRepository
 import com.aiverse.feature.git.domain.GitRepository
 import com.aiverse.feature.git.domain.PatchDiffParser
+import com.aiverse.feature.git.domain.IssuePlatform
 import com.aiverse.feature.git.domain.parseGithubRepoUrl
+import com.aiverse.feature.git.domain.parseIssueRepo
 import com.aiverse.feature.git.domain.model.GitBranch
 import com.aiverse.feature.git.domain.model.GitCommit
 import com.aiverse.feature.git.domain.model.GitFileChange
@@ -169,12 +171,14 @@ class GitViewModel @Inject constructor(
         val issuesError: String? = null,
         /** 当前仓库 remote URL（用于识别 GitHub 与懒加载触发）。 */
         val remoteUrl: String = "",
-        /** 当前 remote 是否为 GitHub。 */
+        /** 当前 remote 是否为 GitHub（PR 相关功能仍只支持 GitHub）。 */
         val isGitHub: Boolean = false,
-        /** 是否已配置 GitHub token。 */
+        /** 当前 remote 是否属于受支持的 issue 平台（GitHub / Gitee / GitCode）。 */
+        val isIssuePlatform: Boolean = false,
+        /** 是否已配置当前平台（GitHub / Gitee / GitCode）的访问令牌。 */
         val hasGitHubToken: Boolean = false,
         /** 正在查看详情的 issue 编号；null 表示未打开详情。 */
-        val issueDetailNumber: Long? = null,
+        val issueDetailNumber: String? = null,
         /** 正在查看的 issue 详情。 */
         val issueDetail: GitHubIssue? = null,
         /** 是否正在加载 issue 详情。 */
@@ -194,7 +198,7 @@ class GitViewModel @Inject constructor(
         /** 是否处于多选模式。 */
         val issueSelectionMode: Boolean = false,
         /** 已选中的 issue 编号集合。 */
-        val selectedIssueNumbers: Set<Long> = emptySet(),
+        val selectedIssueNumbers: Set<String> = emptySet(),
         /** 是否正在执行批量操作。 */
         val issueBulkBusy: Boolean = false,
         /** GitHub Pull Request 列表。 */
@@ -264,7 +268,8 @@ class GitViewModel @Inject constructor(
         val hasIdentity: Boolean = false,
         val untrackedDirFiles: Map<String, List<String>> = emptyMap(),
         val remoteUrl: String = "",
-        val hasGitHubToken: Boolean = false
+        val hasGitHubToken: Boolean = false,
+        val issuePlatform: IssuePlatform? = null
     ) {
         val isGitHub: Boolean get() = parseGithubRepoUrl(remoteUrl) != null
     }
@@ -279,7 +284,11 @@ class GitViewModel @Inject constructor(
         val remoteUrl = async { repository.getRepoUrl() }
         val hasToken = async { issuesRepository.hasGitHubToken() }
         val status = s.await()
-        RepoSnapshot(status, g.await(), r.await(), id.await(), reloadExpandedUntrackedDirs(status), remoteUrl.await(), hasToken.await())
+        val remote = remoteUrl.await()
+        RepoSnapshot(
+            status, g.await(), r.await(), id.await(), reloadExpandedUntrackedDirs(status),
+            remote, hasToken.await(), parseIssueRepo(remote)?.first
+        )
     }
 
     /**
@@ -369,7 +378,7 @@ class GitViewModel @Inject constructor(
                 val snap = loadSnapshot(includeIdentity = true)
                 val commits = snap.graph.toGitCommits()
                 _state.update {
-                    it.copy(loading = false, notARepo = false, status = snap.status, commits = commits, graph = snap.graph, hasRemote = snap.hasRemote, hasIdentity = snap.hasIdentity, untrackedDirFiles = snap.untrackedDirFiles, branchesLoaded = false, branchesLoading = false, branches = emptyList(), tags = emptyList(), repos = repos, subdirs = subdirs, workspaceRoot = workspaceRoot, currentRepo = effectiveRepo, issues = emptyList(), issuesLoading = false, issuesLoaded = false, issuesError = null, issueDetailNumber = null, issueDetail = null, issueDetailLoading = false, issueComments = emptyList(), issueCommentsLoading = false, contributors = emptyList(), issueActionBusy = false, issueActionError = null, issueSelectionMode = false, selectedIssueNumbers = emptySet(), issueBulkBusy = false, pulls = emptyList(), pullsLoading = false, pullsLoaded = false, pullsError = null, pullChecks = emptyMap(), pullDetailNumber = null, pullDetail = null, pullDetailLoading = false, pullDetailChecks = null, pullDetailChecksLoading = false, pullComments = emptyList(), pullCommentsLoading = false, pullActionBusy = false, pullCommits = emptyList(), pullCommitsLoading = false, pullFiles = emptyList(), pullFilesLoading = false, createPullVisible = false, createPullBusy = false, createPullError = null, remoteUrl = snap.remoteUrl, isGitHub = snap.isGitHub, hasGitHubToken = snap.hasGitHubToken)
+                    it.copy(loading = false, notARepo = false, status = snap.status, commits = commits, graph = snap.graph, hasRemote = snap.hasRemote, hasIdentity = snap.hasIdentity, untrackedDirFiles = snap.untrackedDirFiles, branchesLoaded = false, branchesLoading = false, branches = emptyList(), tags = emptyList(), repos = repos, subdirs = subdirs, workspaceRoot = workspaceRoot, currentRepo = effectiveRepo, issues = emptyList(), issuesLoading = false, issuesLoaded = false, issuesError = null, issueDetailNumber = null, issueDetail = null, issueDetailLoading = false, issueComments = emptyList(), issueCommentsLoading = false, contributors = emptyList(), issueActionBusy = false, issueActionError = null, issueSelectionMode = false, selectedIssueNumbers = emptySet(), issueBulkBusy = false, pulls = emptyList(), pullsLoading = false, pullsLoaded = false, pullsError = null, pullChecks = emptyMap(), pullDetailNumber = null, pullDetail = null, pullDetailLoading = false, pullDetailChecks = null, pullDetailChecksLoading = false, pullComments = emptyList(), pullCommentsLoading = false, pullActionBusy = false, pullCommits = emptyList(), pullCommitsLoading = false, pullFiles = emptyList(), pullFilesLoading = false, createPullVisible = false, createPullBusy = false, createPullError = null, remoteUrl = snap.remoteUrl, isGitHub = snap.isGitHub, isIssuePlatform = snap.issuePlatform != null, hasGitHubToken = snap.hasGitHubToken)
                 }
                 // 页面已打开：后台拉取全量分支/标签，用户切到 BRANCHES tab 时无需再等。
                 loadBranches()
@@ -613,7 +622,7 @@ class GitViewModel @Inject constructor(
      */
     fun loadIssues() {
         val current = _state.value
-        if (!current.isGitHub || !current.hasGitHubToken) {
+        if (!current.isIssuePlatform || !current.hasGitHubToken) {
             issuesLoadJob?.cancel()
             _state.update { it.copy(issuesLoaded = true, issuesLoading = false) }
             return
@@ -641,7 +650,7 @@ class GitViewModel @Inject constructor(
     }
 
     /** 打开某条 issue 的详情页并拉取详情；加载失败时页内显示错误+重试（issueDetail 保持 null）。 */
-    fun openIssueDetail(number: Long) {
+    fun openIssueDetail(number: String) {
         val current = _state.value
         if (current.issueDetailNumber == number && current.issueDetail != null) return
         _state.update { it.copy(issueDetailNumber = number, issueDetail = null, issueDetailLoading = true) }
@@ -864,7 +873,7 @@ class GitViewModel @Inject constructor(
     }
 
     private suspend fun loadPullCommentsFor(number: Long) {
-        val comments = issuesRepository.getComments(number).getOrDefault(emptyList())
+        val comments = issuesRepository.getComments(number.toString()).getOrDefault(emptyList())
         if (_state.value.pullDetailNumber != number) return
         _state.update { it.copy(pullComments = comments, pullCommentsLoading = false) }
     }
@@ -876,7 +885,7 @@ class GitViewModel @Inject constructor(
         if (text.isEmpty() || _state.value.pullActionBusy) return
         _state.update { it.copy(pullActionBusy = true) }
         viewModelScope.launch {
-            val result = issuesRepository.addComment(number, text)
+            val result = issuesRepository.addComment(number.toString(), text)
             if (result.isSuccess) {
                 _state.update { it.copy(pullActionBusy = false, toast = context.getString(R.string.git_pr_comment_success)) }
                 loadPullCommentsFor(number)
@@ -1191,7 +1200,7 @@ class GitViewModel @Inject constructor(
     }
 
     /** 勾选/取消勾选单条 issue。 */
-    fun toggleIssueSelection(number: Long) {
+    fun toggleIssueSelection(number: String) {
         _state.update {
             val selected = it.selectedIssueNumbers
             it.copy(selectedIssueNumbers = if (number in selected) selected - number else selected + number)
@@ -1303,7 +1312,7 @@ class GitViewModel @Inject constructor(
     }
 
     /** 懒加载当前 issue 的评论列表。 */
-    fun loadIssueComments(number: Long) {
+    fun loadIssueComments(number: String) {
         if (_state.value.issueCommentsLoading) return
         _state.update { it.copy(issueCommentsLoading = true) }
         viewModelScope.launch {
@@ -1337,7 +1346,7 @@ class GitViewModel @Inject constructor(
         @StringRes nameRes: Int,
         refreshComments: Boolean = false,
         successToast: (() -> String)? = null,
-        action: suspend (Long) -> Result<*>
+        action: suspend (String) -> Result<*>
     ) {
         if (_state.value.issueActionBusy) return
         val number = _state.value.issueDetailNumber ?: return

@@ -31,15 +31,15 @@ private fun stringList(element: kotlinx.serialization.json.JsonElement?): List<S
 /** 通用失败映射：取消传播，其余包成 ToolResult.Error（带 code）。 */
 private fun failure(e: Exception): ToolResult {
     if (e is CancellationException) throw e
-    FileLogger.e(TAG, "GitHub issue 工具失败", e)
+    FileLogger.e(TAG, "issue 工具失败", e)
     val message = e.message.orEmpty()
     if (message.contains("token is missing", ignoreCase = true)) {
         return ToolResult.Error(
-            "未配置 GitHub token：请让用户打开 Git 页右上角钥匙 → 凭据 → +，添加 github.com 的 token，然后重试。不要读取或猜测 token。",
+            "未配置访问令牌：请让用户打开 Git 页右上角钥匙 → 凭据 → +，添加对应平台（github.com / gitee.com / gitcode.com）的 token，然后重试。不要读取或猜测 token。",
             "GITHUB_TOKEN_MISSING"
         )
     }
-    return ToolResult.Error(message.ifBlank { "GitHub issue 操作失败" }, "GITHUB_ISSUE_ERROR")
+    return ToolResult.Error(message.ifBlank { "issue 操作失败" }, "GITHUB_ISSUE_ERROR")
 }
 
 /**
@@ -50,7 +50,7 @@ class ListGitHubIssuesTool @Inject constructor(
     private val repository: GitHubIssuesRepository
 ) : AgentTool() {
     override val name = "listIssues"
-    override val description = "列出当前 GitHub 仓库的 issue 列表（只读）。仅 GitHub 仓库且已配置 token 时可用，否则返回失败。"
+    override val description = "列出当前仓库的 issue 列表（只读）。支持 GitHub / Gitee / GitCode 仓库，需配置对应平台 token，否则返回失败。"
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ)
 
@@ -89,15 +89,15 @@ class GetGitHubIssueTool @Inject constructor(
     private val repository: GitHubIssuesRepository
 ) : AgentTool() {
     override val name = "getIssue"
-    override val description = "获取当前 GitHub 仓库单条 issue 的详情，含正文与评论（只读）。默认返回前 10 条评论，可用 commentLimit 调整（最多 100）。issue 评论常包含用户的补充说明、复现细节和期望结果；处理 issue 前必须先阅读评论再动手。仅 GitHub 仓库且已配置 token 时可用。"
+    override val description = "获取当前仓库单条 issue 的详情，含正文与评论（只读）。默认返回前 10 条评论，可用 commentLimit 调整（最多 100）。issue 评论常包含用户的补充说明、复现细节和期望结果；处理 issue 前必须先阅读评论再动手。支持 GitHub / Gitee / GitCode 仓库，需配置对应平台 token。"
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.NETWORK_READ)
 
     override val parameters = mapOf(
         "number" to ToolParameter(
             name = "number",
-            type = ParameterType.INTEGER,
-            description = "issue 编号（必填）。",
+            type = ParameterType.STRING,
+            description = "issue 编号（必填，字符串；GitHub/GitCode 为数字，Gitee 形如 IKXYF8）。",
             required = true
         ),
         "commentLimit" to ToolParameter(
@@ -109,7 +109,7 @@ class GetGitHubIssueTool @Inject constructor(
     )
 
     override suspend fun execute(args: Map<String, kotlinx.serialization.json.JsonElement>): ToolResult {
-        val number = args["number"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+        val number = args["number"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
             ?: return ToolResult.Error("缺少必需参数：number", "MISSING_NUMBER")
         val rawLimit = args["commentLimit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: DEFAULT_COMMENT_LIMIT
         val limit = rawLimit.coerceIn(1, MAX_COMMENT_LIMIT)
@@ -145,7 +145,7 @@ class CreateGitHubIssueTool @Inject constructor(
     private val repository: GitHubIssuesRepository
 ) : AgentTool() {
     override val name = "createIssue"
-    override val description = "在当前 GitHub 仓库创建一个 issue（写操作，需用户确认）。仅 GitHub 仓库且已配置 token 时可用。"
+    override val description = "在当前仓库创建一个 issue（写操作，需用户确认）。支持 GitHub / Gitee / GitCode 仓库，需配置对应平台 token。"
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.NETWORK_WRITE)
 
@@ -185,9 +185,9 @@ class CreateGitHubIssueTool @Inject constructor(
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认创建 GitHub issue",
+            title = "确认创建 issue",
             summary = "AI 请求创建 issue：$title",
-            details = "将在当前 GitHub 仓库创建 issue。\n标题：$title",
+            details = "将在当前仓库创建 issue。\n标题：$title",
             argsPreview = argsPreview
         )
     }
@@ -221,7 +221,7 @@ class UpdateGitHubIssueTool @Inject constructor(
 ) : AgentTool() {
     override val name = "updateIssue"
     override val description =
-        "对当前 GitHub 仓库的 issue 执行写操作（需用户确认）。action 取值：close（关闭）/reopen（重开）/" +
+        "对当前仓库的 issue 执行写操作（需用户确认）。action 取值：close（关闭）/reopen（重开）/" +
             "edit（改标题正文）/addComment（加评论）/editComment（改评论）/deleteComment（删评论）/" +
             "addLabels（加标签）/removeLabel（删标签）/setAssignees（设受理人）/setMilestone（设里程碑，" +
             "milestone=null 清除）/lock（锁定）/unlock（解锁）。"
@@ -231,8 +231,8 @@ class UpdateGitHubIssueTool @Inject constructor(
     override val parameters = mapOf(
         "number" to ToolParameter(
             name = "number",
-            type = ParameterType.INTEGER,
-            description = "issue 编号（必填）。",
+            type = ParameterType.STRING,
+            description = "issue 编号（必填，字符串；GitHub/GitCode 为数字，Gitee 形如 IKXYF8）。",
             required = true
         ),
         "action" to ToolParameter(
@@ -299,15 +299,15 @@ class UpdateGitHubIssueTool @Inject constructor(
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认更新 GitHub issue",
+            title = "确认更新 issue",
             summary = "AI 请求对 issue #$number 执行：$action",
-            details = "操作：$action（issue #$number）\n将在当前 GitHub 仓库执行该写操作。",
+            details = "操作：$action（issue #$number）\n将在当前仓库执行该写操作。",
             argsPreview = argsPreview
         )
     }
 
     override suspend fun execute(args: Map<String, kotlinx.serialization.json.JsonElement>): ToolResult {
-        val number = args["number"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+        val number = args["number"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
             ?: return ToolResult.Error("缺少必需参数：number", "MISSING_NUMBER")
         val action = args["action"]?.jsonPrimitive?.contentOrNull?.trim()
             ?: return ToolResult.Error("缺少必需参数：action", "MISSING_ACTION")
