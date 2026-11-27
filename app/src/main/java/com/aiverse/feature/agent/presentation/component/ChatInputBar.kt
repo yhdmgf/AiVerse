@@ -603,10 +603,7 @@ internal fun ChatInputBar(
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent
-                        ),
-                        // 外层已给 16dp 左内距；TextField 默认再缩 16dp，导致正文比模式名右移 8dp。
-                        // 收到 8dp 后两条左边缘都落在 24dp（16dp 外距 + 模式键 8dp 内距）。
-                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs)
+                        )
                     )
 
                     Column(
@@ -649,12 +646,14 @@ internal fun ChatInputBar(
                         var modeMenuExpanded by remember { mutableStateOf(false) }
                         Box {
                             // 点击高亮裁剪进按钮圆角，不再方块溢出容器。
-                            // 色块去掉后文字热区会缩小，用 touchTarget 保底，避免触控目标低于推荐值。
+                            // 高度收到 32dp 与右侧图标齐平；横向内距保留，点击区不至于只剩文字宽度。
                             PressableSurface(
                                 onClick = { modeMenuExpanded = !modeMenuExpanded },
                                 shape = RoundedCornerShape(Radius.xs),
-                                contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
-                                // 与右侧 32dp 快捷图标齐平；横向仍保留 8dp 内距，热区不缩到文字本身。
+                                // 外层 16dp + 内距 16dp，模式名左边缘落在 32dp；
+                                // TextFieldValue 版 TextField 不支持 contentPadding，改用同一左内距口径对齐正文。
+                                contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = 0.dp),
+                                // 与右侧 32dp 快捷图标齐平。
                                 modifier = Modifier.height(densityTokens.scale(32))
                             ) {
                                 Text(
