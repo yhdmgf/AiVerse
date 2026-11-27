@@ -3499,6 +3499,7 @@ Use `/goal pause`, `/goal resume`, or `/goal clear` anytime.</string>
 <string name="log_share">Share Logs</string>
 <string name="log_share_all_zip">Export All Logs (.zip)</string>
 <string name="log_share_chooser">Share Logs</string>
+    <string name="log_share_failed">Share failed: %1$s</string>
 <string name="log_share_current">Share Current File</string>
 <string name="log_source_ai">AI Requests</string>
 <string name="log_source_app">App Logs</string>

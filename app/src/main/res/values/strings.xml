@@ -3498,6 +3498,7 @@ AI 将自主循环推进（工具自动放行、PLAN 停用），直到达成、
 <string name="log_share">分享日志</string>
 <string name="log_share_all_zip">打包全部诊断日志 (.zip)</string>
 <string name="log_share_chooser">分享日志</string>
+    <string name="log_share_failed">分享失败：%1$s</string>
 <string name="log_share_current">分享当前文件</string>
 <string name="log_source_ai">AI 请求</string>
 <string name="log_source_app">应用日志</string>
