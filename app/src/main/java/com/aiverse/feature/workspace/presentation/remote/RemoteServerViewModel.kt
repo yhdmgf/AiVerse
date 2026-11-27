@@ -95,6 +95,11 @@ class RemoteServerViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(workspaces = workspaces)
                 }
             }
+            launch {
+                syncSettingsRepository.fileTreeConnectionIds.collect { ids ->
+                    _uiState.value = _uiState.value.copy(fileTreeConnectionIds = ids)
+                }
+            }
         }
     }
 
@@ -463,6 +468,10 @@ class RemoteServerViewModel @Inject constructor(
         syncSettingsRepository.setUseGitIgnore(use)
     }
 
+    fun setFileTreeVisible(connectionId: String, visible: Boolean) {
+        syncSettingsRepository.setFileTreeVisible(connectionId, visible)
+    }
+
     fun setMaxSyncBatchSize(size: Int) {
         syncSettingsRepository.setMaxSyncBatchSize(size)
     }
@@ -493,6 +502,7 @@ data class RemoteServerUiState(
     val connections: List<RemoteConnection> = emptyList(),
     val mounts: List<RemoteMount> = emptyList(),
     val workspaces: List<Workspace> = emptyList(),
+    val fileTreeConnectionIds: Set<String> = emptySet(),
     val failedMountIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val error: String? = null,

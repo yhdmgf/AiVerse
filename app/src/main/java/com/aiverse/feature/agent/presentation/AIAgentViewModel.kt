@@ -66,8 +66,12 @@ import com.aiverse.feature.terminal.domain.TerminalSessionProvider
 import com.aiverse.feature.terminal.domain.takeTailLines
 import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
 import com.aiverse.feature.workspace.domain.FileAccessProvider
+import com.aiverse.feature.workspace.domain.RemoteServerPaths
 import com.aiverse.feature.workspace.domain.UriPathResolver
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
+import com.aiverse.feature.workspace.domain.model.RemoteConnection
+import com.aiverse.feature.workspace.domain.model.RemoteProtocol
+import com.aiverse.feature.workspace.domain.repository.RemoteRepository
 import com.aiverse.feature.agent.domain.tool.PendingToolPermission
 import com.aiverse.feature.agent.domain.tool.ToolPermissionManager
 import com.aiverse.feature.agent.domain.tool.ToolRegistry
@@ -271,6 +275,8 @@ class AIAgentViewModel @Inject constructor(
     private val roleDao: RoleDao,
     private val workspacePathResolver: WorkspacePathResolver,
     private val workspaceRepository: WorkspaceRepository,
+    private val remoteRepository: RemoteRepository,
+    private val syncSettingsRepository: com.aiverse.feature.settings.data.repository.SyncSettingsRepository,
     private val pluginSessionSourceService: PluginSessionSourceService,
     private val pluginSessionRegistry: PluginSessionRegistry,
     private val pluginEventBus: PluginEventBus,
@@ -651,6 +657,9 @@ class AIAgentViewModel @Inject constructor(
     /** 文件树「+」添加的本机文件夹根，按添加顺序排在容器根之后。 */
     private val _localFolders = MutableStateFlow(readLocalFolders())
 
+    /** 在「连接与同步」里勾选显示到文件树的 SSH 服务器根；与执行模式无关。 */
+    private val _remoteFileTreeConnections = MutableStateFlow<List<RemoteConnection>>(emptyList())
+
     /** 侧边栏「文件」Tab 已展开的目录集合（容器路径）。含工作区根：根也可折叠，默认展开；按工作区持久化。 */
     private val _expandedPaths = MutableStateFlow(setOf(WorkspacePathMapper.CONTAINER_ROOT))
 
@@ -826,6 +835,19 @@ class AIAgentViewModel @Inject constructor(
         if (containerExpanded && containerEntries != null) {
             appendBrowseChildren(CONTAINER_FS_ROOT, containerEntries, depth = 1, expanded = expanded, ignorePatterns = emptyList(), relParts = emptyList(), out = nodes)
         }
+        // 独立的 SSH 服务器根：不随执行模式变化，按「连接与同步」里的开关显示。
+        for (connection in _remoteFileTreeConnections.value) {
+            val path = RemoteServerPaths.root(connection.id)
+            val open = path in expanded
+            val entries = if (open) ensureDir(path) else browseListings[path]
+            nodes += rootNode(
+                FileTreeRoot.RemoteServer(connection.id, connection.name), path, expanded,
+                hasError = path in browseDirErrors
+            )
+            if (open && entries != null) {
+                appendBrowseChildren(path, entries, depth = 1, expanded = expanded, ignorePatterns = emptyList(), relParts = emptyList(), out = nodes)
+            }
+        }
         // 用户添加的本机文件夹：读不到（目录被删除/未授权）时只把该行标红，不影响其它根。
         for (folder in _localFolders.value) {
             val path = WorkspacePathMapper.toLocalFolderContainerPath(folder.hostPath)
@@ -926,9 +948,10 @@ class AIAgentViewModel @Inject constructor(
         }
     }
 
-    /** [path] 是否是文件树的根节点（工作区 / 容器 / 本机文件夹）。 */
+    /** [path] 是否是文件树的根节点（工作区 / 容器 / 本机文件夹 / SSH 服务器）。 */
     private fun isBrowseRoot(path: String): Boolean =
         path == WorkspacePathMapper.CONTAINER_ROOT || path == CONTAINER_FS_ROOT ||
+            RemoteServerPaths.isRoot(path) ||
             _localFolders.value.any { WorkspacePathMapper.toLocalFolderContainerPath(it.hostPath) == path }
 
     /**
@@ -975,7 +998,9 @@ class AIAgentViewModel @Inject constructor(
         val wanted = if (!browseSubscribed || scope.mode == ExecutionMode.REMOTE_SSH) {
             emptySet()
         } else {
-            _expandedPaths.value + WorkspacePathMapper.CONTAINER_ROOT
+            (_expandedPaths.value + WorkspacePathMapper.CONTAINER_ROOT)
+                .filterNot { RemoteServerPaths.isPath(it) }
+                .toSet()
         }
         for ((path, job) in browseWatchJobs.toList()) {
             if (path !in wanted || !job.isActive) {
@@ -2638,6 +2663,20 @@ class AIAgentViewModel @Inject constructor(
                 // 切到新工作区：恢复该工作区上次持久化的展开状态（无记录则只展开根），旧缓存整体作废。
                 _expandedPaths.value = loadExpansion(scope.workspace)
                 _browseState.value = FileBrowseState.Loading
+                browseCommands.send(BrowseReload(full = true))
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            combine(
+                remoteRepository.getConnections(),
+                syncSettingsRepository.fileTreeConnectionIds
+            ) { connections, visibleIds ->
+                connections.filter {
+                    it.protocol == RemoteProtocol.SFTP && it.id in visibleIds
+                }
+            }.collect { connections ->
+                _remoteFileTreeConnections.value = connections
                 browseCommands.send(BrowseReload(full = true))
             }
         }

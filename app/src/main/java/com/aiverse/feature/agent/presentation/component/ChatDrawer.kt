@@ -1317,8 +1317,8 @@ private fun FileBrowserTab(
         }
     }
     fun toggleSelect(node: FileTreeNode) {
-        // 本机文件夹挂载根不参与多选勾选：避免其被批量删除/分享/复制带上
-        if (node.root is FileTreeRoot.LocalFolder) return
+        // 根节点不参与多选勾选：避免把整个远程服务器/本机文件夹带入批量删除、分享或复制
+        if (node.root is FileTreeRoot.LocalFolder || node.root is FileTreeRoot.RemoteServer) return
         val kids = descendantsOf(node.path)
         if (node.entry.isDirectory) {
             val children = directChildrenOf(node.path, node.depth)
@@ -2325,12 +2325,12 @@ private fun FileTreeRow(
             .padding(start = Spacing.sm, end = Spacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (inSelectionMode && node.root is FileTreeRoot.LocalFolder) {
-            // 挂载根不参与多选：不显示复选框，用等宽占位保持右侧内容对齐
+        if (inSelectionMode && (node.root is FileTreeRoot.LocalFolder || node.root is FileTreeRoot.RemoteServer)) {
+            // 挂载根/SSH 根不参与多选：不显示复选框，用等宽占位保持右侧内容对齐
             Spacer(Modifier.width(18.dp))
             Spacer(Modifier.width(Spacing.xs))
         }
-        if (inSelectionMode && node.root !is FileTreeRoot.LocalFolder) {
+        if (inSelectionMode && node.root !is FileTreeRoot.LocalFolder && node.root !is FileTreeRoot.RemoteServer) {
             val checked = selectionState == 1
             val partial = selectionState == 2
             Box(
@@ -2434,6 +2434,15 @@ private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
     if (node.root is FileTreeRoot.LocalFolder) {
         Icon(
             imageVector = FeatherIcons.HardDrive,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = decorationColor ?: MaterialTheme.colorScheme.primary
+        )
+        return
+    }
+    if (node.root is FileTreeRoot.RemoteServer) {
+        Icon(
+            imageVector = FeatherIcons.Server,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = decorationColor ?: MaterialTheme.colorScheme.primary

@@ -8,12 +8,13 @@ The "Files" tab at the top of the sidebar is used to browse the files of the cur
 
 ## Browsing Files
 
-The "Files" page is an in-place expanding, indented file tree with **two roots**:
+The "Files" page is an in-place expanding, indented file tree with **two default roots**. After you enable "Show in file tree" for an SSH connection under "Connections & Sync", a server root appears as well:
 
 -   **`workspace`**: the current workspace, expanded by default.
 -   **Current container**: its name is the currently selected container (such as "Built-in Alpine"), and its icon matches the "Containers and Images" list in settings. When expanded it shows the container's entire file system (`/etc`, `/root`, `/usr`, etc.), collapsed by default. In a local PRoot container you see the files inside the container; under remote SSH you see the files on the remote server.
+-   **SSH server (optional)**: turn on the "Show in file tree" switch on an SFTP connection under "Settings → Connections & Sync". It appears as an independent root after the container root, labeled with the connection name; expanding it shows the server's entire `/`. It does not follow the execution mode: even in local mode you can browse and edit remote files over a separate SFTP connection.
 
-Each of the two roots can be collapsed and expanded independently, and there is a refresh button at the top right.
+Each root can be collapsed and expanded independently, and there is a refresh button at the top right.
 
 At the top of the file tree is a **breadcrumb navigation** (`workspace / subdirectory / …`; tapping a non-final segment folds back to that level and collapses the deeper ones). The "⋯" menu on the right gathers: new file, new folder, import (pick files from the system file picker into the workspace root), search (filter currently visible nodes by file name), show/hide hidden files, edit mode, refresh, and sorting by name / size / modification time.
 
@@ -23,7 +24,7 @@ At the top of the file tree is a **breadcrumb navigation** (`workspace / subdire
 -   The coloring rules are similar to VS Code: hidden files starting with `.` are shown in a light, muted color, and entries matched by the workspace root's `.gitignore` are shown in orange (only the workspace root's `.gitignore` is read, not those in subdirectories; files in the container are unaffected).
 -   **File names have three display modes** (switched under "Settings → Appearance → Files", taking effect immediately): **single line, horizontal scrolling** (default, the historical behavior — names don't wrap or truncate, the whole tree shares one horizontal scroll, and you swipe left/right to see the full name) / **at most two lines** (overly long names wrap automatically onto a second line) / **single line with ellipsis** (overly long names are truncated at the end with `…`). The same group also has switches such as "Show hidden files", "Indent density", and "Muted coloring".
 -   Directories you have expanded or collapsed are **remembered per workspace**: closing and reopening the App, or switching away and back to the same workspace, restores the previous expansion state.
--   The container root's directory is only read when expanded; if it can't be read (container not installed, remote not connected), that row is marked red, without affecting the workspace tree.
+-   The container root's directory is only read when expanded; if it can't be read (container not installed, remote not connected), that row is marked red, without affecting the workspace tree. The SSH server root connects on demand too; authentication failures or permission errors only mark that root red. Remote roots have no file watcher, so refresh after editing remote files.
 
 In local mode, the AI file tools support reading and writing files through symbolic links, including links pointing to absolute paths inside the container. Reading or writing follows the link target; deleting, renaming, or moving the link itself leaves the target content in place. When the target doesn't exist, reading reports that the file doesn't exist, and a circular link raises an error. When a project's authorized configuration directory uses such links, the rules can still be read and saved.
 
@@ -61,7 +62,7 @@ A remote SSH workspace cannot watch for changes on the remote file system and **
 
 The name can only be a single entry name: if it contains `/`, `\`, or is `.` or `..`, the confirm button is disabled — this prevents accidentally creating in the wrong directory. If an entry with the same name already exists, or the directory is not writable, a failure message is shown and the original file is not overwritten.
 
-**Long-press a file or subdirectory row** to rename, send to chat, and delete, or open it with another app (both root nodes can only create):
+**Long-press a file or subdirectory row** to rename, send to chat, and delete, or open it with another app (root rows can only create):
 
 -   **Rename**: only changes the name within the same directory; it does not move across directories.
 -   **Send to chat**: appends the file as an `@relative/path` reference into the current session's input box and automatically closes the sidebar; no need to enter multi-select mode first. This item is not shown for entries outside the workspace (e.g., local folders).

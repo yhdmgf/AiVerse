@@ -231,6 +231,10 @@ fun RemoteServerScreen(
                                     ) {
                                         RemoteConnectionCard(
                                             conn = conn,
+                                            showInFileTree = conn.id in uiState.fileTreeConnectionIds,
+                                            onToggleFileTree = { visible ->
+                                                viewModel.setFileTreeVisible(conn.id, visible)
+                                            },
                                             onEdit = {
                                                 connectionToEdit = it
                                                 showAddConnectionDialog = true
