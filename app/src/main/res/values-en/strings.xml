@@ -630,6 +630,7 @@
     <string name="settings_token_stats_cost">Cost</string>
     <string name="settings_token_stats_cache_hit_rate">Cache hit rate</string>
     <string name="settings_token_stats_launch_count">Launches</string>
+    <string name="settings_token_stats_launch_days">Days launched</string>
     <string name="settings_token_stats_cache_read_write">Read %1$s / Write %2$s</string>
     <string name="settings_token_stats_trend">Usage trend</string>
     <string name="settings_token_stats_legend_input">Input</string>

@@ -630,6 +630,7 @@
     <string name="settings_token_stats_cost">费用</string>
     <string name="settings_token_stats_cache_hit_rate">缓存命中率</string>
     <string name="settings_token_stats_launch_count">启动次数</string>
+    <string name="settings_token_stats_launch_days">启动天数</string>
     <string name="settings_token_stats_cache_read_write">读取 %1$s / 写入 %2$s</string>
     <string name="settings_token_stats_trend">消耗趋势</string>
     <string name="settings_token_stats_legend_input">输入</string>

@@ -63,6 +63,12 @@ class GeneralSettingsRepository @Inject constructor(
         /** 应用启动次数：主进程每次冷启动自增一，供 token 统计页概览展示。 */
         val LAUNCH_COUNT_KEY = intPreferencesKey("launch_count")
 
+        /** 累计启动天数：只在本地日期变化后的首次启动自增，同一天多次打开不重复计数。 */
+        val LAUNCH_DAY_COUNT_KEY = intPreferencesKey("launch_day_count")
+
+        /** 上一次计入启动天数的本地日期（ISO yyyy-MM-dd），用于去重。 */
+        val LAST_LAUNCH_DAY_KEY = stringPreferencesKey("last_launch_day")
+
         /** 首字超时默认 5 分钟，与原硬编码值一致。 */
         const val DEFAULT_FIRST_BYTE_TIMEOUT_SEC = 300
 
@@ -313,8 +319,35 @@ class GeneralSettingsRepository @Inject constructor(
     /** 启动次数流；未设置时回退到 0。 */
     val launchCountFlow: Flow<Int> = context.generalDataStore.data.map { it[LAUNCH_COUNT_KEY] ?: 0 }
 
-    /** 启动次数自增一：在 DataStore 事务内读旧值再写回，单进程内原子。 */
-    suspend fun incrementLaunchCount() {
-        context.generalDataStore.edit { it[LAUNCH_COUNT_KEY] = (it[LAUNCH_COUNT_KEY] ?: 0) + 1 }
+    /** 启动次数与启动天数：天数按本地自然日去重，同一天多次打开只算一天。 */
+    val launchStatsFlow: Flow<LaunchStats> = context.generalDataStore.data.map {
+        LaunchStats(
+            count = it[LAUNCH_COUNT_KEY] ?: 0,
+            days = it[LAUNCH_DAY_COUNT_KEY] ?: 0
+        )
     }
+
+    /**
+     * 记录一次启动：次数每次自增；天数仅在本地日期变化后自增。
+     * 读取旧值、比较日期与写回都在同一个 DataStore 事务内完成，避免并发重复计数。
+     */
+    suspend fun recordLaunch() {
+        val today = java.time.LocalDate.now().toString()
+        context.generalDataStore.edit {
+            it[LAUNCH_COUNT_KEY] = (it[LAUNCH_COUNT_KEY] ?: 0) + 1
+            if (it[LAST_LAUNCH_DAY_KEY] != today) {
+                it[LAUNCH_DAY_COUNT_KEY] = (it[LAUNCH_DAY_COUNT_KEY] ?: 0) + 1
+                it[LAST_LAUNCH_DAY_KEY] = today
+            }
+        }
+    }
+
+    /** 启动次数自增一：保留给旧调用点，内部走 [recordLaunch] 同步维护启动天数。 */
+    suspend fun incrementLaunchCount() = recordLaunch()
 }
+
+/** 启动概览：总打开次数与去重后的自然日天数。 */
+data class LaunchStats(
+    val count: Int = 0,
+    val days: Int = 0
+)

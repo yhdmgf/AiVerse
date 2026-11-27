@@ -278,7 +278,7 @@ internal fun TokenStatsSection(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                // AiVerse 自定义：启动次数与 LLM 调用无关，全量累计，不受 hasData 门控。
+                // AiVerse 自定义：启动次数与启动天数都与 LLM 调用无关，全量累计，不受 hasData 门控。
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -286,6 +286,11 @@ internal fun TokenStatsSection(
                     SummaryCard(
                         label = stringResource(R.string.settings_token_stats_launch_count),
                         value = state.launchCount.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryCard(
+                        label = stringResource(R.string.settings_token_stats_launch_days),
+                        value = state.launchDays.toString(),
                         modifier = Modifier.weight(1f)
                     )
                 }

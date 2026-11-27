@@ -309,7 +309,9 @@ data class TokenStatsUiState(
     /** 各供应商 ID 对应的密钥/凭据数量。 */
     val providerKeyCounts: Map<String, Int> = emptyMap(),
     /** 应用启动次数（与周期/筛选无关，全量累计）。 */
-    val launchCount: Int = 0
+    val launchCount: Int = 0,
+    /** 应用启动天数：按本地自然日去重，同一天多次打开只算一天。 */
+    val launchDays: Int = 0
 )
 
 private data class TokenStatsQuery(
@@ -1581,8 +1583,11 @@ class SettingsViewModel @Inject constructor(
             }
 
             launch {
-                generalSettingsRepository.launchCountFlow.collectLatest {
-                    _tokenStats.value = _tokenStats.value.copy(launchCount = it)
+                generalSettingsRepository.launchStatsFlow.collectLatest {
+                    _tokenStats.value = _tokenStats.value.copy(
+                        launchCount = it.count,
+                        launchDays = it.days
+                    )
                 }
             }
 
@@ -1693,9 +1698,10 @@ class SettingsViewModel @Inject constructor(
                             availableProviders = availableProviders,
                             availableModels = availableModels,
                             providerKeyCounts = keyCounts,
-                            // 保留已收集到的启动次数：本管线每次发射会用全新状态整体覆盖 _tokenStats，
-                            // 若不复用当前值，launchCountFlow 写入的值会被冲回默认 0。
-                            launchCount = _tokenStats.value.launchCount
+                            // 保留已收集到的启动统计：本管线每次发射会用全新状态整体覆盖 _tokenStats，
+                            // 若不复用当前值，launchStatsFlow 写入的值会被冲回默认 0。
+                            launchCount = _tokenStats.value.launchCount,
+                            launchDays = _tokenStats.value.launchDays
                         )
                     }
                 }.collectLatest { _tokenStats.value = it }
