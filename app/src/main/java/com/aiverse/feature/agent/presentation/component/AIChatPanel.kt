@@ -789,6 +789,8 @@ fun AIChatPanel(
     settingsViewModel: SettingsViewModel? = null,
     workspaceViewModel: WorkspaceViewModel? = null,
     onOpenDrawer: () -> Unit,
+    /** 侧栏角色入口点击后递增；>0 时打开角色切换抽屉。 */
+    openRoleSwitcherSignal: Int = 0,
     showMenuButton: Boolean = true,
     /** 大屏右栏当前开的是终端 / Git 时，顶栏对应图标高亮。 */
     terminalActive: Boolean = false,
@@ -862,6 +864,10 @@ fun AIChatPanel(
         roleSwitcherViewModel.resolveCurrentRole(sessionRoleId, roleSheetRoles)
     }
     var showRoleSwitcher by remember { mutableStateOf(false) }
+    // 侧栏底部角色入口（issue #271）通过信号复用同一个角色抽屉，避免两处各养一份弹层状态。
+    LaunchedEffect(openRoleSwitcherSignal) {
+        if (openRoleSwitcherSignal > 0) showRoleSwitcher = true
+    }
     val sessionTitle = currentSession?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.chat_new_session_btn)
     val sessionInputTokens = currentSession?.totalInputTokens ?: 0
     val sessionOutputTokens = currentSession?.totalOutputTokens ?: 0
@@ -989,7 +995,7 @@ fun AIChatPanel(
     // 顶栏滚动留白：首帧测量前用兜底估算值，实测 ChatHeader 高度后改为动态值，
     // 让消息列表顶部预留出悬浮顶栏的高度，首条消息不钻到顶栏下（issue #194）。
     // 与下方 inputBarBottomReserveDp 同一套「兜底→实测」模式。
-    val chatHeaderBottomReserveDp = 104.dp
+    val chatHeaderBottomReserveDp = 88.dp
     var headerHeightPx by remember { mutableStateOf(0f) }
     val headerReserveDp = with(LocalDensity.current) {
         (if (headerHeightPx > 0f) headerHeightPx else chatHeaderBottomReserveDp.toPx()).toDp()
@@ -1245,6 +1251,10 @@ fun AIChatPanel(
     val canUploadImages = projectRoot.isNotBlank()
     var showAppUploadSheet by remember { mutableStateOf(false) }
     val reasoningEffort by viewModel.currentSessionReasoningEffort.collectAsStateWithLifecycle()
+    // 顶栏副行只读展示「模型名 / 档位」；不思考时省略档位（issue #271）。
+    val reasoningEffortLabel = reasoningEffort
+        ?.takeIf { it != ReasoningEffort.NONE }
+        ?.let { stringResource(reasoningEffortLabelRes(it)) }
 
     // 上下文用量占比与「是否估算」标记：驱动顶栏用量圆环（原在快捷栏，现固定顶栏）。
     val contextTokenEstimated = contextUsages[currentSessionId]?.estimated
@@ -2422,6 +2432,7 @@ fun AIChatPanel(
                 onOpenMessageTimeline = { showMessageTimeline = true },
                 currentRole = currentRole,
                 onOpenRoleSwitcher = { showRoleSwitcher = true },
+                reasoningEffortLabel = reasoningEffortLabel,
                 pluginHeaderEntries = headerPluginEntries,
                 pluginLanguageTag = pluginLanguageTag,
                 onOpenPluginPage = openPluginPage,
@@ -3125,4 +3136,16 @@ private fun PluginUpdateBanner(
             }
         }
     }
+}
+
+/** 思考档位 → 中文/英文标签资源（与输入区选择器同一套文案）。 */
+private fun reasoningEffortLabelRes(effort: ReasoningEffort): Int = when (effort) {
+    ReasoningEffort.NONE -> R.string.chat_reasoning_effort_none
+    ReasoningEffort.AUTO -> R.string.chat_reasoning_effort_auto
+    ReasoningEffort.MINIMAL -> R.string.chat_reasoning_effort_minimal
+    ReasoningEffort.LOW -> R.string.chat_reasoning_effort_low
+    ReasoningEffort.MEDIUM -> R.string.chat_reasoning_effort_medium
+    ReasoningEffort.HIGH -> R.string.chat_reasoning_effort_high
+    ReasoningEffort.XHIGH -> R.string.chat_reasoning_effort_xhigh
+    ReasoningEffort.MAX -> R.string.chat_reasoning_effort_max
 }

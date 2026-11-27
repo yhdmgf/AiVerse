@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,6 +80,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.aiverse.core.theme.LocalHyperOSStyle
 import com.aiverse.core.theme.LocalSurfaceGlassStyle
 import com.aiverse.core.theme.LocalUIDensityTokens
@@ -170,6 +172,8 @@ internal fun ChatHeader(
     currentRole: Role? = null,
     /** 点击角色入口：打开角色切换抽屉。 */
     onOpenRoleSwitcher: () -> Unit = {},
+    /** 副行展示的思考档位文案（如「中」）；null 表示不展示档位。 */
+    reasoningEffortLabel: String? = null,
     /** 顶栏「···」菜单里的插件槽位入口。 */
     pluginHeaderEntries: List<PluginUiEntry> = emptyList(),
     pluginLanguageTag: String = "",
@@ -186,11 +190,11 @@ internal fun ChatHeader(
                 .statusBarsPadding()
         ) {
             var showRenameDialog by remember { mutableStateOf(false) }
-            var showModelSheet by remember { mutableStateOf(false) }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = Spacing.sm, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
@@ -205,25 +209,28 @@ internal fun ChatHeader(
                 } else {
                     Spacer(modifier = Modifier.width(Spacing.sm))
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    val hyperOS = LocalHyperOSStyle.current
-                    val glass = LocalSurfaceGlassStyle.current
-                    val t = LocalUIDensityTokens.current
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    val titleStyle = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    val titleColor = com.aiverse.core.theme.pluginTopBarTextColor()
+                        ?: MaterialTheme.colorScheme.onBackground
                     // 点标题弹出「重命名会话」对话框：按容器圆角裁剪高亮，不再方块溢出。
                     if (sessionId != null && onRenameSession != null) {
                         PressableSurface(
                             onClick = { showRenameDialog = true },
                             shape = RoundedCornerShape(LocalUIDensityTokens.current.buttonCorner),
-                            contentPadding = PaddingValues(
-                                horizontal = if (hyperOS) Spacing.sm else Spacing.xs,
-                                vertical = Spacing.xs
-                            )
+                            contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 1.dp)
                         ) {
                             Text(
                                 text = sessionTitle,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = com.aiverse.core.theme.pluginTopBarTextColor()
-                                    ?: MaterialTheme.colorScheme.onBackground,
+                                style = titleStyle,
+                                color = titleColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -231,76 +238,34 @@ internal fun ChatHeader(
                     } else {
                         Text(
                             text = sessionTitle,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = com.aiverse.core.theme.pluginTopBarTextColor()
-                                ?: MaterialTheme.colorScheme.onBackground,
+                            style = titleStyle,
+                            color = titleColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                    // 副行：模型 logo + 「模型名 / 档位」，纯只读文字、不可点；模型胶囊与角色胶囊已退役（issue #271）。
+                    val subtitleParts = buildList {
+                        modelName?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        reasoningEffortLabel?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    }
                     Row(
+                        modifier = Modifier.heightIn(min = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
-                    // 当前角色入口：点击打开角色切换抽屉。
-                    RoleSwitcherPill(currentRole = currentRole, onClick = onOpenRoleSwitcher)
-                    if (hyperOS || glass) {
-                        Surface(
-                            shape = RoundedCornerShape(Radius.pill),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(t.scale(1), MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            // 点击高亮裁剪进 pill 圆角，不再方块溢出容器。
-                            PressableSurface(
-                                onClick = { showModelSheet = true },
-                                enabled = onSelectModel != null,
-                                shape = RoundedCornerShape(Radius.pill),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = t.scale(10), vertical = t.scale(5)),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(t.xs)
-                                ) {
-                                    if (!modelName.isNullOrBlank()) {
-                                        ModelLogoIcon(modelName = modelName, size = t.scale(14))
-                                    }
-                                    Text(
-                                        text = modelName?.takeIf { it.isNotBlank() }
-                                            ?: stringResource(R.string.chat_no_model_selected),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
+                        if (!modelName.isNullOrBlank()) {
+                            ModelLogoIcon(modelName = modelName, size = 14.dp)
                         }
-                    } else {
-                        // 点模型名直接打开「模型切换」弹窗：给容器边界+圆角，高亮不再凭空一块。
-                        PressableSurface(
-                            onClick = { showModelSheet = true },
-                            enabled = onSelectModel != null,
-                            shape = RoundedCornerShape(LocalUIDensityTokens.current.buttonCorner),
-                            contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = Spacing.xs)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-                            ) {
-                                if (!modelName.isNullOrBlank()) {
-                                    ModelLogoIcon(modelName = modelName, size = t.scale(14))
-                                }
-                                Text(
-                                    text = modelName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.chat_no_model_selected),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
+                        Text(
+                            text = subtitleParts.joinToString(" / ")
+                                .ifBlank { stringResource(R.string.chat_no_model_selected) },
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
                 // 思考强度入口（右上角，常驻）
@@ -372,21 +337,6 @@ internal fun ChatHeader(
                             Text(stringResource(R.string.common_cancel))
                         }
                     }
-                )
-            }
-            // 点模型名弹「模型切换」弹窗（复用输入区模型选择 ModelSheet）。
-            if (showModelSheet && onSelectModel != null) {
-                ModelSheet(
-                    providers = providers,
-                    currentProviderId = providerId,
-                    currentModel = modelName.orEmpty(),
-                    modelMetadata = modelMetadata,
-                    onSelect = { p, m ->
-                        onSelectModel(p, m)
-                        showModelSheet = false
-                    },
-                    onDismiss = { showModelSheet = false },
-                    runModelTest = runModelTest
                 )
             }
         }

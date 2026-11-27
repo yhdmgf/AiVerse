@@ -118,6 +118,7 @@ import com.aiverse.core.util.ApkInstaller
 import com.aiverse.core.util.extToMimeType
 import com.aiverse.feature.agent.presentation.AIAgentViewModel
 import com.aiverse.feature.agent.presentation.AgentAttachment
+import com.aiverse.feature.agent.presentation.RoleSwitcherViewModel
 import com.aiverse.feature.agent.presentation.component.AIChatPanel
 import com.aiverse.feature.agent.presentation.component.ChatDrawerContent
 import com.aiverse.feature.agent.presentation.component.LocalChatAnimationsEnabled
@@ -863,8 +864,17 @@ fun AppNavigation(
         }
     }
 
+    // issue #271：侧栏底部的角色入口复用聊天页同一个角色切换抽屉，这里只递增信号。
+    var roleSwitcherSignal by remember { mutableIntStateOf(0) }
+
     // 侧栏内容：modal 抽屉与大屏常驻栏共用同一份，不在两处重复几十行参数。
     val drawerBody: @Composable (Boolean) -> Unit = { animationsEnabled ->
+        val roleSwitcherViewModel: RoleSwitcherViewModel = hiltViewModel()
+        val drawerRoles by roleSwitcherViewModel.sheetRoles.collectAsStateWithLifecycle()
+        val drawerRoleId = sessions.firstOrNull { it.id == currentSessionId }?.roleId
+        val drawerRole = remember(drawerRoles, drawerRoleId) {
+            roleSwitcherViewModel.resolveCurrentRole(drawerRoleId, drawerRoles)
+        }
         CompositionLocalProvider(LocalChatAnimationsEnabled provides animationsEnabled) {
         ChatDrawerContent(
             sessions = sessions,
@@ -946,6 +956,9 @@ fun AppNavigation(
                 }
             },
             workspaceName = currentWorkspace?.name.orEmpty(),
+            currentRole = drawerRole,
+            roleWorkspaceName = drawerRole?.workspaceId.orEmpty(),
+            onOpenRoleSwitcher = { roleSwitcherSignal++ },
             onAddLocalFolder = { uri ->
                 agentViewModel.addLocalFolder(uri) { ok ->
                     if (!ok) toastFileOpFailed(context, R.string.file_browser_add_folder_failed)
@@ -1121,6 +1134,7 @@ fun AppNavigation(
                                     settingsViewModel = settingsViewModel,
                                     workspaceViewModel = workspaceViewModel,
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
+                                    openRoleSwitcherSignal = roleSwitcherSignal,
                                     showMenuButton = !permanentDrawer,
                                     onNavigateToTerminal = {
                                         openWorkbench(WorkbenchPaneKind.TERMINAL)
