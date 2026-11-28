@@ -70,6 +70,6 @@ The Developer may update this agreement to reflect feature changes or legal requ
 For questions about this agreement or the App, use the contact details below. GitHub Issues is public; do not post API keys, passwords, or logs containing sensitive information.
 
 
-- Email: admin.aivapp.cn
+- Email: admin@aivapp.cn
 - GitHub Issues: <https://github.com/yhdmgf/AiVerse/issues>
 - Project homepage: <https://github.com/yhdmgf/AiVerse>

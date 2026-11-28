@@ -68,6 +68,6 @@ AI 模型、搜索、网站、MCP 服务、软件仓库、Git 托管、远程服
 
 如对本协议或本应用有疑问，可通过以下方式联系。GitHub Issues 是公开渠道，请勿提交 API Key、密码或含敏感内容的日志。
 
--   联系邮箱：admin.aivapp.cn
+-   联系邮箱：admin@aivapp.cn
 -   GitHub Issues：[https://github.com/yhdmgf/AiVerse/issues](https://github.com/yhdmgf/AiVerse/issues)
 -   项目主页：[https://github.com/yhdmgf/AiVerse](https://github.com/yhdmgf/AiVerse)

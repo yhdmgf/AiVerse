@@ -92,6 +92,6 @@ We may update this policy from time to time. Material changes will be described 
 If you have questions about this Privacy Policy, contact us through the following channels. GitHub Issues is public: do not submit API keys, passwords, or logs containing sensitive information.
 
 
-- Contact email: admin.aivapp.cn
+- Contact email: admin@aivapp.cn
 - GitHub Issues: <https://github.com/yhdmgf/AiVerse/issues>
 - Project home: <https://github.com/yhdmgf/AiVerse>
