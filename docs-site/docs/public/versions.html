@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全部版本 · AiVerse</title>
+<style>
+/* =====================================================================
+   设计基调：静谧编辑风 —— 暖纸色中性底、墨色主操作、衬线版本号做视觉锚点，
+   阴影克制、圆角偏小，状态靠明度/描边/细小图形区分，而非高饱和色。
+   ===================================================================== */
+
+/* ---------- 设计令牌 ---------- */
+:root{
+  /* spacing scale */
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:32px;
+
+  /* neutral roles（亮色） */
+  --bg:#efede7;            /* 页面背景 */
+  --surface:#fbfaf7;       /* 主表面 */
+  --surface-2:#f2efe8;     /* 次表面（左栏 / 分段控件底） */
+  --surface-3:#e9e5db;     /* 按下态表面 */
+  --border:#e2ded4;        /* 常规边框 */
+  --border-strong:#cdc8ba; /* 强边框（控件） */
+  --text:#1c1b19;          /* 主要文字 */
+  --text-2:#5b5850;        /* 次要文字 */
+  --text-disabled:#aaa598; /* 禁用文字 */
+  --ink:#1c1b19;           /* 主按钮底 / 聚焦环 */
+  --ink-hover:#38362f;
+  --ink-active:#0e0d0c;
+  --on-ink:#fbfaf7;
+  --accent:#3451b2;        /* 仅用于文字链接，不做光环/渐变 */
+
+  /* 语义色 */
+  --ok:#2c6a4d;   --ok-bg:#e3eee7;
+  --err:#a23b2e;  --err-bg:#f6e6e1;  --err-border:#dfb4aa;
+  --beta:#86571d; --beta-bg:#f2e7d3;
+  --test:#9b2955; --test-bg:#f7e4ec;
+
+  --focus:var(--ink);
+  --scrim:rgba(28,27,25,.46);
+  --shadow-panel:0 1px 0 rgba(255,255,255,.6) inset,0 24px 48px -16px rgba(28,27,25,.28),0 2px 6px rgba(28,27,25,.08);
+  --shadow-sm:0 1px 2px rgba(28,27,25,.08);
+
+  /* 圆角 / 字号 / 字体 */
+  --r-1:6px; --r-2:8px; --r-3:12px;
+  --fs-xs:12px; --fs-sm:13px; --fs-base:14px; --fs-md:16px; --fs-lg:20px; --fs-xl:40px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  --font-serif:"Iowan Old Style","Songti SC","Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --ctl-h:40px; --ctl-h-sm:32px;
+
+  /* 动效：状态 120–200ms */
+  --t-fast:120ms; --t:160ms; --t-slow:200ms;
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --spring:cubic-bezier(.3,1.3,.5,1);
+}
+html.dark{
+  --bg:#0f0f0e; --surface:#1d1c1a; --surface-2:#171614; --surface-3:#262521;
+  --border:#33312c; --border-strong:#4a4740;
+  --text:#ebe8e0; --text-2:#a9a498; --text-disabled:#6a665d;
+  --ink:#ebe8e0; --ink-hover:#fff; --ink-active:#cfcabd; --on-ink:#1d1c1a;
+  --accent:#8ea3ec;
+  --ok:#6fcf9f; --ok-bg:rgba(111,207,159,.13);
+  --err:#ef8f80; --err-bg:rgba(239,143,128,.12); --err-border:rgba(239,143,128,.38);
+  --beta:#e2a763; --beta-bg:rgba(226,167,99,.13);
+  --test:#e076a3; --test-bg:rgba(224,118,163,.13);
+  --scrim:rgba(0,0,0,.6);
+  --shadow-panel:0 1px 0 rgba(255,255,255,.05) inset,0 24px 56px -12px rgba(0,0,0,.7);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html.is-locked{overflow:hidden;padding-right:var(--sbw,0px)}
+body{
+  font-family:var(--font-sans);font-size:var(--fs-base);line-height:1.65;
+  color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;min-height:100vh;
+}
+.ic{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.ic-sm{width:14px;height:14px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[hidden]{display:none!important}
+
+/* ---------- 宿主页（模态关闭后可见） ---------- */
+.host{max-width:720px;padding:var(--s-6) var(--s-5)}
+.host-brand{display:inline-flex;align-items:center;gap:var(--s-2);font-weight:600;margin-bottom:var(--s-6)}
+.host h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.host p{color:var(--text-2);max-width:46ch;margin-bottom:var(--s-5)}
+
+/* =====================================================================
+   按钮 .btn
+   default      .btn-primary / .btn-secondary
+   hover        .btn:hover
+   focus-visible.btn:focus-visible
+   active       .btn:active
+   disabled     .btn[aria-disabled="true"], .btn:disabled
+   loading      .btn.is-loading
+   success      .btn.is-success
+   error        .btn.is-error
+   ===================================================================== */
+.btn{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);
+  height:var(--ctl-h);padding:0 var(--s-4);border-radius:var(--r-2);border:1px solid transparent;
+  font:inherit;font-size:var(--fs-base);font-weight:550;line-height:1;text-decoration:none;white-space:nowrap;cursor:pointer;
+  transition:background-color var(--t) var(--ease),border-color var(--t) var(--ease),color var(--t) var(--ease),
+             transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.btn-primary{background:var(--ink);color:var(--on-ink)}
+.btn-primary:hover{background:var(--ink-hover)}
+.btn-primary:active{background:var(--ink-active);transform:scale(.98)}
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+.btn-secondary:hover{background:var(--surface-2);border-color:var(--text-2)}
+.btn-secondary:active{background:var(--surface-3);transform:scale(.98)}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.btn[aria-disabled="true"],.btn:disabled{
+  background:var(--surface-2);color:var(--text-disabled);border-color:var(--border);
+  cursor:not-allowed;pointer-events:none;transform:none;
+}
+.btn .btn-ic{position:relative;display:inline-grid;place-items:center;width:18px;height:18px}
+.btn .btn-ic>*{grid-area:1/1;transition:opacity var(--t-fast) var(--ease),transform var(--t) var(--ease)}
+.btn .i-check,.btn .spin{opacity:0;transform:scale(.6)}
+/* loading */
+.btn.is-loading{pointer-events:none;cursor:progress}
+.btn.is-loading .i-dl{opacity:0;transform:scale(.6)}
+.btn.is-loading .spin{opacity:1;transform:none}
+/* success */
+.btn.is-success{background:var(--ok-bg);color:var(--ok);border-color:transparent;pointer-events:none}
+.btn.is-success .i-dl,.btn.is-success .spin{opacity:0}
+.btn.is-success .i-check{opacity:1;transform:none}
+/* error（重试失败时短暂提示） */
+.btn.is-error{background:var(--err-bg);color:var(--err);border-color:var(--err-border)}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* =====================================================================
+   图标按钮 .icon-btn（关闭 / 主题）
+   default / hover / focus-visible / active 如下
+   ===================================================================== */
+.icon-btn{
+  display:inline-grid;place-items:center;width:var(--ctl-h-sm);height:var(--ctl-h-sm);border-radius:var(--r-2);
+  border:1px solid transparent;background:transparent;color:var(--text-2);cursor:pointer;
+  transition:background-color var(--t) var(--ease),color var(--t) var(--ease),border-color var(--t) var(--ease),transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+}
+.icon-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--border)}
+.icon-btn:active{background:var(--surface-3);transform:scale(.94)}
+.icon-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.icon-btn:disabled{color:var(--text-disabled);cursor:not-allowed;background:transparent;border-color:transparent}
+.icon-btn .i-sun{display:none}
+html.dark .icon-btn .i-sun{display:block}
+html.dark .icon-btn .i-moon{display:none}
+
+/* =====================================================================
+   模态骨架 + 遮罩
+   进入：scrim 透明度 200ms；panel 轻微 scale + translateY + 透明度（spring）
+   退出：更快（160ms）ease-out。仅使用 transform/opacity，布局不跳动。
+   ===================================================================== */
+.dl{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:var(--s-5);visibility:hidden;transition:visibility 0s linear 160ms}
+.dl[data-open="true"]{visibility:visible;transition-delay:0s}
+.dl-scrim{position:absolute;inset:0;background:var(--scrim);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity 160ms var(--ease)}
+.dl[data-open="true"] .dl-scrim{opacity:1;transition-duration:var(--t-slow)}
+.dl-panel{
+  position:relative;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);
+  width:min(900px,100%);height:min(640px,calc(100dvh - var(--s-6)*2));
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-3);box-shadow:var(--shadow-panel);overflow:hidden;
+  opacity:0;transform:translateY(var(--s-2)) scale(.97);transform-origin:50% 60%;
+  transition:opacity 160ms var(--ease),transform 160ms var(--ease);
+}
+.dl[data-open="true"] .dl-panel{opacity:1;transform:none;transition:opacity var(--t-slow) var(--ease),transform 240ms var(--spring)}
+.dl-panel:focus{outline:none}
+
+/* ---------- 左栏：上下文层（版本 / 更新日志） ---------- */
+.rail{display:flex;flex-direction:column;min-height:0;padding:var(--s-6) var(--s-5) var(--s-5) var(--s-6);background:var(--surface-2);border-right:1px solid var(--border)}
+.rail-brand{display:flex;align-items:center;gap:var(--s-2);font-weight:600;font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-6)}
+.rail h2{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em;margin-bottom:var(--s-2)}
+.rail .sub{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:var(--s-5);max-width:34ch}
+.eyebrow{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fs-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
+.badge{display:inline-flex;align-items:center;height:20px;padding:0 var(--s-2);border-radius:var(--r-1);font-size:var(--fs-xs);font-weight:600;letter-spacing:0;text-transform:none}
+.badge.stable{background:var(--ok-bg);color:var(--ok)}
+.badge.beta{background:var(--beta-bg);color:var(--beta)}
+.badge.test{background:var(--test-bg);color:var(--test)}
+.ver-big{font-family:var(--font-serif);font-size:var(--fs-xl);line-height:1.1;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;min-height:44px;word-break:break-all}
+.ver-meta{font-size:var(--fs-sm);color:var(--text-2);margin-top:var(--s-2);min-height:21px}
+.ver-sync{margin-top:var(--s-3);font-size:var(--fs-sm);padding:var(--s-3) var(--s-3);border-radius:var(--r-sm,10px);border:1px solid var(--border);background:var(--surface-2,transparent);line-height:1.5}
+.ver-sync .vs-row{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.ver-sync .vs-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.ver-sync.ok{border-color:rgba(46,125,91,.45);background:var(--green-soft,#DFF0E6)}
+.ver-sync.ok .vs-dot{background:var(--green,#2E7D5B)}
+.ver-sync.ok .vs-title{color:var(--green,#2E7D5B);font-weight:600}
+.ver-sync.behind{border-color:rgba(181,131,46,.5);background:var(--amber-soft,#F6ECD8)}
+.ver-sync.behind .vs-dot{background:var(--amber,#B5832E)}
+.ver-sync.behind .vs-title{color:var(--amber,#B5832E);font-weight:600}
+.ver-sync .vs-sub{color:var(--text-2);margin-top:var(--s-1);font-size:var(--fs-xs)}
+.ver-sync .vs-sub a{color:var(--green,#2E7D5B);font-weight:600;text-decoration:underline}
+.ver-sync .vs-hash{font-family:var(--font-mono,monospace);font-size:var(--fs-xs);color:var(--text-2)}
+.ver-test-badge{display:inline-block;vertical-align:middle;margin-left:var(--s-2);padding:2px 10px;border-radius:999px;background:var(--beta-bg,#F2E7D3);color:var(--beta,#86571D);font-family:var(--font-sans,sans-serif);font-size:var(--fs-xs);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.notes-label{margin-top:var(--s-5);padding-top:var(--s-4);border-top:1px solid var(--border);margin-bottom:var(--s-3)}
+.release-note{flex:1;min-height:0;overflow:auto;font-size:var(--fs-sm);color:var(--text-2);padding-right:var(--s-2);scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.release-note h2,.release-note h3,.release-note h4,.release-note h5,.release-note h6{font-size:var(--fs-sm);color:var(--text);font-weight:600;margin:var(--s-4) 0 var(--s-1)}
+.release-note h2:first-child,.release-note h3:first-child{margin-top:0}
+.release-note p{margin-bottom:var(--s-2)}
+.release-note ul,.release-note ol{padding-left:var(--s-5);margin-bottom:var(--s-3)}
+.release-note li{margin-bottom:var(--s-1)}
+.release-note code{font-family:var(--font-mono);font-size:var(--fs-xs);background:var(--surface-3);padding:0 var(--s-1);border-radius:4px}
+.release-note a{color:var(--accent);text-underline-offset:2px}
+.release-note table{border-collapse:collapse;width:100%;margin-bottom:var(--s-3)}
+.release-note th,.release-note td{border-bottom:1px solid var(--border);text-align:left;padding:var(--s-1) var(--s-2)}
+.release-note hr{border:0;border-top:1px solid var(--border);margin:var(--s-3) 0}
+/* GitHub 风格告警卡片（> [!NOTE] / [!TIP] / [!IMPORTANT] / [!WARNING] / [!CAUTION]） */
+.release-note .md-alert{--ac:var(--text-2);--ac-bg:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--ac);background:var(--ac-bg);border-radius:var(--r-1);padding:var(--s-2) var(--s-3);margin-bottom:var(--s-3)}
+.release-note .md-alert-title{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;color:var(--ac);margin-bottom:2px}
+.release-note .md-alert-body{font-size:var(--fs-xs);color:var(--text-2);line-height:1.6}
+.release-note .md-alert--note{--ac:var(--accent);--ac-bg:rgba(52,81,178,.07)}
+.release-note .md-alert--tip{--ac:#2c6a4d;--ac-bg:#e3eee7}
+.release-note .md-alert--important{--ac:#6a3fa0;--ac-bg:#ece4f6}
+.release-note .md-alert--warning{--ac:#86571d;--ac-bg:#f2e7d3}
+.release-note .md-alert--caution{--ac:#a23b2e;--ac-bg:#f6e6e1}
+html.dark .release-note .md-alert{border-color:var(--border)}
+html.dark .release-note .md-alert--note{--ac:#8ea3ec;--ac-bg:rgba(142,163,236,.12)}
+html.dark .release-note .md-alert--tip{--ac:#6fcf9f;--ac-bg:rgba(111,207,159,.13)}
+html.dark .release-note .md-alert--important{--ac:#b79ae8;--ac-bg:rgba(183,154,232,.13)}
+html.dark .release-note .md-alert--warning{--ac:#e2a763;--ac-bg:rgba(226,167,99,.13)}
+html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128,.12)}
+.release-note blockquote{margin:0 0 var(--s-3);padding:var(--s-1) var(--s-3);border-left:3px solid var(--border-strong);color:var(--text-2);font-size:var(--fs-xs)}
+
+/* ---------- 右栏：操作层 ---------- */
+.ops{display:flex;flex-direction:column;min-height:0;min-width:0}
+.ops-bar{display:flex;justify-content:flex-end;gap:var(--s-1);padding:var(--s-3) var(--s-3) 0}
+.ops-body{flex:1;min-height:0;overflow:auto;padding:var(--s-2) var(--s-6) var(--s-5);scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.group{margin-bottom:var(--s-5)}
+.group-label{font-size:var(--fs-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:var(--s-2)}
+
+/* =====================================================================
+   分段控件 .switch / .switch-btn
+   default      .switch-btn
+   selected     .switch-btn.active（thumb 滑块跟随）
+   hover        .switch-btn:hover
+   focus-visible.switch-btn:focus-visible
+   active       .switch-btn:active
+   disabled     .switch-btn:disabled（数据加载中 / 失败时）
+   ===================================================================== */
+.switch{position:relative;display:flex;padding:var(--s-1);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-2)}
+.switch .thumb{position:absolute;top:var(--s-1);bottom:var(--s-1);left:0;width:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-1);box-shadow:var(--shadow-sm);opacity:0;transition:transform var(--t-slow) var(--ease),width var(--t-slow) var(--ease),opacity var(--t-fast) var(--ease)}
+.switch .thumb.ready{opacity:1}
+.switch.no-anim .thumb{transition:none}
+.switch-btn{
+  position:relative;z-index:1;flex:1;display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);
+  height:var(--ctl-h-sm);border:0;border-radius:var(--r-1);background:transparent;color:var(--text-2);
+  font:inherit;font-size:var(--fs-sm);font-weight:550;cursor:pointer;
+  transition:color var(--t) var(--ease),transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
+}
+.switch-btn:hover{color:var(--text)}
+.switch-btn:active{transform:scale(.97)}
+.switch-btn.active{color:var(--text)}
+.switch-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.switch-btn:disabled{color:var(--text-disabled);cursor:not-allowed;transform:none}
+.switch-btn .dot{width:6px;height:6px;border-radius:50%;background:var(--text-disabled);transition:background-color var(--t) var(--ease)}
+.switch-btn[data-channel="stable"].active .dot{background:var(--ok)}
+.switch-btn[data-channel="beta"].active .dot{background:var(--beta)}
+.switch-btn[data-channel="test"].active .dot{background:var(--test)}
+.switch-btn[data-source].active .dot{background:var(--text)}
+
+/* 提示条 */
+.source-note{display:flex;gap:var(--s-2);align-items:flex-start;margin-top:var(--s-3);padding:var(--s-2) var(--s-3);border-radius:var(--r-2);background:var(--surface-2);border:1px solid var(--border);font-size:var(--fs-xs);color:var(--text-2);line-height:1.6}
+.source-note[hidden]{display:none}
+.source-note .ic{margin-top:2px}
+.source-note b{color:var(--text)}
+
+/* =====================================================================
+   安装包行 .pkg —— 推荐项（.is-rec）视觉权重最高，其余降级
+   default / hover(.pkg:hover) / 内部按钮见 .btn
+   ===================================================================== */
+.pkgs{display:flex;flex-direction:column;gap:var(--s-3)}
+.pkg{padding:var(--s-4);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface);transition:border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.pkg:hover{border-color:var(--border-strong)}
+.pkg.is-rec{border-color:var(--border-strong);background:var(--surface);box-shadow:var(--shadow-sm)}
+.pkg-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-3)}
+.pkg-id{display:flex;align-items:center;gap:var(--s-2)}
+.pkg-name{font-weight:650;font-size:var(--fs-md)}
+.tag{font-size:var(--fs-xs);font-weight:600;color:var(--on-ink);background:var(--ink);border-radius:var(--r-1);padding:0 var(--s-2);line-height:20px}
+.pkg-size{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2);font-variant-numeric:tabular-nums}
+.pkg-abi{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2);margin-top:2px}
+.pkg-desc{font-size:var(--fs-sm);color:var(--text-2);margin:var(--s-2) 0 var(--s-3)}
+.pkg-actions{display:flex;gap:var(--s-2)}
+.pkg-actions .btn{flex:1}
+/* 校验值：直接平铺官方 MD5 / SHA-256 */
+.pkg-sums{margin-top:var(--s-2);display:flex;flex-direction:column;gap:var(--s-1)}
+.pkg-sums .sums{margin:2px 0;font-size:12px;line-height:1.7;color:var(--text-2);word-break:break-all}
+.pkg-sums .sums code{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:1px 6px;font-size:11px;color:var(--text)}
+.pkg-sums .vstatus.bad{color:#dc2626;font-weight:600}
+.pkg:not(.is-rec) .btn{height:var(--ctl-h-sm)}
+.pkg-hint{margin-top:var(--s-2);font-size:var(--fs-xs);color:var(--text-2)}
+.pkg-hint b{color:var(--text)}
+
+/* =====================================================================
+   骨架 loading：.sk（加载中占位）
+   空状态：.state（无版本 / 无安装包）
+   错误状态：.state.state-error（带重试）
+   ===================================================================== */
+.sk{display:block;border-radius:var(--r-1);background:linear-gradient(90deg,var(--surface-3) 0%,var(--border) 50%,var(--surface-3) 100%);background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.sk-ver{width:55%;height:40px}
+.sk-line{height:12px;margin-bottom:var(--s-2)}
+.sk-pkg{height:132px;border-radius:var(--r-2);margin-bottom:var(--s-3)}
+.state{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2);padding:var(--s-5);border:1px dashed var(--border-strong);border-radius:var(--r-2);color:var(--text-2)}
+.state .ic{width:22px;height:22px;color:var(--text-2)}
+.state-title{font-weight:600;color:var(--text)}
+.state-desc{font-size:var(--fs-sm)}
+.state .btn{margin-top:var(--s-2)}
+.state-error{border-style:solid;border-color:var(--err-border);background:var(--err-bg)}
+.state-error .ic,.state-error .state-title{color:var(--err)}
+.inline-error{display:flex;gap:var(--s-2);align-items:flex-start;color:var(--err);font-size:var(--fs-sm)}
+.inline-error .ic{margin-top:2px}
+
+/* =====================================================================
+   链接 .link
+   default / hover / focus-visible / active
+   ===================================================================== */
+.foot{border-top:1px solid var(--border);padding:var(--s-4) var(--s-6);display:flex;flex-direction:column;gap:var(--s-2);background:var(--surface)}
+.foot-links{display:flex;flex-wrap:wrap;gap:var(--s-2) var(--s-4)}
+.link{display:inline-flex;align-items:center;gap:var(--s-1);font-size:var(--fs-sm);color:var(--text-2);text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;border-radius:4px;transition:color var(--t) var(--ease),text-decoration-color var(--t) var(--ease),box-shadow var(--t-fast) var(--ease)}
+.link:hover{color:var(--text);text-decoration-color:currentColor}
+.link:active{color:var(--text-2);text-decoration-color:currentColor;opacity:.8}
+.link:focus-visible{outline:none;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--focus)}
+.foot-note{font-size:var(--fs-xs);color:var(--text-2)}
+.foot-note .link{font-size:inherit;color:var(--accent)}
+
+/* ---------- 移动端：底部浮层 ---------- */
+@media (max-width:760px){
+  .dl{padding:0;place-items:end center}
+  .dl-panel{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);width:100%;height:min(92dvh,760px);border-radius:var(--r-3) var(--r-3) 0 0;border-bottom:0;transform:translateY(24px)}
+  .rail{padding:var(--s-5) var(--s-5) var(--s-4);border-right:0;border-bottom:1px solid var(--border)}
+  .rail-brand,.rail .sub,.notes-label{display:none}
+  .rail h2{display:none}
+  .ver-big{font-size:var(--fs-lg);min-height:28px}
+  .release-note{display:none}
+  .ops-bar{position:absolute;top:var(--s-2);right:var(--s-2);padding:0}
+  .ops-body{padding:var(--s-4) var(--s-5) var(--s-5)}
+  .foot{padding:var(--s-3) var(--s-5)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ---------- 下载页独立页面布局：打开即见完整内容，不再套一层弹窗 ---------- */
+html,body{min-height:100%;background:var(--bg)}
+body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(ellipse at 12% 0%,rgba(73,105,93,.08),transparent 38%),var(--bg)}
+.dl{position:relative;inset:auto;z-index:1;display:grid;place-items:center;min-height:calc(100dvh - clamp(24px,6vw,72px));padding:0;visibility:visible!important;transition:none}
+.dl-scrim{display:none!important}
+.dl-panel,.dl[data-open="true"] .dl-panel{width:min(1120px,100%);height:min(820px,calc(100dvh - clamp(24px,6vw,72px)));min-height:600px;opacity:1;transform:none;transition:none;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-panel);overflow:hidden}
+.home-btn{text-decoration:none}
+.home-btn:hover{background:var(--surface-2);color:var(--text)}
+.host{display:none!important}
+@media(max-width:760px){
+ body{padding:10px;background:var(--bg)}
+ .dl{min-height:calc(100dvh - 20px);align-items:stretch}
+ .dl-panel,.dl[data-open="true"] .dl-panel{width:100%;height:auto;min-height:calc(100dvh - 20px);max-height:none;border-radius:14px;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);}
+ .rail{padding:22px 20px 16px}
+ .rail-brand{display:flex!important;margin-bottom:10px}
+ .rail h2{display:block!important;margin-bottom:4px}
+ .rail .sub{display:block!important;margin-bottom:12px}
+ .ver-big{font-size:25px;min-height:30px}
+ /* 移动端也显示更新公告，限高+内部滚动，避免挤占空间 */
+ .release-note{display:block!important;max-height:220px;overflow:auto;border-top:1px solid var(--border);padding-top:10px;margin-top:4px}
+ .notes-label{display:block!important;margin-top:14px}
+ .ops{min-height:0}
+ .ops-bar{position:absolute;top:12px;right:12px;z-index:3;padding:0}
+ .ops-body{padding:18px 18px 22px;overflow:visible}
+ .foot{padding:14px 18px 18px}
+}
+
+
+/* 独立下载页的视觉细节 */
+.rail{background:linear-gradient(155deg,var(--surface-2),var(--surface));}
+.rail-brand{letter-spacing:.02em}
+.rail h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
+.eyebrow{letter-spacing:.07em;text-transform:uppercase}
+.ver-big{font-size:clamp(34px,4vw,48px);letter-spacing:-.045em}
+.ops-bar{padding:14px 16px 0}
+.icon-btn{width:38px;height:38px;border-radius:10px}
+.ops-body{gap:22px}
+.group{margin-bottom:24px}
+.group-label{font-size:12px;letter-spacing:.055em}
+.pkg{border-radius:12px;padding:17px}
+.pkg.is-rec{border-color:var(--border-strong);box-shadow:0 5px 18px rgba(28,27,25,.055)}
+.pkg-name{letter-spacing:-.02em}
+@media(max-width:760px){.ops-bar{padding:0}.rail-brand{margin-bottom:8px}.rail h2{font-size:23px}.group{margin-bottom:18px}.pkg{padding:15px}}
+
+/* =====================================================================
+   测试版确认弹窗 .test-modal
+   遮罩 + 居中卡片；三个复选框全部勾选后确认按钮才可用；右上角 × 关闭即放弃
+   ===================================================================== */
+.test-modal-scrim{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:var(--s-5);background:var(--scrim);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;transition:opacity var(--t) var(--ease)}
+.test-modal-scrim[hidden]{display:none}
+.test-modal-scrim.open{opacity:1}
+.test-modal{width:min(440px,100%);max-height:min(88vh,640px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-3);box-shadow:var(--shadow-panel);transform:translateY(16px) scale(.98);opacity:0;transition:transform var(--t) var(--spring),opacity var(--t) var(--ease)}
+.test-modal-scrim.open .test-modal{transform:none;opacity:1}
+.test-modal-head{display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-5) var(--s-5) var(--s-4);border-bottom:1px solid var(--border)}
+.test-modal-title{flex:1;font-family:var(--font-serif);font-size:var(--fs-lg);font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:var(--s-2)}
+.test-modal-title .warn-ic{width:22px;height:22px;color:var(--test);flex-shrink:0}
+.test-modal-close{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--r-1);background:var(--surface-2);color:var(--text-2);cursor:pointer;transition:color var(--t) var(--ease),border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.test-modal-close:hover{color:var(--text);border-color:var(--border-strong);background:var(--surface-3)}
+.test-modal-close svg{width:16px;height:16px}
+.test-modal-body{flex:1;min-height:0;overflow:auto;padding:var(--s-4) var(--s-5) var(--s-5)}
+.test-modal-lead{font-size:var(--fs-sm);color:var(--text-2);line-height:1.7;margin-bottom:var(--s-4)}
+.test-modal-lead b{color:var(--text)}
+.ack-list{display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-5)}
+.ack-item{display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-3) var(--s-4);border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface-2);cursor:pointer;transition:border-color var(--t) var(--ease),background-color var(--t) var(--ease)}
+.ack-item:hover{border-color:var(--border-strong)}
+.ack-item input{margin-top:2px;width:16px;height:16px;accent-color:var(--test);cursor:pointer;flex-shrink:0}
+.ack-item span{font-size:var(--fs-sm);color:var(--text);line-height:1.6}
+.test-modal-foot{display:flex;gap:var(--s-3)}
+.test-modal-foot .btn{flex:1}
+
+/* ---------- 全部版本列表页 ---------- */
+.ver-page{max-width:880px;margin:0 auto;padding:var(--s-6) var(--s-5) var(--s-6)}
+.ver-head h1{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg);letter-spacing:-.01em}
+.ver-head .sub{color:var(--text-2);max-width:56ch;margin-top:var(--s-2);font-size:var(--fs-sm)}
+.rel-list{display:flex;flex-direction:column;gap:var(--s-4);margin-top:var(--s-5)}
+.rel-card{border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface);padding:var(--s-5)}
+.rel-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap}
+.rel-head .pkg-id{display:flex;align-items:center;gap:var(--s-2)}
+.rel-tag{font-family:var(--font-serif);font-weight:600;font-size:var(--fs-lg)}
+.rel-date{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2)}
+.rel-note{margin:var(--s-3) 0 var(--s-1)}
+.rel-pkgs{display:flex;flex-direction:column;gap:var(--s-3);margin-top:var(--s-3)}
+</style>
+</head>
+<body>
+
+<!-- 内联 SVG 图标：统一 24 网格、stroke-width 1.75、圆角端点 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 11 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7"/><path d="M5.5 9v11h13V9M9.5 20v-6h5v6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.5L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.5l1.7-2"/><path d="M20 20v-4.5h-4.5"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 10.5 13.5"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M4 13.5 6.5 5h11l2.5 8.5"/><path d="M4 13.5V18a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4.5h-4.5a2.5 2.5 0 0 1-5 0H4z"/></symbol>
+  <symbol id="i-mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="9" ry="4.5" transform="rotate(-30 12 12)"/></symbol>
+</svg>
+
+<div class="ver-page">
+  <div class="ops-bar">
+    <button class="icon-btn" id="themeBtn" type="button" title="切换明暗主题" aria-label="切换明暗主题">
+      <svg class="ic i-moon"><use href="#i-moon"/></svg><svg class="ic i-sun"><use href="#i-sun"/></svg>
+    </button>
+    <a class="icon-btn home-btn" href="/" title="返回首页" aria-label="返回首页">
+      <svg class="ic"><use href="#i-home"/></svg>
+    </a>
+  </div>
+  <header class="ver-head">
+    <h1>全部版本</h1>
+    <p class="sub">列出仓库内全部发布版本；安装包均经本站签名链路分发，可按架构选择下载。</p>
+  </header>
+  <main id="relList" class="rel-list" aria-live="polite"></main>
+</div>
+<div class="sr-only" id="sr" aria-live="polite"></div>
+
+<script>
+(function(){
+  var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
+  // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
+  var SIGN_API='https://api.aivapp.cn/sign';
+  var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=100';
+
+  var PKGS=[
+    {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64 位 ARM 芯片，主流安卓手机推荐', rec:true},
+    {key:'universal', name:'Universal', abi:'arm64-v8a + x86_64', desc:'通用包：同时含两套架构，兼容所有设备，体积约为单架构包两倍'},
+    {key:'x86_64', name:'x86_64', abi:'x86_64', desc:'x86_64 架构，模拟器 / x86 设备'}
+  ];
+
+  var $=function(id){return document.getElementById(id)};
+  var ICON=function(n,c){return '<svg class="ic'+(c?' '+c:'')+'"><use href="#i-'+n+'"/></svg>';};
+
+  /* ---------- 主题 ---------- */
+  var root=document.documentElement;
+  try{ if(localStorage.getItem('vp-theme')==='dark') root.classList.add('dark'); }catch(e){}
+  $('themeBtn').addEventListener('click',function(){
+    var dark=root.classList.toggle('dark');
+    try{ localStorage.setItem('vp-theme',dark?'dark':'light'); }catch(e){}
+  });
+
+  /* ---------- 更新公告清洗 ---------- */
+  function cleanNote(md){
+    var lines=md.replace(/\r/g,'').split('\n');
+    var out=[], inTable=false, inCode=false;
+    for(var i=0;i<lines.length;i++){
+      var L=lines[i];
+      if(/^\s*```/.test(L)){ inCode=!inCode; continue; }
+      if(inCode) continue;
+      if(!inTable && L.indexOf('|')!==-1 && (lines[i+1]||'').indexOf('-')!==-1 && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i+1]||'')){ inTable=true; continue; }
+      if(inTable){
+        if(/^\s*\|?[\s:|-]+\|?\s*$/.test(L)) continue;
+        if(L.indexOf('|')!==-1 && !/^\s*$/.test(L)) continue;
+        inTable=false;
+      }
+      if(/Full\s+Changelog/i.test(L)) continue;
+      out.push(L);
+    }
+    return out.join('\n');
+  }
+  function stripRefs(html){
+    return html
+      .replace(/<a\s+[^>]*href="[^"]*\/(?:issues|pull)\/\d+"[^>]*>[\s\S]*?<\/a>/gi,'')
+      .replace(/<a[^>]*>\s*#\d+\s*<\/a>/gi,'')
+      .replace(/[（(]\s*(?:#\d+|\d+)\s*[）)]\s*/g,'')
+      .replace(/[（(]\s*[\s\S]*?\s*#\d+\s*[\s\S]*?\s*[）)]\s*/g,'')
+      .replace(/\s*#\d+/g,'')
+      .replace(/[（(]\s*[）)]/g,'')
+      .replace(/[（(]\s*<br\s*\/?>\s*[）)]/gi,'')
+      .replace(/[（(]\s*[）)]\s*/g,'')
+      .replace(/\s{2,}/g,' ')
+      .replace(/[ \t]+([。\.!?！？])/g,'$1');
+  }
+
+  /* ---------- 轻量 Markdown 渲染 ---------- */
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function inline(s){
+    return esc(s)
+      .replace(/`([^`]+)`/g,'<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+      .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/|#)[^)]*)\)/g,'<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  }
+  function splitRow(row){
+    row=row.trim();
+    if(row.charAt(0)==='|') row=row.slice(1);
+    if(row.charAt(row.length-1)==='|') row=row.slice(0,-1);
+    return row.split('|').map(function(c){return c.trim();});
+  }
+  function renderMD(md){
+    if(window.markdownit) return window.markdownit({html:false}).render(md);
+    var lines=md.replace(/\r/g,'').split('\n');
+    var out=[], i=0;
+    while(i<lines.length){
+      var line=lines[i];
+      if(line.indexOf('|')!==-1 && (lines[i+1]||'').indexOf('-')!==-1 && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i+1]||'')){
+        var header=splitRow(line); i+=2;
+        var rows=[];
+        while(i<lines.length && lines[i].indexOf('|')!==-1 && !/^\s*$/.test(lines[i])){ rows.push(splitRow(lines[i])); i++; }
+        var t='<table><thead><tr>';
+        header.forEach(function(c){t+='<th>'+inline(c)+'</th>';});
+        t+='</tr></thead><tbody>';
+        rows.forEach(function(r){ t+='<tr>'; header.forEach(function(_,ci){ t+='<td>'+inline(r[ci]||'')+'</td>'; }); t+='</tr>'; });
+        t+='</tbody></table>';
+        out.push(t); continue;
+      }
+      if(/^\s*([-*_])\s*(?:\1\s*){2,}$/.test(line)){ out.push('<hr>'); i++; continue; }
+      var hm=line.match(/^(#{1,6})\s+(.+)$/);
+      if(hm){ var lv=Math.min(hm[1].length+1,6); out.push('<h'+lv+'>'+inline(hm[2])+'</h'+lv+'>'); i++; continue; }
+      if(/^\s*[-*+]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)){
+        var ordered=/^\s*\d+\.\s+/.test(line);
+        var items=[];
+        while(i<lines.length && (/^\s*[-*+]\s+/.test(lines[i]) || /^\s*\d+\.\s+/.test(lines[i]))){
+          items.push(lines[i].replace(/^\s*(?:[-*+]|\d+\.)\s+/,'')); i++;
+        }
+        var tag=ordered?'ol':'ul', l='<'+tag+'>';
+        items.forEach(function(it){ l+='<li>'+inline(it)+'</li>'; });
+        out.push(l+'</'+tag+'>'); continue;
+      }
+      if(/^\s*$/.test(line)){ i++; continue; }
+      if(/^\s*>/.test(line)){
+        var q=[];
+        while(i<lines.length && /^\s*>/.test(lines[i])){
+          q.push(lines[i].replace(/^\s*>\s?/,'')); i++;
+        }
+        var alertM=(q[0]||'').match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+        if(alertM){
+          var type=alertM[1].toUpperCase(); var rest=alertM[2]||'';
+          if(/^\s*$/.test(rest)) q.shift();
+          else q[0]=rest;
+          var body=q.filter(function(x){return !/^\s*$/.test(x);}).map(inline).join('<br>');
+          out.push('<div class="md-alert md-alert--'+type.toLowerCase()+'"><div class="md-alert-title">'+type+'</div><div class="md-alert-body">'+body+'</div></div>');
+        } else {
+          var qbody=q.filter(function(x){return !/^\s*$/.test(x);}).map(inline).join('<br>');
+          out.push('<blockquote>'+qbody+'</blockquote>');
+        }
+        continue;
+      }
+      var para=[];
+      while(i<lines.length && !/^\s*$/.test(lines[i]) && !/^\s*(?:[-*+]|\d+\.)\s+/.test(lines[i]) && !/^#{1,6}\s/.test(lines[i]) && !/^\s*>/.test(lines[i]) && lines[i].indexOf('|')===-1){
+        para.push(lines[i]); i++;
+      }
+      if(para.length){ out.push('<p>'+para.map(inline).join('<br>')+'</p>'); }
+      else { i++; }
+    }
+    return out.join('\n');
+  }
+
+  /* ---------- GitHub 直连兜底（仅在无 JS / 签名失败时兜底，页面主下载走本站签名） ---------- */
+  function ghUrl(tag,key){ return 'https://github.com/'+GH_OWNER+'/'+GH_REPO+'/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }
+
+  function dlBtn(href,label,signFile){
+    return '<a class="btn btn-primary" href="'+href+'" download'+(signFile?' data-sign="'+signFile+'"':'')+'>'
+      +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
+      +'<span class="btn-label">'+label+'</span></a>';
+  }
+
+  /* ---------- 单个版本卡片 ---------- */
+  function releaseCard(rel){
+    var tag=rel.tag_name, assets=rel.assets||[];
+    var pre=!!rel.prerelease;
+    var badge='<span class="badge '+(pre?'beta':'stable')+'">'+(pre?'预览版':'正式版')+'</span>';
+    var d=new Date(rel.published_at);
+    var dateStr=isNaN(d)?'':d.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'});
+    var note=stripRefs(renderMD(cleanNote(rel.body||'（暂无更新日志）')));
+
+    var pkgs='';
+    PKGS.forEach(function(p){
+      var a=assets.filter(function(x){return x.name.toLowerCase().indexOf(p.key)!==-1;})[0];
+      if(!a) return;
+      var mb=(a.size/1024/1024).toFixed(1);
+      var siteFile='/apk/'+a.name;
+      pkgs+='<article class="pkg'+(p.rec?' is-rec':'')+'">'
+        +'<div class="pkg-top"><div class="pkg-id"><span class="pkg-name">'+p.name+'</span>'+(p.rec?'<span class="tag">推荐</span>':'')+'</div><span class="pkg-size">'+mb+' MB</span></div>'
+        +'<div class="pkg-abi">'+p.abi+'</div>'
+        +'<p class="pkg-desc">'+p.desc+'</p>'
+        +'<div class="pkg-actions">'+dlBtn(ghUrl(tag,p.key),'本站下载',siteFile)+'</div>'
+        +'<div class="pkg-sums" data-file="'+siteFile+'"><span class="sk sk-line" style="width:60%"></span></div>'
+        +'</article>';
+    });
+    if(!pkgs) pkgs='<div class="state"><div class="state-desc">该版本暂无可下载安装包。</div></div>';
+
+    return '<section class="rel-card">'
+      +'<div class="rel-head"><div class="pkg-id"><span class="rel-tag">'+esc(tag)+'</span>'+badge+'</div><span class="rel-date">'+esc(dateStr)+'</span></div>'
+      +'<div class="release-note rel-note">'+note+'</div>'
+      +'<div class="rel-pkgs">'+pkgs+'</div>'
+      +'</section>';
+  }
+
+  /* ---------- 拉取官方 MD5/SHA-256 平铺到卡片 ---------- */
+  function fillSums(){
+    var boxes=document.querySelectorAll('.pkg-sums');
+    Array.prototype.forEach.call(boxes,function(box){
+      var file=box.getAttribute('data-file');
+      fetch(SIGN_API+'?file='+encodeURIComponent(file.replace(/^\/apk\//,'')))
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){
+          box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
+            +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
+        })
+        .catch(function(){ box.innerHTML='<div class="vstatus bad">校验值获取失败，请稍后重试</div>'; });
+    });
+  }
+
+  function render(rs){
+    $('relList').innerHTML=rs.map(releaseCard).join('');
+    fillSums();
+  }
+
+  function showSkeleton(){
+    $('relList').innerHTML='<span class="sk sk-pkg" style="height:132px"></span><span class="sk sk-pkg" style="height:132px"></span><span class="sk sk-pkg" style="height:132px"></span>';
+  }
+
+  /* ---------- 下载：本站签名链路，失败兜底 GitHub 直连 ---------- */
+  $('relList').addEventListener('click',function(e){
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var label=b.querySelector('.btn-label'), old=label.textContent;
+    var signFile=b.getAttribute('data-sign');
+    if(!signFile) return;
+    e.preventDefault();
+    var dlName=signFile.replace(/^\/apk\//,'');
+    label.textContent='正在准备下载…';
+    fetch(SIGN_API+'?file='+encodeURIComponent(dlName))
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(d){ if(d&&d.url){ window.location.href=d.url; } else { throw new Error('no url'); } })
+      .catch(function(){ window.location.href=b.href; });
+    b.classList.add('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
+    $('sr').textContent='已开始下载';
+    setTimeout(function(){ b.classList.remove('is-loading'); b.classList.remove('is-success'); label.textContent=old; },2200);
+  });
+
+  function load(){
+    showSkeleton();
+    fetch(API)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(rs){
+        if(!rs||!rs.length){
+          $('relList').innerHTML='<div class="state"><div class="state-title">仓库暂无 Release</div><div class="state-desc">发布后这里会出现可下载的安装包。</div></div>';
+          return;
+        }
+        render(rs);
+      })
+      .catch(function(){
+        $('relList').innerHTML='<div class="state state-error" role="alert">'+ICON('alert','ic-sm')+'<div class="state-title">无法获取版本列表</div><div class="state-desc">请检查网络后重试。</div><button class="btn btn-secondary" type="button" data-action="retry">重试</button></div>';
+      });
+  }
+
+  $('relList').addEventListener('click',function(e){
+    var a=e.target.closest('[data-action="retry"]'); if(a) load();
+  });
+
+  load();
+})();
+
+</script>
+</body>
+</html>
