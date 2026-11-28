@@ -22,6 +22,7 @@ import com.aiverse.feature.web.routes.sessionManageRoutes
 import com.aiverse.feature.web.routes.sessionRoutes
 import com.aiverse.feature.web.routes.settingsRoutes
 import com.aiverse.feature.web.routes.streamingRoutes
+import com.aiverse.feature.web.routes.workspaceRoutes
 import com.aiverse.feature.workspace.data.repository.WorkspaceRepository
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
@@ -145,8 +146,9 @@ class WebServerManager @Inject constructor(
                                 singlePageApplication()
                             }
                             authRoutes(authManager, settingsRepository)
-                            sessionRoutes(sessionDao, messageDao, messageBridge)
+                            sessionRoutes(sessionDao, messageDao, messageBridge, workspaceRepository)
                             sessionManageRoutes(sessionUseCase, workspaceRepository, roleDao)
+                            workspaceRoutes(workspaceRepository)
                             streamingRoutes(agentRunManager)
                             roleRoutes(roleDao)
                             mcpRoutes(mcpManager)

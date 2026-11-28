@@ -288,14 +288,14 @@ class AIEditorApp : Application(), Configuration.Provider {
         // loader 的 `AsyncImage` / `rememberAsyncImagePainter`（头像、正文内嵌图等）都用这份带解码器的单例。
         coil.Coil.setImageLoader(com.aiverse.core.ui.buildAppImageLoader(this))
         logDeviceInfo()
-        // 启动次数自增：每次应用进入前台计一次（冷启动与从后台/最近任务恢复都算）。
+        // 启动统计自增：每次进入前台计一次启动；同一天只累计一个启动日。
         // 不放在 Application.onCreate：本应用后台常驻（TerminalKeepaliveService / PRoot 容器），
         // 进程常在，用户「再次打开」多为前台恢复，onCreate 只在冷启动触发，导致数字长期停滞。
         // 用 ProcessLifecycleOwner 的 ON_START（已启动 Activity 数 0→1 即触发一次），
         // 与用户直觉「打开一次加一」一致；crash 子进程在 onCreate 最前已 return，不会注册观察者。
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
-                appScope.launch { generalSettings.incrementLaunchCount() }
+                appScope.launch { generalSettings.recordLaunch() }
             }
         })
         // 补记 Java 未捕获异常处理器覆盖不到的异常退出（native 崩溃 / ANR / 低内存被杀 / 被信号杀死）。

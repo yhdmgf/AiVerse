@@ -192,11 +192,36 @@ data class LoginResponse(
 /** 新建会话请求体（字段均可空，缺省跟随默认）。 */
 @Serializable
 data class CreateSessionRequest(
+    /** 工作区别名/目录名；优先于 workspacePath，网页端下拉框用它。 */
+    val workspaceName: String? = null,
     val workspacePath: String? = null,
     val providerId: String? = null,
     val model: String? = null,
     val reasoningEffort: String? = null,
     val roleId: String? = null
+)
+
+/** 网页端工作区条目：只暴露展示与绑定所需字段。 */
+@Serializable
+data class WorkspaceDto(
+    val name: String,
+    val label: String,
+    val path: String,
+    val type: String,
+    val available: Boolean
+)
+
+/** 工作区列表 + 当前选中项。 */
+@Serializable
+data class WorkspaceListDto(
+    val current: String? = null,
+    val workspaces: List<WorkspaceDto> = emptyList()
+)
+
+/** 切换当前工作区请求体。 */
+@Serializable
+data class SelectWorkspaceRequest(
+    val name: String
 )
 
 /** 设置会话思考强度请求体。 */
@@ -237,10 +262,19 @@ data class McpServerDto(
     val error: String? = null
 )
 
-/** SSE 流式推送体：content / reasoning 变化，settled=true 表示本轮结束。 */
+/**
+ * SSE 流式推送体。
+ *
+ * `type` 必须与网页端按 `payload.type` 分支的既有协议一致：
+ * `streaming`（正文增长）、`completed`（本轮结束，客户端会重新拉取消息）、
+ * `error`（本轮失败，客户端停止 loading 并重新拉取）。
+ * 只发 `event:` 字段而 data 里不带 type 时，网页端会当作未知事件丢弃。
+ */
 @Serializable
 data class StreamingEventDto(
+    val type: String = "streaming",
     val content: String = "",
     val reasoning: String = "",
-    val settled: Boolean = false
+    val settled: Boolean = false,
+    val message: String = ""
 )

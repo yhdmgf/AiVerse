@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Pin, Plus, Search } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FolderKanban, MessageSquare, Pin, Plus, Search } from "lucide-react";
 import dayjs from "dayjs";
-import { createSession, listSessions } from "~/services/api";
+import { createSession, listSessions, listWorkspaces, selectWorkspace } from "~/services/api";
 import type { SessionDto } from "~/types/core";
 
 function formatTime(ts: number) {
@@ -48,19 +48,43 @@ function Row({ s, active }: { s: SessionDto; active: boolean }) {
 
 export function SessionList({ activeId }: { activeId?: string }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: workspaceData } = useQuery({
+    queryKey: ["workspaces"],
+    queryFn: listWorkspaces,
+  });
+  const current = workspaceData?.workspaces.find((w) => w.name === workspaceData.current);
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["sessions"],
-    queryFn: listSessions,
+    queryKey: ["sessions", current?.path ?? null],
+    queryFn: () => listSessions(current?.path),
+    enabled: !!workspaceData,
   });
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
+  const [switching, setSwitching] = useState(false);
+
+  async function onWorkspaceChange(name: string) {
+    if (!name || switching) return;
+    setSwitching(true);
+    try {
+      await selectWorkspace(name);
+      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["files"] });
+      navigate("/");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   async function onNew() {
     if (creating) return;
     setCreating(true);
     try {
-      const s = await createSession();
-      refetch();
+      const s = await createSession(current?.name);
+      await refetch();
       navigate(`/c/${s.id}`);
     } catch (e) {
       console.error(e);
@@ -81,6 +105,32 @@ export function SessionList({ activeId }: { activeId?: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {workspaceData && workspaceData.workspaces.length > 0 && (
+        <div className="px-3 pb-2 pt-1">
+          <label className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-muted focus-within:border-accent/60">
+            <FolderKanban className="h-4 w-4 shrink-0" />
+            <select
+              value={current?.name ?? ""}
+              onChange={(e) => onWorkspaceChange(e.target.value)}
+              disabled={switching}
+              aria-label="选择工作区"
+              className="w-full min-w-0 cursor-pointer bg-transparent text-sm text-fg outline-none disabled:opacity-60"
+            >
+              {!current && (
+                <option value="" disabled>
+                  选择工作区
+                </option>
+              )}
+              {workspaceData.workspaces.map((w) => (
+                <option key={w.name} value={w.name} disabled={!w.available}>
+                  {w.label}
+                  {!w.available ? "（不可用）" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <div className="flex items-center gap-2 px-3 pb-2 pt-1">
         <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-muted focus-within:border-accent/60">
           <Search className="h-4 w-4 shrink-0" />
@@ -126,7 +176,7 @@ export function SessionList({ activeId }: { activeId?: string }) {
 
         {!isLoading && !error && list.length === 0 && (
           <p className="px-3 py-10 text-center text-sm text-faint">
-            {q ? "没有匹配的会话" : "暂无会话，请先在 App 里发起对话"}
+            {q ? "没有匹配的会话" : "暂无会话，点右上角 + 新建一个"}
           </p>
         )}
 

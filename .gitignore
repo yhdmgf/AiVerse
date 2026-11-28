@@ -63,3 +63,6 @@ __pycache__/
 
 # 发版流程临时目录（CI 里生成，不提交）
 .release-notes/
+
+# Web UI 类型生成目录（react-router typegen）
+/web-ui/.react-router/
