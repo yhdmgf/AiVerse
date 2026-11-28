@@ -943,11 +943,11 @@ private fun SessionListContent(
         groups.forEach { group ->
             val isPinned = group.groupKey == "pinned"
             val collapsed = !isPinned && group.groupKey in collapsedGroupKeys
-            val label = group.sessions.firstOrNull()?.let { sessionGroupLabel(group.groupKey, it) } ?: ""
             val selectedInGroup = if (selectionMode) {
                 group.sessions.count { it.id in selectedSessionIds }
             } else 0
             item(key = "group-${group.groupKey}", contentType = "group-header") {
+                val label = group.sessions.firstOrNull()?.let { sessionGroupLabel(group.groupKey, it) } ?: ""
                 if (isPinned) {
                     SettingsGroupHeader(text = label)
                 } else {
