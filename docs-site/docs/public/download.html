@@ -546,9 +546,9 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   // 测试版：独立仓库 yhdmgf/aiverse-beta，仅供内部使用
   var TEST_OWNER='yhdmgf', TEST_REPO='aiverse-beta';
   var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
-  // 本站 APK 签发接口：后端用 S3 预签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
+  // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
   var SIGN_API='https://api.aivapp.cn/sign';
-  // 完整性校验回源代理（同源读取 APK 字节做哈希比对，绕开对象存储 CORS）；下载跳转仍直连预签名链接。
+  // 完整性校验回源代理（同源读取 APK 字节做哈希比对，绕开对象存储 CORS）；下载跳转走 dl 域名 CDN 签名链接。
   var PROXY_API='https://api.aivapp.cn/apk-proxy';
   // 双镜像：用户可手动选择镜像一/镜像二
   var MIRRORS=[
@@ -732,7 +732,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         }
       } else {
         // 正式版/预览版：本站为主（对象存储，文件名与 GitHub Release 一致）+ GitHub 直连备用。
-        // 本站下载由 data-sign 拦截、经签发端换 S3 预签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
+        // 本站下载由 data-sign 拦截、经签发端换 CDN 签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
         var siteFile='/apk/'+a.name;
         var siteUrl=ghUrl(tag,p.key);
         html+=head+'<div class="pkg-actions">'
@@ -952,12 +952,17 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
     sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
     b.classList.add('is-loading');
-    // 本站 APK：跳转本站域名下载代理（后端回源对象存储），地址栏不暴露 S3 长链
+    // 本站 APK：先向后端取 CDN 签名临时链接，再跳转 dl 域名下载；签发失败兜底 GitHub 直连
     if(signFile){
       e.preventDefault();
       var dlName=signFile.replace(/^\/apk\//,'');
       label.textContent='正在准备下载…';
-      window.location.href='/dl/'+encodeURIComponent(dlName);
+      fetch(SIGN_API+'?file='+encodeURIComponent(dlName))
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){
+          if(d&&d.url){ window.location.href=d.url; } else { throw new Error('no url'); }
+        })
+        .catch(function(){ window.location.href=b.href; });
       b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
       $('sr').textContent='已开始下载';
       setTimeout(function(){
