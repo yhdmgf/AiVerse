@@ -283,17 +283,11 @@ html.dark .release-note .md-alert--caution{--ac:#ef8f80;--ac-bg:rgba(239,143,128
 .pkg-desc{font-size:var(--fs-sm);color:var(--text-2);margin:var(--s-2) 0 var(--s-3)}
 .pkg-actions{display:flex;gap:var(--s-2)}
 .pkg-actions .btn{flex:1}
-/* 文件完整性校验：展示官方 md5/sha256 + 浏览器端算 sha256 比对 */
-.pkg-verify{margin-top:var(--s-2);display:flex;flex-direction:column;gap:var(--s-1)}
-.verify-btn{align-self:flex-start;background:none;border:1px dashed var(--border-strong);color:var(--text-2);border-radius:var(--r-sm);padding:6px 12px;font:inherit;font-size:12px;cursor:pointer;transition:.15s}
-.verify-btn:hover{color:var(--text);border-color:var(--text-2);background:var(--surface)}
-.verify-btn:disabled{opacity:.6;cursor:progress}
-.verify-result{font-size:12px;line-height:1.7;color:var(--text-2);word-break:break-all}
-.verify-result .sums{margin:2px 0}
-.verify-result .sums code{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:1px 6px;font-size:11px;color:var(--text)}
-.verify-result .vstatus{margin-top:var(--s-1)}
-.verify-result .vstatus.ok{color:#16a34a;font-weight:600}
-.verify-result .vstatus.bad{color:#dc2626;font-weight:600}
+/* Checksums: official MD5 / SHA-256 shown inline */
+.pkg-sums{margin-top:var(--s-2);display:flex;flex-direction:column;gap:var(--s-1)}
+.pkg-sums .sums{margin:2px 0;font-size:12px;line-height:1.7;color:var(--text-2);word-break:break-all}
+.pkg-sums .sums code{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);padding:1px 6px;font-size:11px;color:var(--text)}
+.pkg-sums .vstatus.bad{color:#dc2626;font-weight:600}
 .pkg:not(.is-rec) .btn{height:var(--ctl-h-sm)}
 .pkg-hint{margin-top:var(--s-2);font-size:var(--fs-xs);color:var(--text-2)}
 .pkg-hint b{color:var(--text)}
@@ -491,7 +485,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 
       <div class="foot">
         <div class="foot-links">
-          <a class="link" href="https://github.com/yhdmgf/AiVerse/releases" target="_blank" rel="noreferrer">View all releases on GitHub<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
+          <a class="link" href="/en/versions" target="_blank" rel="noreferrer">All releases<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
         </div>
         <p class="foot-note">By downloading, you agree to the <a class="link" href="/terms.html">Terms of Service</a> and <a class="link" href="/privacy.html">Privacy Policy</a>.</p>
       </div>
@@ -505,8 +499,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
   // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
   var SIGN_API='https://api.aivapp.cn/sign';
-  // 完整性校验回源代理（同源读取 APK 字节做哈希比对，绕开对象存储 CORS）；下载跳转走 dl 域名 CDN 签名链接。
-  var PROXY_API='https://api.aivapp.cn/apk-proxy';
   var state={channel:'stable', data:null};
   var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=30';
 
@@ -676,13 +668,25 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         +dlBtn(main,siteUrl,'Download',siteFile)
         +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub')
         +'</div>'
-        +'<div class="pkg-verify" data-file="'+siteFile+'">'
-          +'<button type="button" class="verify-btn">Verify integrity</button>'
-          +'<div class="verify-result" hidden></div>'
-        +'</div></article>';
+        +'<div class="pkg-sums" data-file="'+siteFile+'"><span class="sk sk-line" style="width:60%"></span></div></article>';
     });
     if(!html) html=emptyState('No packages for this release','This release has no downloadable packages. Try another channel or check the releases page.');
     $('pkgs').innerHTML=html;
+  }
+
+  /* ---------- Fetch official MD5/SHA-256 and render inline ---------- */
+  function fillPkgSums(){
+    var boxes=document.querySelectorAll('.pkg-sums');
+    Array.prototype.forEach.call(boxes,function(box){
+      var file=box.getAttribute('data-file');
+      fetch(SIGN_API+'?file='+encodeURIComponent(file.replace(/^\/apk\//,'')))
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){
+          box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
+            +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
+        })
+        .catch(function(){ box.innerHTML='<div class="vstatus bad">Failed to load checksums, please retry later</div>'; });
+    });
   }
 
   /* ---------- 空状态 / 错误状态 / 骨架 ---------- */
@@ -753,6 +757,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     $('releaseNote').innerHTML=stripRefs(renderMD(cleanNote(rel.body||'(No changelog yet)')));
 
     renderPkgs(rel);
+    fillPkgSums();
     initThumbs();
   }
 
@@ -817,41 +822,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
       },2200);
     },700);
-  });
-  /* ---------- 文件完整性校验：取官方哈希 + 浏览器端算 SHA-256 比对 ---------- */
-  $('pkgs').addEventListener('click',function(e){
-    var vb=e.target.closest('.verify-btn'); if(!vb) return;
-    e.preventDefault();
-    var wrap=vb.closest('.pkg-verify'), file=wrap.getAttribute('data-file');
-    var resultEl=wrap.querySelector('.verify-result');
-    vb.disabled=true; var vbOld=vb.textContent; vb.textContent='Verifying…';
-    resultEl.hidden=false; resultEl.innerHTML='<div class="vstatus">Fetching official checksums…</div>';
-    var done=function(){ vb.disabled=false; vb.textContent=vbOld; };
-    if(!window.crypto||!crypto.subtle||!window.fetch){
-      resultEl.innerHTML='<div class="vstatus bad">Your browser does not support integrity verification. Please use a modern browser.</div>';
-      done(); return;
-    }
-    // 1）取官方校验值（走签发端，同时拿到签名下载链接）
-    fetch(SIGN_API+'?file='+encodeURIComponent(file))
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(d){
-        if(!d||!d.sha256||!d.url) throw new Error('no hash');
-        resultEl.innerHTML='<div class="sums">MD5 <code>'+d.md5+'</code></div>'
-          +'<div class="sums">SHA-256 <code>'+d.sha256+'</code></div>'
-          +'<div class="vstatus">Computing local checksum, please wait…</div>';
-        // 2）Fetch bytes via the same-origin proxy, compute SHA-256 in-browser and compare (bucket has no CORS, no cross-origin direct fetch)
-        return fetch(PROXY_API+'?file='+encodeURIComponent(file)).then(function(fr){ if(!fr.ok) throw new Error('HTTP '+fr.status); return fr.arrayBuffer(); })
-          .then(function(buf){ return crypto.subtle.digest('SHA-256',buf); })
-          .then(function(dig){
-            var hex=Array.prototype.map.call(new Uint8Array(dig),function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
-            var ok=(hex===d.sha256);
-            resultEl.insertAdjacentHTML('beforeend','<div class="vstatus '+(ok?'ok':'bad')+'">'+(ok?'✓ Verified: file matches the official release':'✗ Verification failed: the file may be corrupted or tampered with')+'</div>');
-          });
-      })
-      .catch(function(err){
-        resultEl.innerHTML='<div class="vstatus bad">Verification failed: '+(err&&err.message?err.message:'please try again later')+'</div>';
-      })
-      .then(done,done);
   });
   // 空状态 / 错误状态内的操作
   $('pkgs').addEventListener('click',function(e){
