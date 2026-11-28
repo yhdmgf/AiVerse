@@ -277,6 +277,29 @@ jobs:
 
           echo "三架构 APK 已入桶（1.0/${FULL}/）：${FULL}" >> "$GITHUB_STEP_SUMMARY"
 
+      # 发版即刷新 CDN：dl 站点按目录缓存 30 天，同名重传（如重建同版本号）必须主动清，
+      # 否则边缘缓存会把旧包继续发出去。token 走 secrets，未配置则跳过、不影响发版。
+      - name: 刷新 CDN 缓存（dl.aivapp.cn）
+        env:
+          CDN_TOKEN: ${{ secrets.CDN_REFRESH_TOKEN }}
+          FULL: ${{ needs.prepare.outputs.full }}
+        run: |
+          if [ -z "$CDN_TOKEN" ]; then
+            echo "未配置 CDN_REFRESH_TOKEN，跳过缓存刷新" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for i in 1 2 3; do
+            RES=$(curl -sS -m 20 -X POST https://console.scdno.com/prod-api/site_refresh \
+              -H "Authorization: $CDN_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"clean_dir\",\"content\":\"https://dl.aivapp.cn/1.0/${FULL}/\"}") || RES=""
+            echo "clean_dir 第 ${i} 次：${RES}"
+            case "$RES" in *'"code":200'*) echo "CDN 缓存已刷新：1.0/${FULL}/" >> "$GITHUB_STEP_SUMMARY"; exit 0;; esac
+            sleep 3
+          done
+          echo "CDN 缓存刷新失败（不阻塞发版）" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
       - name: 清理旧 Release（避免重复累积）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
