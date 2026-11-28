@@ -600,6 +600,8 @@
     <string name="plugins_dev_detail_installed">已安装版本</string>
     <string name="plugins_dev_detail_status">启用状态</string>
     <string name="plugins_dev_detail_hint">开启开发者侧载期间，保存项目文件会自动重载。开发目录：%1$s</string>
+    <string name="plugins_dev_delete_title">删除开发项目</string>
+    <string name="plugins_dev_delete_message">确定删除「%1$s」的开发目录与源码吗？已安装的插件不受影响，此操作不可恢复。</string>
 
     <!-- 插件工作区工具抽屉（AiCode 移植） -->
     <string name="plugins_current_project">当前项目</string>

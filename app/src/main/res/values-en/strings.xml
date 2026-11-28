@@ -600,6 +600,8 @@
     <string name="plugins_dev_detail_installed">Installed version</string>
     <string name="plugins_dev_detail_status">Enabled</string>
     <string name="plugins_dev_detail_hint">Saving project files reloads it automatically while developer sideload is enabled. Dev directory: %1$s</string>
+    <string name="plugins_dev_delete_title">Delete development project</string>
+    <string name="plugins_dev_delete_message">Delete the development folder and source code of "%1$s"? The installed plugin is unaffected. This cannot be undone.</string>
 
     <!-- Plugin workspace tool drawer (ported from AiCode) -->
     <string name="plugins_current_project">Current Project</string>

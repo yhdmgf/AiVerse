@@ -183,6 +183,7 @@ internal fun PluginsSection(
     onRefreshDevProjects: () -> Unit,
     onOpenDevDetail: (PluginDevProject) -> Unit,
     onSetDevEnabled: (PluginDevProject, Boolean) -> Unit,
+    onDeleteDevProject: (PluginDevProject) -> Unit = {},
     onOpenDetail: (InstalledPlugin) -> Unit,
     onToggleEnabled: (InstalledPlugin, Boolean) -> Unit,
     onMemoryToggleEnabled: (Boolean) -> Unit,
@@ -308,7 +309,8 @@ internal fun PluginsSection(
                         refreshing = devRefreshing,
                         onRefresh = onRefreshDevProjects,
                         onOpenDetail = onOpenDevDetail,
-                        onSetEnabled = onSetDevEnabled
+                        onSetEnabled = onSetDevEnabled,
+                        onDeleteProject = onDeleteDevProject
                     )
                     else -> PluginStorePage(
                         onShowPreview = onShowStorePreview,

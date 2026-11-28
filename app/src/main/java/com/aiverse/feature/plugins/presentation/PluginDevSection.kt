@@ -1,7 +1,6 @@
 package com.aiverse.feature.plugins.presentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,14 +20,20 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -40,7 +45,7 @@ import com.aiverse.core.theme.Radius
 import com.aiverse.core.theme.Spacing
 import com.aiverse.core.theme.semanticColors
 import com.aiverse.core.ui.AppSwitch
-import com.aiverse.core.ui.listBottomContentPadding
+import com.aiverse.core.ui.SwipeToDeleteRow
 import com.aiverse.feature.plugins.domain.InstalledPlugin
 import com.aiverse.feature.settings.presentation.component.LazyGroupItem
 import com.aiverse.feature.settings.presentation.component.McpPill
@@ -56,7 +61,6 @@ import compose.icons.feathericons.Folder
 import compose.icons.feathericons.Package
 import compose.icons.feathericons.Power
 import compose.icons.feathericons.Tag
-import java.util.Locale
 
 /**
  * 开发者侧载目录里的插件项目：列表版式与已安装一致，点击进入独立详情页。
@@ -73,9 +77,13 @@ internal fun DevPluginsPage(
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onOpenDetail: (PluginDevProject) -> Unit,
-    onSetEnabled: (PluginDevProject, Boolean) -> Unit
+    onSetEnabled: (PluginDevProject, Boolean) -> Unit,
+    onDeleteProject: (PluginDevProject) -> Unit
 ) {
     val t = LocalUIDensityTokens.current
+    val languageTag = currentLanguageTag()
+    var pendingDelete by remember { mutableStateOf<PluginDevProject?>(null) }
+
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = onRefresh,
@@ -84,8 +92,13 @@ internal fun DevPluginsPage(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = Spacing.lg, end = Spacing.lg, bottom = listBottomContentPadding()),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            contentPadding = PaddingValues(
+                start = Spacing.md,
+                end = Spacing.md,
+                top = t.xs,
+                bottom = t.pluginTabBarReserve
+            )
+            // 不设 spacedBy：与已安装列表一致，LazyGroupItem 首尾行圆角、行间无缝拼成一张卡。
         ) {
             if (projects.isEmpty()) {
                 item(key = "empty", contentType = "empty") {
@@ -109,18 +122,45 @@ internal fun DevPluginsPage(
                         DevPluginRow(
                             project = project,
                             installed = installed,
+                            languageTag = languageTag,
                             onClick = { onOpenDetail(project) },
-                            onSetEnabled = { onSetEnabled(project, it) }
+                            onSetEnabled = { onSetEnabled(project, it) },
+                            onDelete = { pendingDelete = project }
                         )
                     }
                 }
             }
         }
     }
+
+    // 删除开发项目二次确认：只删开发目录源码，已安装插件不受影响。
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.plugins_dev_delete_title)) },
+            text = { Text(stringResource(R.string.plugins_dev_delete_message, target.displayName(languageTag))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    onDeleteProject(target)
+                }) {
+                    Text(
+                        text = stringResource(R.string.common_delete),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
+    }
 }
 
 /**
- * 单个开发者项目行：图标 + 名称 + 版本/状态徽章 + 启用开关。
+ * 单个开发者项目行：图标 + 名称 + 版本/状态徽章 + 启用开关，支持左滑删除。
  *
  * TODO: 原 AiCode 用 `installed.status == PluginStatus.OK` 判断可用；AiVerse 领域层无
  * PluginStatus，改用 [InstalledPlugin.isActive]（enabled && manifest && content 齐全）。
@@ -129,83 +169,94 @@ internal fun DevPluginsPage(
 private fun DevPluginRow(
     project: PluginDevProject,
     installed: InstalledPlugin?,
+    languageTag: String,
     onClick: () -> Unit,
-    onSetEnabled: (Boolean) -> Unit
+    onSetEnabled: (Boolean) -> Unit,
+    onDelete: () -> Unit
 ) {
     val t = LocalUIDensityTokens.current
-    val languageTag = Locale.getDefault().toLanguageTag()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
+    val rowContent: @Composable () -> Unit = {
+        Row(
             modifier = Modifier
-                .size(t.scale(40))
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(Radius.sm)
+                .fillMaxWidth()
+                .padding(
+                    start = Spacing.lg,
+                    end = Spacing.sm,
+                    top = t.listCellPaddingVertical,
+                    bottom = t.listCellPaddingVertical
                 ),
-            contentAlignment = Alignment.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            PluginIconContent(
-                icon = installed?.content?.icon,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                iconSize = t.scale(22),
-                shape = RoundedCornerShape(Radius.sm)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(Spacing.md))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = project.displayName(languageTag),
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(t.scale(6)))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(t.scale(6)),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .size(t.scale(40))
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(Radius.sm)
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                if (project.version.isNotBlank()) {
+                PluginIconContent(
+                    icon = installed?.content?.icon,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    iconSize = t.scale(22),
+                    shape = RoundedCornerShape(Radius.sm)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(Spacing.md))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = project.displayName(languageTag),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(t.scale(6)))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(t.scale(6)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (project.version.isNotBlank()) {
+                        McpPill(
+                            text = "v${project.version}",
+                            textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                     McpPill(
-                        text = "v${project.version}",
-                        textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = projectStatusText(project, installed),
+                        textColor = if (project.error != null) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                     )
                 }
-                McpPill(
-                    text = projectStatusText(project, installed),
-                    textColor = if (project.error != null) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                )
             }
+
+            Spacer(modifier = Modifier.width(Spacing.sm))
+
+            AppSwitch(
+                checked = installed?.record?.enabled == true,
+                onCheckedChange = onSetEnabled,
+                enabled = project.error == null && (installed == null || installed.isActive)
+            )
+
+            Spacer(modifier = Modifier.width(Spacing.xs))
+
+            Icon(
+                imageVector = FeatherIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.semanticColors.subtleText,
+                modifier = Modifier.size(t.scale(18))
+            )
         }
+    }
 
-        Spacer(modifier = Modifier.width(Spacing.sm))
-
-        AppSwitch(
-            checked = installed?.record?.enabled == true,
-            onCheckedChange = onSetEnabled,
-            enabled = project.error == null && (installed == null || installed.isActive)
-        )
-
-        Spacer(modifier = Modifier.width(Spacing.xs))
-
-        Icon(
-            imageVector = FeatherIcons.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.semanticColors.subtleText,
-            modifier = Modifier.size(t.scale(18))
-        )
+    SwipeToDeleteRow(onDelete = onDelete, onClick = onClick) {
+        rowContent()
     }
 }
 
@@ -229,7 +280,7 @@ internal fun PluginDevDetailSection(
     onInstall: () -> Unit
 ) {
     val t = LocalUIDensityTokens.current
-    val languageTag = Locale.getDefault().toLanguageTag()
+    val languageTag = currentLanguageTag()
     val installed = plugins.firstOrNull { it.id == project.pluginId }
 
     Column(
