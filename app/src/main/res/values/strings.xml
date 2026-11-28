@@ -1068,6 +1068,7 @@
     <string name="chat_header_more">更多</string>
     <string name="file_browser_batch_delete_title">删除所选项目？</string>
     <string name="file_browser_batch_delete_confirm">将永久删除 %1$d 个项目，此操作无法撤销。</string>
+    <string name="file_browser_batch_delete_parent_checkbox">同时删除 %1$d 个父文件夹（默认保留）</string>
     <string name="chat_open_git">打开 Git</string>
     <string name="chat_open_terminal">打开终端</string>
     <string name="chat_open_browser">打开浏览器</string>
@@ -1332,6 +1333,8 @@
     <string name="session_group_last_30_days">30天内</string>
     <string name="session_group_pinned">置顶</string>
     <string name="session_group_month_format">yyyy年M月</string>
+    <string name="session_group_count">%1$d</string>
+    <string name="session_group_selected">已选 %1$d/%2$d</string>
     <string name="chat_settings">设置</string>
     <string name="chat_pin_session">置顶</string>
     <string name="chat_unpin_session">取消置顶</string>
