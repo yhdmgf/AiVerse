@@ -115,7 +115,7 @@ object PluginWebViewFactory {
     ): WebView {
         return WebView(context).apply {
             val boundProfile = profile?.let { target ->
-                runCatching { WebViewCompat.setProfile(this, target) }
+                runCatching { WebViewCompat.setProfile(this, target.name) }
                     .onFailure { FileLogger.w("PluginWebViewFactory", "登录 WebView 绑定独立 profile 失败: ${it.message}") }
                     .isSuccess
             } == true
