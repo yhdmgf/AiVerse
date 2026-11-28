@@ -21,7 +21,7 @@ hero:
       link: /en/guide/quick-start
     - theme: alt
       text: Download APK
-      link: https://aivapp.cn/download
+      link: /en/download
     - theme: alt
       text: GitHub
       link: https://github.com/yhdmgf/AiVerse
