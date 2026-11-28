@@ -546,9 +546,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   // 测试版：独立仓库 yhdmgf/aiverse-beta，仅供内部使用
   var TEST_OWNER='yhdmgf', TEST_REPO='aiverse-beta';
   var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
-  // 本站 APK 签名签发接口（CDN URL 鉴权）：仅本站 /apk/ 下载走此流程，第三方渠道不签名。
-  // 签发端地址可按环境替换；前端只调接口拿签名链接，不实现签名算法、不接触密钥。
+  // 本站 APK 签发接口：后端用 S3 预签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
   var SIGN_API='https://api.aivapp.cn/sign';
+  // 完整性校验回源代理（同源读取 APK 字节做哈希比对，绕开对象存储 CORS）；下载跳转仍直连预签名链接。
+  var PROXY_API='https://api.aivapp.cn/apk-proxy';
   // 双镜像：用户可手动选择镜像一/镜像二
   var MIRRORS=[
     {name:'镜像一', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/aiverse/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
@@ -730,10 +731,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
           html+=head+'<div class="pkg-actions">'+dlBtn(main,'https://gh.aivapp.cn/'+tgh,'镜像下载')+'</div></article>';
         }
       } else {
-        // 正式版/预览版：本站为主（/apk/，文件名与 GitHub Release 一致）+ GitHub 直连备用，不再使用镜像一/二
-        // 本站下载走签名：file 为本站相对路径，由签发端换签名临时链接
+        // 正式版/预览版：本站为主（对象存储，文件名与 GitHub Release 一致）+ GitHub 直连备用。
+        // 本站下载由 data-sign 拦截、经签发端换 S3 预签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
         var siteFile='/apk/'+a.name;
-        var siteUrl='https://www.aivapp.cn'+siteFile;
+        var siteUrl=ghUrl(tag,p.key);
         html+=head+'<div class="pkg-actions">'
           +dlBtn(main,siteUrl,'本站下载',siteFile)
           +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub 直连')
@@ -951,30 +952,18 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
     sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
     b.classList.add('is-loading');
-    // 本站 APK：先调签发端拿签名临时链接再跳转；失败按文案提示并恢复按钮
+    // 本站 APK：跳转本站域名下载代理（后端回源对象存储），地址栏不暴露 S3 长链
     if(signFile){
       e.preventDefault();
+      var dlName=signFile.replace(/^\/apk\//,'');
       label.textContent='正在准备下载…';
-      fetch(SIGN_API+'?file='+encodeURIComponent(signFile))
-        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-        .then(function(d){
-          if(!d || !d.url) throw new Error('no url');
-          window.location.href=d.url;
-          b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
-          $('sr').textContent='已开始下载';
-          setTimeout(function(){
-            b.classList.remove('is-success'); label.textContent=old;
-            sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-          },2200);
-        })
-        .catch(function(){
-          b.classList.remove('is-loading'); b.classList.add('is-error');
-          label.textContent='下载链接生成失败，请稍后重试';
-          setTimeout(function(){
-            b.classList.remove('is-error'); label.textContent=old;
-            sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-          },2800);
-        });
+      window.location.href='/dl/'+encodeURIComponent(dlName);
+      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
+      $('sr').textContent='已开始下载';
+      setTimeout(function(){
+        b.classList.remove('is-success'); label.textContent=old;
+        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
+      },2200);
       return;
     }
     // 第三方渠道：保持原生跳转，仅做加载/成功反馈
@@ -1009,8 +998,8 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         resultEl.innerHTML='<div class="sums">MD5 <code>'+d.md5+'</code></div>'
           +'<div class="sums">SHA-256 <code>'+d.sha256+'</code></div>'
           +'<div class="vstatus">正在计算本地文件校验值，请稍候…</div>';
-        // 2）用签名链接取文件，浏览器端算 SHA-256 与官方值比对
-        return fetch(d.url).then(function(fr){ if(!fr.ok) throw new Error('HTTP '+fr.status); return fr.arrayBuffer(); })
+        // 2）经同源代理取文件字节，浏览器端算 SHA-256 与官方值比对（桶未配 CORS，不跨域直连）
+        return fetch(PROXY_API+'?file='+encodeURIComponent(file)).then(function(fr){ if(!fr.ok) throw new Error('HTTP '+fr.status); return fr.arrayBuffer(); })
           .then(function(buf){ return crypto.subtle.digest('SHA-256',buf); })
           .then(function(dig){
             var hex=Array.prototype.map.call(new Uint8Array(dig),function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
