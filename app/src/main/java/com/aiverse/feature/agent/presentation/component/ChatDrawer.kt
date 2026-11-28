@@ -149,6 +149,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.feature.agent.presentation.FileTreeRoot
 import com.aiverse.feature.workspace.domain.FileAccessProvider
+import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.RemoteServerPaths
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
@@ -2027,7 +2028,9 @@ private fun FileBrowserTab(
 
     pendingProps?.let { node ->
         FilePropertiesSheet(
-            node = node,
+            entry = node.entry,
+            path = node.path,
+            displayName = node.displayName,
             onDismiss = { pendingProps = null },
             onLoadDirectoryInfo = onLoadDirectoryInfo
         )
@@ -2701,25 +2704,28 @@ private fun SheetActionRow(
     }
 }
 
-/** 文件树「属性」抽屉：类型 / 大小 / 位置 / 修改时间 / 权限。文件夹大小由父层在 IO 后台递归统计后回填。 */
+/** 文件「属性」抽屉：类型 / 大小 / 位置 / 修改时间 / 权限。文件夹大小由父层在 IO 后台递归统计后回填。
+ *  与具体树节点解耦：文件树长按菜单与全屏查看器菜单共用同一套展示。 */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun FilePropertiesSheet(
-    node: FileTreeNode,
+internal fun FilePropertiesSheet(
+    entry: FileEntry,
+    path: String,
+    displayName: String,
     onDismiss: () -> Unit,
     onLoadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit
 ) {
-    var dirInfo by remember(node.path) { mutableStateOf<DirectoryInfo?>(null) }
-    var dirLoaded by remember(node.path) { mutableStateOf(false) }
-    LaunchedEffect(node.path) {
-        if (node.entry.isDirectory) {
-            onLoadDirectoryInfo(node.path) { info ->
+    var dirInfo by remember(path) { mutableStateOf<DirectoryInfo?>(null) }
+    var dirLoaded by remember(path) { mutableStateOf(false) }
+    LaunchedEffect(path) {
+        if (entry.isDirectory) {
+            onLoadDirectoryInfo(path) { info ->
                 dirInfo = info
                 dirLoaded = true
             }
         }
     }
-    val sizeText = if (node.entry.isDirectory) {
+    val sizeText = if (entry.isDirectory) {
         val info = dirInfo
         when {
             info != null -> stringResource(
@@ -2731,12 +2737,12 @@ private fun FilePropertiesSheet(
             else -> stringResource(R.string.file_properties_size_calculating)
         }
     } else {
-        formatFileSize(node.entry.size)
+        formatFileSize(entry.size)
     }
-    val typeText = if (node.entry.isDirectory) {
+    val typeText = if (entry.isDirectory) {
         stringResource(R.string.file_properties_type_directory)
     } else {
-        val name = node.entry.name
+        val name = entry.name
         // 纯文本类扩展名刻意不收进 EXT_MIME_TYPES，这里按属性「类型」语义归成 text/plain。
         if (name.substringAfterLast('.') in TEXT_EXTS) "text/plain"
         else extToMimeType(name) ?: "application/octet-stream"
@@ -2752,7 +2758,7 @@ private fun FilePropertiesSheet(
                 .padding(bottom = Spacing.xl)
         ) {
             Text(
-                text = node.displayName,
+                text = displayName,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -2771,21 +2777,21 @@ private fun FilePropertiesSheet(
             )
             PropertyRow(
                 label = stringResource(R.string.file_properties_location),
-                value = node.path
+                value = path
             )
             val modifiedPattern = stringResource(R.string.file_properties_modified_format)
             // 格式化器只依赖 lastModified 与格式字符串，重组不重复 new SimpleDateFormat。
-            val modifiedText = remember(node.entry.lastModified, modifiedPattern) {
-                SimpleDateFormat(modifiedPattern, Locale.getDefault()).format(Date(node.entry.lastModified))
+            val modifiedText = remember(entry.lastModified, modifiedPattern) {
+                SimpleDateFormat(modifiedPattern, Locale.getDefault()).format(Date(entry.lastModified))
             }
             PropertyRow(
                 label = stringResource(R.string.file_properties_modified),
                 value = modifiedText
             )
-            if (node.entry.permissions.isNotBlank()) {
+            if (entry.permissions.isNotBlank()) {
                 PropertyRow(
                     label = stringResource(R.string.file_properties_permissions),
-                    value = node.entry.permissions
+                    value = entry.permissions
                 )
             }
         }
