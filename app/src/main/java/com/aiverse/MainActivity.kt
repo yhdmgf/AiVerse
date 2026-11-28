@@ -85,6 +85,7 @@ import com.aiverse.core.theme.AIEditorTheme
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.FileTreeDisplayPrefs
 import com.aiverse.core.theme.LocalChatPanelOpacity
+import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.core.theme.UIDensity
 import com.aiverse.core.ui.BetaWatermark
 import com.aiverse.core.ui.ImageSource
@@ -1535,7 +1536,9 @@ fun AppNavigation(
             drawerContent = {
                 ModalDrawerSheet(
                     drawerShape = RectangleShape,
-                    drawerContainerColor = settingsPageBackground(),
+                    // 外层 sheet 优先跟随插件声明的 drawerColor：带透明度时半透明效果不会被外层不透明底色盖住；
+                    // 无插件声明时回退页面背景。内层抽屉内容取色与这里保持一致。
+                    drawerContainerColor = LocalPluginUiStyle.current?.drawerColor ?: settingsPageBackground(),
                     drawerTonalElevation = 0.dp,
                     // 不在 sheet 上叠 .shadow(clip=false)：这层 RenderNode 图形修饰会干扰 ModalNavigationDrawer
                     // 自带 scrim 的合成（表现为手势滑出不变暗、点 ☰ 暗一下即恢复）。抽屉层次感交给
