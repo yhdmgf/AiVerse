@@ -26,7 +26,7 @@ const siteData = {
       },
       {
         "text": "下载",
-        "link": "https://aivapp.cn/download"
+        "link": "/download"
       },
       {
         "text": "用户协议",
@@ -632,7 +632,7 @@ const siteData = {
           },
           {
             "text": "Download",
-            "link": "https://aivapp.cn/en/download"
+            "link": "/en/download"
           },
           {
             "text": "User Agreement",
