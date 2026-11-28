@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+    <link rel="icon" href="/logo.png" type="image/png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>下载 AiVerse</title>
 <style>
@@ -498,9 +499,9 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 (function(){
   var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
   // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
-  var SIGN_API='https://api.aivapp.cn/sign';
+  var SIGN_API='/sign';
   var state={channel:'stable', data:null};
-  var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=30';
+  var API='/releases';
 
   var PKGS=[
     {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64 位 ARM 芯片，主流安卓手机推荐', rec:true},
@@ -636,11 +637,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   }
 
   /* ---------- 链接构造（文件名带 v = tag） ---------- */
-  function ghUrl(tag,key,owner,repo,fname){ return 'https://github.com/'+(owner||GH_OWNER)+'/'+(repo||GH_REPO)+'/releases/download/'+tag+'/'+(fname||('AiVerse-'+key+'-'+tag))+'.apk'; }
 
   /* ---------- 下载按钮结构：图标槽同时容纳 default / loading / success ---------- */
   function dlBtn(cls,href,label,signFile){
-    return '<a class="btn '+cls+'" href="'+href+'" download'+(signFile?' data-sign="'+signFile+'"':'')+'>'
+    return '<a class="btn '+cls+'" href="'+href+'"'+(signFile?' data-sign="'+signFile+'"':'')+'>'
       +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
       +'<span class="btn-label">'+label+'</span></a>';
   }
@@ -661,12 +661,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
       var main=p.rec?'btn-primary':'btn-secondary';
 
       // 正式版/预览版：本站为主（对象存储，文件名与 GitHub Release 一致）+ GitHub 直连备用。
-      // 本站下载由 data-sign 拦截、经签发端换 CDN 签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
       var siteFile='/apk/'+a.name;
-      var siteUrl=ghUrl(tag,p.key);
+      var siteUrl='/get/'+a.name;
       html+=head+'<div class="pkg-actions">'
         +dlBtn(main,siteUrl,'本站下载',siteFile)
-        +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub 直连')
         +'</div>'
         +'<div class="pkg-sums" data-file="'+siteFile+'"><span class="sk sk-line" style="width:60%"></span></div></article>';
     });
@@ -684,8 +682,20 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         .then(function(d){
           box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
             +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
+          var card=box.closest('article.pkg');
+          var act=card&&card.querySelector('a.btn');
+          var u=d.url||d.proxy;
+          if(act&&u){
+            act.setAttribute('href',u);
+            act.setAttribute('data-direct','1');
+            act.setAttribute('data-sums',(d.md5||'')+'|'+(d.sha256||''));
+          }
         })
-        .catch(function(){ box.innerHTML='<div class="vstatus bad">校验值获取失败，请稍后重试</div>'; });
+        .catch(function(){ fetch('/meta/'+encodeURIComponent(file.replace(/^\/apk\//,'')))
+          .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+          .then(function(d){ box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
+            +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>'; })
+          .catch(function(){ box.innerHTML='<div class="vstatus bad">校验值获取失败，请稍后重试</div>'; }); });
     });
   }
 
@@ -785,44 +795,29 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   window.addEventListener('resize',function(){ initThumbs(true); });
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ initThumbs(true); });
 
-  /* ---------- 下载点击反馈：loading → success → 复位（不拦截原生下载） ---------- */
+    /* ---------- 下载点击反馈：只做提示，不拦截原生跳转（href 指向 /get/<名>） ---------- */
   $('pkgs').addEventListener('click',function(e){
-    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')) return;
+    if(b.getAttribute('data-direct')==='1') return;   // href 已是 dl 直链 → 原生跳转
     var label=b.querySelector('.btn-label'), old=label.textContent;
     var signFile=b.getAttribute('data-sign');
-    var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
-    sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
-    b.classList.add('is-loading');
-    // 本站 APK：先向后端取 CDN 签名临时链接，再跳转 dl 域名下载；签发失败兜底 GitHub 直连
-    if(signFile){
-      e.preventDefault();
-      var dlName=signFile.replace(/^\/apk\//,'');
-      label.textContent='正在准备下载…';
-      fetch(SIGN_API+'?file='+encodeURIComponent(dlName))
-        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-        .then(function(d){
-          if(d&&d.url){ window.location.href=d.url; } else { throw new Error('no url'); }
-        })
-        .catch(function(){ window.location.href=b.href; });
-      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
-      $('sr').textContent='已开始下载';
-      setTimeout(function(){
-        b.classList.remove('is-success'); label.textContent=old;
-        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-      },2200);
-      return;
-    }
-    // 第三方渠道：保持原生跳转，仅做加载/成功反馈
-    label.textContent='准备下载…';
-    setTimeout(function(){
-      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
-      $('sr').textContent='已开始下载';
-      setTimeout(function(){
-        b.classList.remove('is-success'); label.textContent=old;
-        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-      },2200);
-    },700);
+    if(!signFile) return;
+    e.preventDefault();
+    b.classList.add('is-loading'); label.textContent='正在生成下载链接…';
+    fetch(SIGN_API+'?file='+encodeURIComponent(signFile.replace(/^\/apk\//,'')))
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(d){
+        var u=d&&(d.url||d.proxy);
+        if(!u) throw new Error('no url');
+        window.location.href=u;
+      })
+      .catch(function(){
+        var h=b.getAttribute('href');
+        window.location.href=(h&&h.indexOf('http')===0)?h:('/get/'+signFile.replace(/^\/apk\//,''));
+      });
+    setTimeout(function(){ b.classList.remove('is-loading'); label.textContent=old; },2600);
   });
+
   // 空状态 / 错误状态内的操作
   $('pkgs').addEventListener('click',function(e){
     var a=e.target.closest('[data-action]'); if(!a) return;

@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+    <link rel="icon" href="/logo.png" type="image/png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>全部版本 · AiVerse</title>
 <style>
@@ -424,6 +425,26 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 .rel-date{font-family:var(--font-mono);font-size:var(--fs-xs);color:var(--text-2)}
 .rel-note{margin:var(--s-3) 0 var(--s-1)}
 .rel-pkgs{display:flex;flex-direction:column;gap:var(--s-3);margin-top:var(--s-3)}
+.rel-controls{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);flex-wrap:wrap;margin-top:var(--s-4)}
+.rel-toggle{display:inline-flex;align-items:center;gap:var(--s-2);font-size:var(--fs-sm);color:var(--text-2);cursor:pointer}
+.rel-toggle input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.rel-pager{display:flex;align-items:center;gap:var(--s-2)}
+.pager-btn{height:var(--ctl-h-sm);padding:0 var(--s-3);border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:var(--r-sm);font:inherit;font-size:var(--fs-sm);cursor:pointer;transition:.15s}
+.pager-btn:hover:not(:disabled){border-color:var(--text-2);background:var(--surface-2)}
+.pager-btn:disabled{opacity:.45;cursor:not-allowed}
+.pager-info{font-size:var(--fs-xs);color:var(--text-2);font-family:var(--font-mono)}
+
+/* ---- 版本卡片折叠：默认收起，展开时才拉该版本的包与校验值 ---- */
+.rel-card{padding:0;overflow:hidden}
+.rel-head{padding:var(--s-5);cursor:pointer;user-select:none}
+.rel-head:hover .rel-expand{border-color:var(--text-2);background:var(--surface-2)}
+.rel-head .rel-meta{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap}
+.rel-expand{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:var(--r-sm);padding:4px 10px;font:inherit;font-size:var(--fs-xs);cursor:pointer;white-space:nowrap}
+.rel-card:not(.is-collapsed) .rel-expand .chev{transform:rotate(180deg)}
+.rel-expand .chev{display:inline-block;transition:transform .2s}
+.rel-body{padding:0 var(--s-5) var(--s-5)}
+.rel-card.is-collapsed .rel-body{display:none}
+.rel-card.is-collapsed .rel-head{border-bottom:0}
 </style>
 </head>
 <body>
@@ -457,6 +478,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     <h1>全部版本</h1>
     <p class="sub">列出仓库内全部发布版本；安装包均经本站签名链路分发，可按架构选择下载。</p>
   </header>
+  <div class="rel-controls">
+    <label class="rel-toggle"><input type="checkbox" id="showPre"> 显示预览版</label>
+    <div class="rel-pager" id="pager"></div>
+  </div>
   <main id="relList" class="rel-list" aria-live="polite"></main>
 </div>
 <div class="sr-only" id="sr" aria-live="polite"></div>
@@ -465,8 +490,8 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 (function(){
   var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
   // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
-  var SIGN_API='https://api.aivapp.cn/sign';
-  var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=100';
+  var SIGN_API='/sign';
+  var API='/releases';
 
   var PKGS=[
     {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64 位 ARM 芯片，主流安卓手机推荐', rec:true},
@@ -591,16 +616,14 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     return out.join('\n');
   }
 
-  /* ---------- GitHub 直连兜底（仅在无 JS / 签名失败时兜底，页面主下载走本站签名） ---------- */
-  function ghUrl(tag,key){ return 'https://github.com/'+GH_OWNER+'/'+GH_REPO+'/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }
 
   function dlBtn(href,label,signFile){
-    return '<a class="btn btn-primary" href="'+href+'" download'+(signFile?' data-sign="'+signFile+'"':'')+'>'
+    return '<a class="btn btn-primary" href="'+href+'"'+(signFile?' data-sign="'+signFile+'"':'')+'>'
       +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
       +'<span class="btn-label">'+label+'</span></a>';
   }
 
-  /* ---------- 单个版本卡片 ---------- */
+  /* ---------- 单个版本卡片（默认折叠，展开时才加载） ---------- */
   function releaseCard(rel){
     var tag=rel.tag_name, assets=rel.assets||[];
     var pre=!!rel.prerelease;
@@ -619,56 +642,152 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         +'<div class="pkg-top"><div class="pkg-id"><span class="pkg-name">'+p.name+'</span>'+(p.rec?'<span class="tag">推荐</span>':'')+'</div><span class="pkg-size">'+mb+' MB</span></div>'
         +'<div class="pkg-abi">'+p.abi+'</div>'
         +'<p class="pkg-desc">'+p.desc+'</p>'
-        +'<div class="pkg-actions">'+dlBtn(ghUrl(tag,p.key),'本站下载',siteFile)+'</div>'
-        +'<div class="pkg-sums" data-file="'+siteFile+'"><span class="sk sk-line" style="width:60%"></span></div>'
+        +'<div class="pkg-actions">'+dlBtn('/get/'+a.name,'本站下载',siteFile)+'</div>'
+        +'<div class="pkg-sums" data-file="'+siteFile+'"></div>'
         +'</article>';
     });
     if(!pkgs) pkgs='<div class="state"><div class="state-desc">该版本暂无可下载安装包。</div></div>';
 
-    return '<section class="rel-card">'
-      +'<div class="rel-head"><div class="pkg-id"><span class="rel-tag">'+esc(tag)+'</span>'+badge+'</div><span class="rel-date">'+esc(dateStr)+'</span></div>'
-      +'<div class="release-note rel-note">'+note+'</div>'
-      +'<div class="rel-pkgs">'+pkgs+'</div>'
+    return '<section class="rel-card is-collapsed">'
+      +'<div class="rel-head" role="button" tabindex="0" aria-expanded="false">'
+        +'<div class="pkg-id"><span class="rel-tag">'+esc(tag)+'</span>'+badge+'</div>'
+        +'<span class="rel-meta"><span class="rel-date">'+esc(dateStr)+'</span>'
+        +'<button class="rel-expand" type="button" tabindex="-1">展开下载 <span class="chev">▾</span></button></span>'
+      +'</div>'
+      +'<div class="rel-body">'
+        +'<div class="release-note rel-note">'+note+'</div>'
+        +'<div class="rel-pkgs">'+pkgs+'</div>'
+      +'</div>'
       +'</section>';
   }
 
-  /* ---------- 拉取官方 MD5/SHA-256 平铺到卡片 ---------- */
-  function fillSums(){
-    var boxes=document.querySelectorAll('.pkg-sums');
-    Array.prototype.forEach.call(boxes,function(box){
-      var file=box.getAttribute('data-file');
-      fetch(SIGN_API+'?file='+encodeURIComponent(file.replace(/^\/apk\//,'')))
+  /* ---------- 校验值：展开后才按顺序拉，失败重试一次再走 /meta 兜底 ---------- */
+  function sumsHTML(d){
+    return '<div class="sums">MD5 <code>'+esc(d.md5)+'</code></div>'
+      +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
+  }
+  function loadSums(card){
+    var boxes=card.querySelectorAll('.pkg-sums');
+    var i=0;
+    (function next(){
+      if(i>=boxes.length) return;
+      var box=boxes[i++];
+      if(box.getAttribute('data-loaded')==='1'){ return next(); }
+      var name=box.getAttribute('data-file').replace(/^\/apk\//,'');
+      box.innerHTML='<div class="vstatus">正在获取校验值…</div>';
+      var ok=function(d){
+        if(!d||!d.md5) throw new Error('no md5');
+        box.innerHTML=sumsHTML(d);
+        box.setAttribute('data-loaded','1');
+        // 把下载按钮的 href 直接改写成签名直链（dl.aivapp.cn），长按复制/右键复制拿到的就是最终地址
+        var act=box.parentNode&&box.parentNode.querySelector('a.btn');
+        var u=d.url||d.proxy;
+        if(act&&u){
+          act.setAttribute('href',u);
+          act.setAttribute('data-direct','1');
+          act.setAttribute('data-sums',(d.md5||'')+'|'+(d.sha256||''));
+        }
+        setTimeout(next,260);
+      };
+      var useMeta=function(){
+        fetch('/meta/'+encodeURIComponent(name))
+          .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+          .then(ok)
+          .catch(function(){
+            box.innerHTML='<div class="vstatus bad">校验值获取失败 '
+              +'<button type="button" class="rel-expand" data-retry-sum="'+name+'">重试</button></div>';
+          });
+      };
+      fetch(SIGN_API+'?file='+encodeURIComponent(name))
         .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-        .then(function(d){
-          box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
-            +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
-        })
-        .catch(function(){ box.innerHTML='<div class="vstatus bad">校验值获取失败，请稍后重试</div>'; });
-    });
+        .then(ok)
+        .catch(function(){ setTimeout(useMeta,900); });
+    })();
   }
 
-  function render(rs){
-    $('relList').innerHTML=rs.map(releaseCard).join('');
-    fillSums();
+  /* ---------- 卡片展开 / 收起（展开才加载该版本内容） ---------- */
+  $('relList').addEventListener('click',function(e){
+    var r=e.target.closest('[data-retry-sum]');
+    if(r){
+      var box=r.closest('.pkg-sums');
+      if(box){ box.removeAttribute('data-loaded'); box.innerHTML=''; loadSums(r.closest('.rel-card')); }
+      return;
+    }
+    if(e.target.closest('a.btn')) return;
+    var h=e.target.closest('.rel-head');
+    if(!h) return;
+    var card=h.parentNode;
+    var collapsed=card.classList.toggle('is-collapsed');
+    h.setAttribute('aria-expanded', collapsed?'false':'true');
+    var btn=h.querySelector('.rel-expand');
+    if(btn) btn.innerHTML=(collapsed?'展开下载':'收起')+' <span class="chev">▾</span>';
+    if(!collapsed) loadSums(card);
+  });
+
+$('relList').addEventListener('keydown',function(e){
+    if(e.key!=='Enter'&&e.key!==' ') return;
+    var h=e.target.closest('.rel-head'); if(!h) return;
+    e.preventDefault(); h.click();
+  });
+
+
+  var PAGE_SIZE=10;
+  var state={all:[], page:1, showPre:false};
+
+  function filtered(){
+    return state.showPre ? state.all : state.all.filter(function(r){return !r.prerelease;});
+  }
+
+  function render(){
+    var list=filtered();
+    var total=list.length;
+    var pages=Math.max(1, Math.ceil(total/PAGE_SIZE));
+    if(state.page>pages) state.page=pages;
+    var slice=list.slice((state.page-1)*PAGE_SIZE, state.page*PAGE_SIZE);
+    $('relList').innerHTML=slice.map(releaseCard).join('')
+      || '<div class="state"><div class="state-desc">当前筛选条件下暂无可显示版本。</div></div>';
+    renderPager(total, pages);
+  }
+
+  function renderPager(total, pages){
+    var p=$('pager');
+    if(total<=0){ p.innerHTML=''; return; }
+    p.innerHTML='<button type="button" class="pager-btn" data-page="prev"'+(state.page<=1?' disabled':'')+'>上一页</button>'
+      +'<span class="pager-info">第 '+state.page+' / '+pages+' 页 · 共 '+total+' 个版本</span>'
+      +'<button type="button" class="pager-btn" data-page="next"'+(state.page>=pages?' disabled':'')+'>下一页</button>';
   }
 
   function showSkeleton(){
     $('relList').innerHTML='<span class="sk sk-pkg" style="height:132px"></span><span class="sk sk-pkg" style="height:132px"></span><span class="sk sk-pkg" style="height:132px"></span>';
   }
 
-  /* ---------- 下载：本站签名链路，失败兜底 GitHub 直连 ---------- */
+  /* ---------- 下载：点击时现签一条 2 分钟有效的 /dl 短链，直接跳过去（不再经过 /get） ---------- */
   $('relList').addEventListener('click',function(e){
-    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')) return;
+    if(b.getAttribute('data-direct')==='1') return;   // href 已是 dl 直链 → 原生跳转，零中转
     var label=b.querySelector('.btn-label'), old=label.textContent;
     var signFile=b.getAttribute('data-sign');
     if(!signFile) return;
     e.preventDefault();
-    var dlName=signFile.replace(/^\/apk\//,'');
-    label.textContent='正在准备下载…';
-    fetch(SIGN_API+'?file='+encodeURIComponent(dlName))
+    b.classList.add('is-loading'); label.textContent='正在生成下载链接…';
+    fetch(SIGN_API+'?file='+encodeURIComponent(signFile.replace(/^\/apk\//,'')))
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(d){ if(d&&d.url){ window.location.href=d.url; } else { throw new Error('no url'); } })
-      .catch(function(){ window.location.href=b.href; });
+      .then(function(d){
+        var u=d&&(d.url||d.proxy);
+        if(!u) throw new Error('no url');
+        window.location.href=u;
+      })
+      .catch(function(){
+        var h=b.getAttribute('href');
+        window.location.href=(h&&h.indexOf('http')===0)?h:('/get/'+signFile.replace(/^\/apk\//,''));
+      });
+    setTimeout(function(){ b.classList.remove('is-loading'); label.textContent=old; },2600);
+  });
+
+$('relList').addEventListener('click',function(e){
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var label=b.querySelector('.btn-label'), old=label.textContent;
+    if(!b.getAttribute('href')) return;
     b.classList.add('is-loading'); b.classList.add('is-success'); label.textContent='已开始下载';
     $('sr').textContent='已开始下载';
     setTimeout(function(){ b.classList.remove('is-loading'); b.classList.remove('is-success'); label.textContent=old; },2200);
@@ -683,7 +802,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
           $('relList').innerHTML='<div class="state"><div class="state-title">仓库暂无 Release</div><div class="state-desc">发布后这里会出现可下载的安装包。</div></div>';
           return;
         }
-        render(rs);
+        state.all=rs; state.page=1; render();
       })
       .catch(function(){
         $('relList').innerHTML='<div class="state state-error" role="alert">'+ICON('alert','ic-sm')+'<div class="state-title">无法获取版本列表</div><div class="state-desc">请检查网络后重试。</div><button class="btn btn-secondary" type="button" data-action="retry">重试</button></div>';
@@ -692,6 +811,19 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 
   $('relList').addEventListener('click',function(e){
     var a=e.target.closest('[data-action="retry"]'); if(a) load();
+  });
+
+  /* 预览版开关：切换后回到第一页 */
+  $('showPre').addEventListener('change',function(){
+    state.showPre=this.checked; state.page=1; render();
+  });
+  /* 分页上一页 / 下一页 */
+  $('pager').addEventListener('click',function(e){
+    var b=e.target.closest('.pager-btn'); if(!b||b.disabled) return;
+    var pages=Math.max(1, Math.ceil(filtered().length/PAGE_SIZE));
+    if(b.dataset.page==='prev' && state.page>1) state.page--;
+    if(b.dataset.page==='next' && state.page<pages) state.page++;
+    render();
   });
 
   load();

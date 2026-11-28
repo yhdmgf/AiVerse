@@ -90,6 +90,6 @@ AiVerse（以下简称“本应用”）是一款运行在 Android 上的开源 
 
 如对本隐私政策有任何疑问，可通过以下方式联系。GitHub Issues 是公开渠道，请勿提交 API Key、密码或含敏感内容的日志：
 
--   联系邮箱：qlqqyx@qq.com
+-   联系邮箱：admin.aivapp.cn
 -   GitHub Issues：[https://github.com/yhdmgf/AiVerse/issues](https://github.com/yhdmgf/AiVerse/issues)
 -   项目主页：[https://github.com/yhdmgf/AiVerse](https://github.com/yhdmgf/AiVerse)

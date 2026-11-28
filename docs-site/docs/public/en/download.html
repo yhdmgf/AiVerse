@@ -498,9 +498,9 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 (function(){
   var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
   // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
-  var SIGN_API='https://api.aivapp.cn/sign';
+  var SIGN_API='/sign';
   var state={channel:'stable', data:null};
-  var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=30';
+  var API='/releases';
 
   var PKGS=[
     {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64-bit ARM chip — recommended for most Android phones', rec:true},
@@ -636,11 +636,10 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   }
 
   /* ---------- 链接构造（文件名带 v = tag） ---------- */
-  function ghUrl(tag,key,owner,repo,fname){ return 'https://github.com/'+(owner||GH_OWNER)+'/'+(repo||GH_REPO)+'/releases/download/'+tag+'/'+(fname||('AiVerse-'+key+'-'+tag))+'.apk'; }
 
   /* ---------- 下载按钮结构：图标槽同时容纳 default / loading / success ---------- */
   function dlBtn(cls,href,label,signFile){
-    return '<a class="btn '+cls+'" href="'+href+'" download'+(signFile?' data-sign="'+signFile+'"':'')+'>'
+    return '<a class="btn '+cls+'" href="'+href+'"'+(signFile?' data-sign="'+signFile+'"':'')+'>'
       +'<span class="btn-ic">'+ICON('download','i-dl')+'<i class="spin"></i>'+ICON('check','i-check')+'</span>'
       +'<span class="btn-label">'+label+'</span></a>';
   }
@@ -663,10 +662,9 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
       // Stable/Preview: site-first (object storage, same asset name as GitHub release) + GitHub direct as fallback.
       // The site download is intercepted by data-sign and exchanged for a CDN signed temporary link via the sign endpoint; href falls back to GitHub direct when JS is off.
       var siteFile='/apk/'+a.name;
-      var siteUrl=ghUrl(tag,p.key);
+      var siteUrl='/get/'+a.name;
       html+=head+'<div class="pkg-actions">'
         +dlBtn(main,siteUrl,'Download',siteFile)
-        +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub')
         +'</div>'
         +'<div class="pkg-sums" data-file="'+siteFile+'"><span class="sk sk-line" style="width:60%"></span></div></article>';
     });
@@ -685,7 +683,11 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
           box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
             +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>';
         })
-        .catch(function(){ box.innerHTML='<div class="vstatus bad">Failed to load checksums, please retry later</div>'; });
+        .catch(function(){ fetch('/meta/'+encodeURIComponent(file.replace(/^\/apk\//,'')))
+          .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+          .then(function(d){ box.innerHTML='<div class="sums">MD5 <code>'+esc(d.md5||'—')+'</code></div>'
+            +'<div class="sums">SHA-256 <code>'+esc(d.sha256||'—')+'</code></div>'; })
+          .catch(function(){ box.innerHTML='<div class="vstatus bad">Failed to load checksums, please retry later</div>'; }); });
     });
   }
 
@@ -785,44 +787,25 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   window.addEventListener('resize',function(){ initThumbs(true); });
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ initThumbs(true); });
 
-  /* ---------- 下载点击反馈：loading → success → 复位（不拦截原生下载） ---------- */
+    /* ---------- 下载点击反馈：只做提示，不拦截原生跳转（href 指向 /get/<名>） ---------- */
   $('pkgs').addEventListener('click',function(e){
-    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')||b.classList.contains('is-success')) return;
+    var b=e.target.closest('a.btn'); if(!b||b.classList.contains('is-loading')) return;
     var label=b.querySelector('.btn-label'), old=label.textContent;
     var signFile=b.getAttribute('data-sign');
-    var sibs=[].filter.call(b.parentNode.querySelectorAll('a.btn'),function(x){return x!==b;});
-    sibs.forEach(function(s){ s.setAttribute('aria-disabled','true'); });
-    b.classList.add('is-loading');
-    // 本站 APK：先向后端取 CDN 签名临时链接，再跳转 dl 域名下载；签发失败兜底 GitHub 直连
-    if(signFile){
-      e.preventDefault();
-      var dlName=signFile.replace(/^\/apk\//,'');
-      label.textContent='Preparing download…';
-      fetch(SIGN_API+'?file='+encodeURIComponent(dlName))
-        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-        .then(function(d){
-          if(d&&d.url){ window.location.href=d.url; } else { throw new Error('no url'); }
-        })
-        .catch(function(){ window.location.href=b.href; });
-      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='Download started';
-      $('sr').textContent='Download started';
-      setTimeout(function(){
-        b.classList.remove('is-success'); label.textContent=old;
-        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-      },2200);
-      return;
-    }
-    // 第三方渠道：保持原生跳转，仅做加载/成功反馈
-    label.textContent='Preparing…';
-    setTimeout(function(){
-      b.classList.remove('is-loading'); b.classList.add('is-success'); label.textContent='Download started';
-      $('sr').textContent='Download started';
-      setTimeout(function(){
-        b.classList.remove('is-success'); label.textContent=old;
-        sibs.forEach(function(s){ s.removeAttribute('aria-disabled'); });
-      },2200);
-    },700);
+    if(!signFile) return;
+    e.preventDefault();
+    b.classList.add('is-loading'); label.textContent='Generating link…';
+    fetch(SIGN_API+'?file='+encodeURIComponent(signFile.replace(/^\/apk\//,'')))
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(d){
+        var u=d&&(d.url||d.proxy);
+        if(!u) throw new Error('no url');
+        window.location.href=u;
+      })
+      .catch(function(){ window.location.href=b.getAttribute('href'); });
+    setTimeout(function(){ b.classList.remove('is-loading'); label.textContent=old; },2600);
   });
+
   // 空状态 / 错误状态内的操作
   $('pkgs').addEventListener('click',function(e){
     var a=e.target.closest('[data-action]'); if(!a) return;
