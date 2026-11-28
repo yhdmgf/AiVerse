@@ -13,7 +13,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.Profile
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
 import com.aiverse.R
 import com.aiverse.core.util.FileLogger
 import com.aiverse.feature.plugins.domain.newmodel.PluginPage
@@ -95,22 +97,41 @@ object PluginWebViewFactory {
      * 应用内登录页 WebView（`webview.login`）：与 [`create()`] 完全独立。
      *
      * 与插件页的关键差异：不经过 [WebViewAssetLoader] 虚拟域、不加 CSP、不阻断外链——
-     * 这里要加载远程 https 登录页并跟随 OAuth 跳转。Cookie 落在 `cookieManager`
-     * （调用方传入的独立 profile jar，用后由 Activity 清除），与插件页默认 profile 隔离。
-     * 每次导航（`onPageFinished` / `doUpdateVisitedHistory`）交回宿主判完成条件。
+     * 这里要加载远程 https 登录页并跟随 OAuth 跳转。
+     *
+     * 注意：仅在构造后拿 `Profile.cookieManager` 读 Cookie 是不够的；WebView 本身默认仍跑在
+     * 默认 profile 上，页面请求与脚本写入的 Cookie 会落在默认 jar，和登录侧读的 profile 对不上。
+     * 这里必须先 [WebViewCompat.setProfile] 把 WebView 绑到独立 profile，再对同一个 CookieManager
+     * 打开第三方 Cookie，纯 CSR 登录页的 CDN 子资源与风控脚本才有会话可用。
      */
     @SuppressLint("SetJavaScriptEnabled")
     fun createLoginWebView(
         context: Context,
-        cookieManager: CookieManager,
+        profile: Profile?,
+        onCookieManagerResolved: (CookieManager) -> Unit,
         onNavigation: (String?) -> Unit,
         onMainFrameError: () -> Unit,
         onLoadingChanged: (Boolean) -> Unit
     ): WebView {
-        cookieManager.setAcceptCookie(true)
         return WebView(context).apply {
+            val boundProfile = profile?.let { target ->
+                runCatching { WebViewCompat.setProfile(this, target) }
+                    .onFailure { FileLogger.w("PluginWebViewFactory", "登录 WebView 绑定独立 profile 失败: ${it.message}") }
+                    .isSuccess
+            } == true
+            val cookieManager = if (boundProfile && profile != null) {
+                profile.cookieManager
+            } else {
+                CookieManager.getInstance()
+            }
+            cookieManager.setAcceptCookie(true)
+            // 部分登录页的静态资源与风控 SDK 走第三方域，默认拦截会让纯 CSR 页面只剩空壳。
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+            onCookieManagerResolved(cookieManager)
+
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.databaseEnabled = true
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.useWideViewPort = true
