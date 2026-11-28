@@ -478,20 +478,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
             <div class="thumb"></div>
             <button class="switch-btn active" data-channel="stable" type="button" role="radio" aria-checked="true" disabled><span class="dot"></span>正式版</button>
             <button class="switch-btn" data-channel="beta" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>预览版</button>
-            <button class="switch-btn" data-channel="test" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>测试版</button>
-          </div>
-        </div>
-
-        <div class="group" id="sourceGroup" hidden>
-          <div class="group-label" id="lblSource">下载源</div>
-          <div class="switch" id="sourceSwitch" role="radiogroup" aria-labelledby="lblSource">
-            <div class="thumb"></div>
-            <button class="switch-btn active" data-source="github" type="button" role="radio" aria-checked="true" disabled><span class="dot"></span>直连</button>
-            <button class="switch-btn" data-source="mirror" type="button" role="radio" aria-checked="false" disabled><span class="dot"></span>镜像</button>
-          </div>
-          <div class="source-note" id="mirrorTip" hidden>
-            <svg class="ic ic-sm"><use href="#i-info"/></svg>
-            <span id="mirrorTipText"></span>
           </div>
         </div>
 
@@ -506,7 +492,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
       <div class="foot">
         <div class="foot-links">
           <a class="link" href="https://github.com/yhdmgf/AiVerse/releases" target="_blank" rel="noreferrer">在 GitHub 查看所有版本<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
-          <a class="link" href="https://gitcode.com/aiverse/aiverse/releases" target="_blank" rel="noreferrer">在 GitCode 镜像查看所有版本<svg class="ic ic-sm"><use href="#i-external"/></svg></a>
         </div>
         <p class="foot-note">下载即表示你已阅读并同意 <a class="link" href="/terms.html">服务条款</a> 与 <a class="link" href="/privacy.html">隐私政策</a>。</p>
       </div>
@@ -515,50 +500,15 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 </div>
 <div class="sr-only" id="sr" aria-live="polite"></div>
 
-<div class="test-modal-scrim" id="testModal" hidden>
-  <div class="test-modal" role="dialog" aria-modal="true" aria-labelledby="testModalTitle">
-    <div class="test-modal-head">
-      <div class="test-modal-title" id="testModalTitle">
-        <svg class="warn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        测试版仅供内部使用
-      </div>
-      <button class="test-modal-close" type="button" data-action="close-test" aria-label="关闭">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="test-modal-body">
-      <p class="test-modal-lead">测试版仅供内部使用，<b>不能当正式版使用</b>，日常推荐使用 <b>预览版</b> 或 <b>正式版</b>。</p>
-      <div class="ack-list">
-        <label class="ack-item"><input type="checkbox" data-ack><span>我已知晓测试版有水印</span></label>
-        <label class="ack-item"><input type="checkbox" data-ack><span>我已知晓测试版可能无法自动检查更新</span></label>
-        <label class="ack-item"><input type="checkbox" data-ack><span>我已知晓测试版带来的不稳定性</span></label>
-      </div>
-      <div class="test-modal-foot">
-        <button class="btn btn-primary" type="button" data-action="confirm-test" disabled>确认切换到测试版</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
 (function(){
   var GH_OWNER='yhdmgf', GH_REPO='AiVerse';
-  // 测试版：独立仓库 yhdmgf/aiverse-beta，仅供内部使用
-  var TEST_OWNER='yhdmgf', TEST_REPO='aiverse-beta';
-  var TEST_API='https://api.github.com/repos/'+TEST_OWNER+'/'+TEST_REPO+'/releases/latest';
   // 本站 APK 签发接口：后端用 CDN 签名生成临时下载链接；前端只调接口拿链接，不接触密钥。
   var SIGN_API='https://api.aivapp.cn/sign';
   // 完整性校验回源代理（同源读取 APK 字节做哈希比对，绕开对象存储 CORS）；下载跳转走 dl 域名 CDN 签名链接。
   var PROXY_API='https://api.aivapp.cn/apk-proxy';
-  // 双镜像：用户可手动选择镜像一/镜像二
-  var MIRRORS=[
-    {name:'镜像一', host:'gitcode', build:function(tag,key){ return 'https://gitcode.com/aiverse/aiverse/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }},
-    {name:'镜像二', host:'gh.aivapp.cn（本站加速）', build:function(tag,key){ return 'https://gh.aivapp.cn/https://github.com/'+GH_OWNER+'/'+GH_REPO+'/releases/download/'+tag+'/AiVerse-'+key+'-'+tag+'.apk'; }}
-  ];
-  var state={channel:'stable', source:'github', data:null, test:null, testUnlocked:false};
+  var state={channel:'stable', data:null};
   var API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/releases?per_page=30';
-  // 主仓库 main 最新 commit（用于测试版内容同步对比）
-  var MAIN_COMMIT_API='https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/commits/main';
 
   var PKGS=[
     {key:'arm64', name:'ARM64', abi:'arm64-v8a', desc:'64 位 ARM 芯片，主流安卓手机推荐', rec:true},
@@ -695,7 +645,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
 
   /* ---------- 链接构造（文件名带 v = tag） ---------- */
   function ghUrl(tag,key,owner,repo,fname){ return 'https://github.com/'+(owner||GH_OWNER)+'/'+(repo||GH_REPO)+'/releases/download/'+tag+'/'+(fname||('AiVerse-'+key+'-'+tag))+'.apk'; }
-  function mirrorUrl(idx,tag,key){ return MIRRORS[idx].build(tag,key); }
 
   /* ---------- 下载按钮结构：图标槽同时容纳 default / loading / success ---------- */
   function dlBtn(cls,href,label,signFile){
@@ -719,31 +668,18 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
         +'<p class="pkg-desc">'+p.desc+'</p>';
       var main=p.rec?'btn-primary':'btn-secondary';
 
-      var isTestCh=state.channel==='test';
-      if(isTestCh){
-        // 测试版：独立仓库 yhdmgf/aiverse-beta，文件名不带版本号（-beta）
-        // 与其他通道一致：直连模式只显示直连按钮，镜像模式只显示镜像按钮（测试版仅一个 gh 镜像）
-        var tf='AiVerse-'+p.key+'-beta';
-        var tgh=ghUrl(tag,p.key,TEST_OWNER,TEST_REPO,tf);
-        if(state.source==='github'){
-          html+=head+'<div class="pkg-actions">'+dlBtn(main,tgh,'GitHub 直连下载')+'</div></article>';
-        } else {
-          html+=head+'<div class="pkg-actions">'+dlBtn(main,'https://gh.aivapp.cn/'+tgh,'镜像下载')+'</div></article>';
-        }
-      } else {
-        // 正式版/预览版：本站为主（对象存储，文件名与 GitHub Release 一致）+ GitHub 直连备用。
-        // 本站下载由 data-sign 拦截、经签发端换 CDN 签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
-        var siteFile='/apk/'+a.name;
-        var siteUrl=ghUrl(tag,p.key);
-        html+=head+'<div class="pkg-actions">'
-          +dlBtn(main,siteUrl,'本站下载',siteFile)
-          +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub 直连')
-          +'</div>'
-          +'<div class="pkg-verify" data-file="'+siteFile+'">'
-            +'<button type="button" class="verify-btn">校验文件完整性</button>'
-            +'<div class="verify-result" hidden></div>'
-          +'</div></article>';
-      }
+      // 正式版/预览版：本站为主（对象存储，文件名与 GitHub Release 一致）+ GitHub 直连备用。
+      // 本站下载由 data-sign 拦截、经签发端换 CDN 签名临时链接；href 兜底指向 GitHub 直连（无 JS 时不落到已清空的本地目录）。
+      var siteFile='/apk/'+a.name;
+      var siteUrl=ghUrl(tag,p.key);
+      html+=head+'<div class="pkg-actions">'
+        +dlBtn(main,siteUrl,'本站下载',siteFile)
+        +dlBtn('btn-secondary',ghUrl(tag,p.key),'GitHub 直连')
+        +'</div>'
+        +'<div class="pkg-verify" data-file="'+siteFile+'">'
+          +'<button type="button" class="verify-btn">校验文件完整性</button>'
+          +'<div class="verify-result" hidden></div>'
+        +'</div></article>';
     });
     if(!html) html=emptyState('该版本未找到安装包资源','这个版本没有附带可用的安装包，请切换通道或前往发布页查看。');
     $('pkgs').innerHTML=html;
@@ -777,75 +713,29 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
   }
   function initThumbs(instant){
     positionThumb($("channelSwitch"),!instant);
-    positionThumb($("sourceSwitch"),!instant);
   }
   function syncSwitch(sw){
     sw.querySelectorAll('.switch-btn').forEach(function(x){ x.setAttribute('aria-checked',x.classList.contains('active')?'true':'false'); x.tabIndex=x.classList.contains('active')?0:-1; });
   }
-  function setBusy(b){                                                    // 数据未就绪：禁用两个分段控件
+  function setBusy(b){                                                    // 数据未就绪：禁用分段控件
     document.querySelectorAll('.switch-btn').forEach(function(x){ x.disabled=b; });
-  }
-
-  /* ---------- 测试版内容同步：从 body 抓 commit，对比主仓库 main 最新提交 ---------- */
-  function extractCommit(body){
-    var m = /commit\s+([0-9a-f]{7,40})/i.exec(body||'');
-    return m ? m[1] : '';
-  }
-  function renderVerSync(body){
-    var box = $('verSync');
-    var testCommit = extractCommit(body);
-    if(!testCommit){ box.hidden = true; return; }        // body 无 commit，不显示
-    var shortTest = testCommit.slice(0,7);
-    box.hidden = false;
-    box.className = 'ver-sync';
-    box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">正在检查测试版是否为最新…</span></div>';
-    fetch(MAIN_COMMIT_API)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(c){
-        var mainSha = (c && c.sha) ? String(c.sha) : '';
-        if(!mainSha){ box.hidden = true; return; }
-        var shortMain = mainSha.slice(0,7);
-        var same = (mainSha.slice(0, testCommit.length).toLowerCase() === testCommit.toLowerCase());
-        if(same){
-          box.className = 'ver-sync ok';
-          box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">测试版已是最新</span></div>'
-            + '<div class="vs-sub">构建 commit <span class="vs-hash">'+shortTest+'</span> 与主仓库最新提交一致</div>';
-        } else {
-          box.className = 'ver-sync behind';
-          box.innerHTML = '<div class="vs-row"><span class="vs-dot"></span><span class="vs-title">测试版已落后于主仓库</span></div>'
-            + '<div class="vs-sub">构建 commit <span class="vs-hash">'+shortTest+'</span> · 主仓库最新 <span class="vs-hash">'+shortMain+'</span></div>'
-            + '<div class="vs-sub">请<a href="https://aivapp.cn/trigger/" target="_blank" rel="noopener noreferrer">手动触发一次</a>，以获得最新测试版</div>';
-        }
-      })
-      .catch(function(){ box.hidden = true; });          // 查询失败则静默隐藏，不打扰
   }
 
   /* ---------- 渲染全部 ---------- */
   function renderAll(){
-    var isTest=state.channel==='test';
     var isBeta=state.channel==='beta';
-    if(!isTest && !state.data) return;
-    var rel = isTest ? state.test : (isBeta ? state.data.beta : state.data.stable);
-    var chName = isTest?'测试版':(isBeta?'预览版':'正式版');
+    if(!state.data) return;
+    var rel = isBeta ? state.data.beta : state.data.stable;
+    var chName = isBeta?'预览版':'正式版';
     var badge=$('channelBadge');
-    badge.className='badge '+(isTest?'test':(isBeta?'beta':'stable'));
+    badge.className='badge '+(isBeta?'beta':'stable');
     badge.textContent=chName;
-    // 正式版/预览版不再使用镜像，隐藏“下载源”切换；仅测试版显示并可切 GitHub 直连/镜像
-    $('sourceGroup').hidden=!isTest;
-    var tip=$('mirrorTip');
-    if(isTest && state.source==='mirror'){
-      tip.hidden=false;
-      $('mirrorTipText').innerHTML='测试版镜像为本站加速（gh.aivapp.cn），仅此一个镜像。';
-    } else {
-      tip.hidden=true;
-    }
-    if(isTest) positionThumb($('sourceSwitch'),false);
 
     if(!rel){
       $('verBig').textContent = '暂无'+chName;
       $('verMeta').textContent='';
       $('releaseNote').innerHTML='<p>该通道暂时没有可用版本，请切换另一通道。</p>';
-      var otherCh = isTest?'预览版':(isBeta?'正式版':'预览版');
+      var otherCh = isBeta?'正式版':'预览版';
       $('pkgs').innerHTML=emptyState('暂无'+chName,'该通道暂时没有可用安装包。',
         '<button class="btn btn-secondary" type="button" data-action="other-channel">切换到'+otherCh+'</button>');
       initThumbs();
@@ -855,25 +745,11 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     $('infoTitle').textContent='版本信息';
     var d=new Date(rel.published_at);
     var dateStr=isNaN(d)?'':d.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'});
-    $('verMeta').textContent='发布于 '+dateStr+(isTest?' · 内部测试版，仅供内部使用':(isBeta?' · 预览版本，可能不稳定':' · 推荐日常使用'));
-    if(isTest){
-      // 测试版：版本号右侧加"测试版"标记（测试版号≠最终版本号）
-      $('verBig').innerHTML='';
-      var vText=document.createElement('span'); vText.textContent=v;
-      var vBadge=document.createElement('span'); vBadge.className='ver-test-badge'; vBadge.textContent='测试版';
-      $('verBig').appendChild(vText); $('verBig').appendChild(vBadge);
-      // 测试版：隐藏顶部"版本信息"标题（避免与下方 notesTitle"版本信息"重复），通道名由 verBig 旁"测试版"标记体现
-      $('infoEyebrow').hidden=true;
-      // 测试版左栏标题用"版本信息"（其余通道保持"更新日志"）
-      $('notesTitle').textContent='版本信息';
-      // 内容同步状态：对比 beta 构建 commit 与主仓库 main 最新提交
-      renderVerSync(rel.body);
-    } else {
-      $('infoEyebrow').hidden=false;
-      $('verBig').textContent=v;
-      $('notesTitle').textContent='更新日志';
-      $('verSync').hidden=true;
-    }
+    $('verMeta').textContent='发布于 '+dateStr+(isBeta?' · 最新预览版，可能不稳定':' · 最新稳定版，推荐日常使用');
+    $('infoEyebrow').hidden=false;
+    $('verBig').textContent=v;
+    $('notesTitle').textContent='更新日志';
+    $('verSync').hidden=true;
     $('releaseNote').innerHTML=stripRefs(renderMD(cleanNote(rel.body||'（暂无更新日志）')));
 
     renderPkgs(rel);
@@ -885,8 +761,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     var sw=$(id);
     sw.addEventListener('click',function(e){
       var b=e.target.closest('.switch-btn'); if(!b||b.disabled||b.classList.contains('active')) return;
-      // 测试版通道：先弹窗确认（勾选三个已知悉 + 确认才切换；点 × 关闭则不切换）
-      if(id==='channelSwitch' && b.dataset.channel==='test'){ showTestModal(); return; }
       sw.querySelectorAll('.switch-btn').forEach(function(x){x.classList.remove('active')});
       b.classList.add('active');
       apply(b.dataset[key]);
@@ -902,44 +776,6 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
     });
   }
   bindSwitch('channelSwitch','channel',function(v){ state.channel=v; });
-  // 下载源：二选一（直连 / 镜像），镜像模式每个包固定镜像一/镜像二双按钮
-  bindSwitch('sourceSwitch','source',function(v){ state.source=v; });
-
-  /* ---------- 测试版确认弹窗（事件只绑一次）---------- */
-  var testModal=$('testModal');
-  var testChecks=[].slice.call(testModal.querySelectorAll('[data-ack]'));
-  var testConfirmBtn=testModal.querySelector('[data-action="confirm-test"]');
-  var testCloseBtn=testModal.querySelector('[data-action="close-test"]');
-  function updateTestConfirm(){
-    var all=testChecks.length>0 && testChecks.every(function(c){return c.checked});
-    testConfirmBtn.disabled=!all;
-  }
-  testChecks.forEach(function(c){ c.addEventListener('change',updateTestConfirm); });
-  function showTestModal(){
-    testChecks.forEach(function(c){c.checked=false});
-    testConfirmBtn.disabled=true;
-    testModal.hidden=false;
-    requestAnimationFrame(function(){ testModal.classList.add('open'); });
-    document.documentElement.classList.add('is-locked');
-  }
-  function closeTestModal(){
-    testModal.classList.remove('open');
-    document.documentElement.classList.remove('is-locked');
-    setTimeout(function(){ testModal.hidden=true; },200);
-  }
-  testConfirmBtn.addEventListener('click',function(){
-    state.channel='test';
-    state.testUnlocked=true;                       // 已确认 → 解锁下载
-    closeTestModal();
-    var sw=$('channelSwitch');
-    sw.querySelectorAll('.switch-btn').forEach(function(x){x.classList.remove('active')});
-    sw.querySelector('[data-channel="test"]').classList.add('active');
-    syncSwitch(sw);
-    renderAll();
-  });
-  testCloseBtn.addEventListener('click',closeTestModal);          // 点 × → 不切换（保持原通道）
-  testModal.addEventListener('click',function(e){ if(e.target===testModal) closeTestModal(); });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape' && !testModal.hidden) closeTestModal(); });
 
   window.addEventListener('resize',function(){ initThumbs(true); });
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ initThumbs(true); });
@@ -1048,9 +884,8 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
           state.channel='beta';
           $('channelSwitch').querySelectorAll('.switch-btn').forEach(function(x){ x.classList.toggle('active', x.dataset.channel==='beta'); });
         }
-        setBusy(false); syncSwitch($('channelSwitch')); syncSwitch($('sourceSwitch'));
+        setBusy(false); syncSwitch($('channelSwitch'));
         renderAll();
-        loadTest();
       })
       .catch(function(){
         $('verBig').textContent='加载失败'; $('verMeta').textContent='';
@@ -1061,15 +896,7 @@ body{min-height:100dvh;padding:clamp(12px,3vw,36px);background:radial-gradient(e
       });
   }
 
-  /* ---------- 拉取测试版（独立仓库 yhdmgf/aiverse-beta）---------- */
-  function loadTest(){
-    fetch(TEST_API)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-      .then(function(rel){ state.test=(rel && !rel.draft)?rel:null; if(state.channel==='test') renderAll(); })
-      .catch(function(){ state.test=null; if(state.channel==='test') renderAll(); });
-  }
-
-  syncSwitch($('channelSwitch')); syncSwitch($('sourceSwitch'));
+  syncSwitch($('channelSwitch'));
   load();
   // 下载界面已作为页面主体直接展示。
 })();
