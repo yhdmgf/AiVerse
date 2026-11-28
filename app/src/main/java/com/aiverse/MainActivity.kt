@@ -85,6 +85,7 @@ import com.aiverse.core.theme.AIEditorTheme
 import com.aiverse.core.theme.AppThemePreset
 import com.aiverse.core.theme.FileTreeDisplayPrefs
 import com.aiverse.core.theme.LocalChatPanelOpacity
+import com.aiverse.core.theme.LocalPluginUiStyle
 import com.aiverse.core.theme.UIDensity
 import com.aiverse.core.ui.BetaWatermark
 import com.aiverse.core.ui.ImageSource
@@ -115,6 +116,7 @@ import com.aiverse.core.ui.rememberViewerDecodeSpec
 import com.aiverse.core.ui.isPdfFile
 import com.aiverse.core.ui.pdfFileResolver
 import com.aiverse.core.util.ApkInstaller
+import com.aiverse.core.util.AppLocale
 import com.aiverse.core.util.extToMimeType
 import com.aiverse.feature.agent.presentation.AIAgentViewModel
 import com.aiverse.feature.agent.presentation.AgentAttachment
@@ -253,8 +255,8 @@ class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: android.content.Context) {
         // 在 Activity 创建前同步应用用户选择的语言，确保冷启动也生效。
         // Hilt 尚未注入，直接从 SharedPreferences 同步读取。
-        val tag = newBase.getSharedPreferences("language_prefs_sync", android.content.Context.MODE_PRIVATE)
-            .getString("language_tag", null)
+        val tag = AppLocale.storedTag(newBase)
+        AppLocale.syncDefault(tag)
         val context = if (tag.isNullOrBlank()) {
             newBase
         } else {
@@ -284,6 +286,9 @@ class MainActivity : ComponentActivity() {
         // 监听语言偏好变化，更新 Application/Activity locale 后重建。
         lifecycleScope.launch {
             languageSettings.languageFlow.drop(1).distinctUntilChanged().collect { tag ->
+                // 先同步 JVM 默认 Locale：清单多语言文本等读取 Locale.getDefault() 的链路
+                // 不会随 Resources 配置更新，不同步会出现切回原语言后文案仍停留在旧语言。
+                AppLocale.syncDefault(tag)
                 // 同步更新 Application context 的 Configuration，确保非 Activity 来源的
                 // Resources（如 ViewModel 中 context.getString）也能拿到正确 locale。
                 val app = applicationContext
@@ -1535,7 +1540,9 @@ fun AppNavigation(
             drawerContent = {
                 ModalDrawerSheet(
                     drawerShape = RectangleShape,
-                    drawerContainerColor = settingsPageBackground(),
+                    // 外层 sheet 优先跟随插件声明的 drawerColor：带透明度时半透明效果不会被外层不透明底色盖住；
+                    // 无插件声明时回退页面背景。内层抽屉内容取色与这里保持一致。
+                    drawerContainerColor = LocalPluginUiStyle.current?.drawerColor ?: settingsPageBackground(),
                     drawerTonalElevation = 0.dp,
                     // 不在 sheet 上叠 .shadow(clip=false)：这层 RenderNode 图形修饰会干扰 ModalNavigationDrawer
                     // 自带 scrim 的合成（表现为手势滑出不变暗、点 ☰ 暗一下即恢复）。抽屉层次感交给

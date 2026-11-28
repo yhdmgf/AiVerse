@@ -94,7 +94,7 @@ Choose **Edit mode** from the "⋯" menu at the top of the file tree (or long-pr
 -   **Copy**: puts the selected entries into the batch clipboard (pasting does not delete the source).
 -   **Move**: puts the selected entries into the batch clipboard and marks them for moving (pasting deletes the source), with a bottom hint "N items cut — tap the target directory to paste".
 -   **Paste**: there is no separate button — when there is content on the clipboard, **tapping the target directory row** pastes the whole batch there (pasting does not delete the source).
--   **Delete**: deletes the selected entries in bulk, using the same **second confirmation** dialog as the settings page (deletion cannot be undone).
+-   **Delete**: deletes the selected entries in bulk, using the same **second confirmation** dialog as the settings page (deletion cannot be undone). By default only explicitly checked entries are removed; parent folders whose children are all selected but the folder itself was not checked are kept unless the "Also delete parent folders" option is checked in the confirmation dialog.
 -   **Deselect**: clears the selection and exits edit mode.
 
 After copying or moving, **tapping the target directory row** pastes the whole batch there; a move-paste deletes the source while a copy keeps it. When the target already has an entry with the same name, that entry is skipped (not overwritten, leaving the source file unchanged), and the remaining entries are handled as usual.

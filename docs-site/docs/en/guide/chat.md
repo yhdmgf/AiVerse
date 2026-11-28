@@ -29,7 +29,7 @@ Tap the menu button at the top left, or swipe right from the left edge of the sc
 
 ### Sessions Tab
 
-Sessions are arranged from newest to oldest by last reply time, and grouped by time (Today / Yesterday / Within 7 days / Within 30 days / earlier by month). Pinned sessions are placed separately in a "Pinned" group at the very front, with a light-blue card background.
+Sessions are arranged from newest to oldest by last reply time, and grouped by time (Today / Yesterday / Within 7 days / Within 30 days / earlier by month). Pinned sessions are placed separately in a "Pinned" group at the very front, with a light-blue card background. The group header shows the session count; tap the header to collapse or expand it. The collapsed state is remembered per group, and the pinned group always stays expanded.
 
 A short press switches sessions, and **a long press pops up an actions menu**:
 

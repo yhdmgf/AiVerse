@@ -67,6 +67,7 @@ This suits writing your own plugin or wanting to edit a plugin's source directly
 1.  Tap the **gear** in the top-right corner of "Settings → Plugins" to open **Developer Mode**.
 2.  Once enabled, every subdirectory containing a `plugin.json` under `~/.aiverse/plugin-dev//` appears in the "**In Development**" tab.
 3.  Changing files in those directories **automatically repackages and replaces** them, with no need to re-import.
+4.  Swipe a project left in the "In Development" list to delete its development folder and source code; the installed plugin is unaffected.
 
 Note
 

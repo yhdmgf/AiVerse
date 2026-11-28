@@ -552,6 +552,22 @@ class PluginsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 删除开发项目：只删开发目录里的源码与项目目录，已安装插件的文件不受影响；
+     * 删除后清掉基线记录并重新扫描开发目录。
+     */
+    fun removeDevProject(project: PluginDevProject) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dir = File(manager.devDir, project.dirName)
+            if (dir.exists()) {
+                runCatching { dir.deleteRecursively() }
+                    .onFailure { FileLogger.w(TAG, "删除开发项目目录失败: ${project.dirName}", it) }
+            }
+            devLastLoaded.remove(project.dirName)
+            refreshDevProjects()
+        }
+    }
+
     /** 启停入口：真实插件走 [PluginManager.setEnabled]，持久化并回推到 [plugins]。 */
     fun setEnabled(id: String, enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {

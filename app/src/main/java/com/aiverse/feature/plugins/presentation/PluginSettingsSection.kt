@@ -366,6 +366,7 @@ internal fun PluginSettingsSection(
                         enabled && project.error == null -> viewModel.installDevProject(project)
                     }
                 },
+                onDeleteDevProject = { project -> viewModel.removeDevProject(project) },
                 onOpenDetail = { selectedPluginId = it.id },
                 onToggleEnabled = { plugin, enabled -> viewModel.setEnabled(plugin.id, enabled) },
                 onMemoryToggleEnabled = viewModel::setMemoryEnabled,

@@ -16,7 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +40,10 @@ import com.aiverse.core.ui.openFileExternal
 import com.aiverse.core.util.extToMimeType
 import com.aiverse.R
 import com.aiverse.feature.agent.presentation.AIAgentViewModel
+import com.aiverse.feature.agent.presentation.component.DirectoryInfo
+import com.aiverse.feature.agent.presentation.component.FilePropertiesSheet
+import com.aiverse.feature.agent.presentation.component.loadDirectoryInfoSync
+import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
 import compose.icons.FeatherIcons
@@ -83,6 +90,34 @@ internal fun ViewerFileActionSheet(
     var showRenameDialog by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var renameValue by remember(fileName) { mutableStateOf(fileName) }
+    // 「属性」抽屉可见态；条目元信息在 IO 后台读取，失败时不弹属性抽屉。
+    var showProps by remember { mutableStateOf(false) }
+    var propsEntry by remember(path) { mutableStateOf<FileEntry?>(null) }
+
+    LaunchedEffect(path) {
+        propsEntry = withContext(Dispatchers.IO) {
+            runCatching {
+                val dir = agentViewModel.fileAccess.isDirectory(path)
+                FileEntry(
+                    name = fileName,
+                    isDirectory = dir,
+                    size = if (dir) 0L else agentViewModel.fileAccess.fileSize(path),
+                    lastModified = agentViewModel.fileAccess.lastModified(path),
+                    permissions = agentViewModel.fileAccess.permissions(path)
+                )
+            }.getOrNull()
+        }
+    }
+
+    // 目录大小递归统计走 IO 后台，与文件树长按菜单同一套链路。
+    val loadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit = { target, onResult ->
+        scope.launch {
+            val info = withContext(Dispatchers.IO) {
+                runCatching { loadDirectoryInfoSync(agentViewModel.fileAccess, target) }.getOrNull()
+            }
+            onResult(info)
+        }
+    }
 
     // 导出：与文件树同一套 SAF「另存为 zip」，回调后交给 VM 导出。
     val exportLauncher = rememberLauncherForActivityResult(
@@ -117,12 +152,12 @@ internal fun ViewerFileActionSheet(
                         .padding(bottom = Spacing.md)
                 )
                 ViewerSheetActionRow(
-                    icon = FeatherIcons.Send,
-                    label = stringResource(R.string.file_browser_send_to_chat),
+                    icon = FeatherIcons.ExternalLink,
+                    label = stringResource(R.string.attachment_open_external),
                     tint = MaterialTheme.colorScheme.onSurface,
                     onClick = {
                         sheetVisible = false
-                        sendViewerPathToChat(path, agentViewModel)
+                        openViewerFileExternal(path, context, agentViewModel, scope)
                     }
                 )
                 ViewerSheetActionRow(
@@ -144,12 +179,12 @@ internal fun ViewerFileActionSheet(
                     }
                 )
                 ViewerSheetActionRow(
-                    icon = FeatherIcons.ExternalLink,
-                    label = stringResource(R.string.attachment_open_external),
+                    icon = FeatherIcons.Send,
+                    label = stringResource(R.string.file_browser_send_to_chat),
                     tint = MaterialTheme.colorScheme.onSurface,
                     onClick = {
                         sheetVisible = false
-                        openViewerFileExternal(path, context, agentViewModel, scope)
+                        sendViewerPathToChat(path, agentViewModel)
                     }
                 )
                 ViewerSheetActionRow(
@@ -188,7 +223,29 @@ internal fun ViewerFileActionSheet(
                         showDeleteConfirm = true
                     }
                 )
+                // 「属性」：与文件树长按菜单同一入口，排在常规操作末尾。
+                ViewerSheetActionRow(
+                    icon = Icons.Outlined.Info,
+                    label = stringResource(R.string.file_browser_properties),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    onClick = {
+                        sheetVisible = false
+                        showProps = true
+                    }
+                )
             }
+        }
+    }
+
+    if (showProps) {
+        propsEntry?.let { entry ->
+            FilePropertiesSheet(
+                entry = entry,
+                path = path,
+                displayName = fileName,
+                onDismiss = { showProps = false },
+                onLoadDirectoryInfo = loadDirectoryInfo
+            )
         }
     }
 

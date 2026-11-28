@@ -16,6 +16,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import com.aiverse.core.net.AppProxy
 import com.aiverse.core.ui.overlay.OverlayApprovalService
 import com.aiverse.core.util.AILogger
+import com.aiverse.core.util.AppLocale
 import com.aiverse.core.util.FileLogger
 import com.aiverse.core.util.TombstoneParser
 import net.schmizz.sshj.common.SecurityUtils
@@ -46,8 +47,6 @@ class AIEditorApp : Application(), Configuration.Provider {
 
     companion object {
         const val TAG = "AIEditorApp"
-        const val LANG_PREFS = "language_prefs_sync"
-        const val LANG_KEY = "language_tag"
         /** 崩溃堆栈经 Intent extra 传递，超出 Binder 上限会抛异常，需截断。 */
         const val MAX_CRASH_STACK_CHARS = 50_000
         private const val CRASH_PREFS = "crash_state"
@@ -137,8 +136,8 @@ class AIEditorApp : Application(), Configuration.Provider {
         // 使 App 侧全部 HTTP 链路（对话、MCP、更新检查等）按需走全局/提供商代理。
         // 用 base 而非下文才定义的局部 context：attachBaseContext 阶段 base 即合法 Context。
         AppProxy.applyGlobal(base)
-        val tag = base.getSharedPreferences(LANG_PREFS, android.content.Context.MODE_PRIVATE)
-            .getString(LANG_KEY, null)
+        val tag = AppLocale.storedTag(base)
+        AppLocale.syncDefault(tag)
         val context = if (tag.isNullOrBlank()) {
             base
         } else {

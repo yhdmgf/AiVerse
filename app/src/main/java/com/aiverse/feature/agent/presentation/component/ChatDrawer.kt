@@ -53,6 +53,8 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.DropdownMenu
@@ -114,6 +116,7 @@ import com.aiverse.core.ui.SegmentedTabs
 import com.aiverse.core.ui.rememberImeBottomInset
 import com.aiverse.core.ui.RoleAvatar
 import com.aiverse.feature.settings.presentation.component.ModelSearchField
+import com.aiverse.feature.settings.presentation.component.CollapsibleGroupHeader
 import com.aiverse.feature.settings.presentation.component.SettingsDivider
 import com.aiverse.feature.settings.presentation.component.SettingsGroup
 import com.aiverse.feature.settings.presentation.component.SettingsGroupHeader
@@ -149,6 +152,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aiverse.feature.agent.presentation.FileTreeRoot
 import com.aiverse.feature.workspace.domain.FileAccessProvider
+import com.aiverse.feature.workspace.domain.FileEntry
 import com.aiverse.feature.workspace.domain.RemoteServerPaths
 import com.aiverse.feature.workspace.domain.WorkspacePathMapper
 import com.aiverse.feature.workspace.domain.isValidFileEntryName
@@ -891,6 +895,13 @@ private fun SessionListContent(
             restore = { it.toSet() }
         )
     ) { mutableStateOf(emptySet<String>()) }
+    // 时间分组折叠状态：按分组 key 记忆；默认全部展开，置顶组始终展开。
+    var collapsedGroupKeys by rememberSaveable(
+        stateSaver = listSaver<Set<String>, String>(
+            save = { it.toList() },
+            restore = { it.toSet() }
+        )
+    ) { mutableStateOf(emptySet<String>()) }
     val groups = remember(sessions) {
         val now = System.currentTimeMillis()
         val pinned = sessions.filter { it.isPinned }
@@ -930,11 +941,45 @@ private fun SessionListContent(
         // 每个分组占一个 item、组内 forEach 全量渲染会让 LazyColumn 失去惰性：
         // 「最近 30 天」这种分组有上百个会话时，一个 item 就要组合上百行。分组头与会话各自成 item。
         groups.forEach { group ->
+            val isPinned = group.groupKey == "pinned"
+            val collapsed = !isPinned && group.groupKey in collapsedGroupKeys
+            val selectedInGroup = if (selectionMode) {
+                group.sessions.count { it.id in selectedSessionIds }
+            } else 0
             item(key = "group-${group.groupKey}", contentType = "group-header") {
-                SettingsGroupHeader(
-                    text = group.sessions.firstOrNull()?.let { sessionGroupLabel(group.groupKey, it) } ?: ""
-                )
+                val label = group.sessions.firstOrNull()?.let { sessionGroupLabel(group.groupKey, it) } ?: ""
+                if (isPinned) {
+                    SettingsGroupHeader(text = label)
+                } else {
+                    CollapsibleGroupHeader(
+                        text = label,
+                        expanded = !collapsed,
+                        onToggle = {
+                            collapsedGroupKeys = if (collapsed) {
+                                collapsedGroupKeys - group.groupKey
+                            } else {
+                                collapsedGroupKeys + group.groupKey
+                            }
+                        },
+                        trailing = {
+                            Text(
+                                text = if (selectionMode && selectedInGroup > 0) {
+                                    stringResource(
+                                        R.string.session_group_selected,
+                                        selectedInGroup,
+                                        group.sessions.size
+                                    )
+                                } else {
+                                    stringResource(R.string.session_group_count, group.sessions.size)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    )
+                }
             }
+            if (!collapsed) {
             itemsIndexed(
                 items = group.sessions,
                 key = { _, session -> session.id },
@@ -1035,6 +1080,7 @@ private fun SessionListContent(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1333,6 +1379,8 @@ private fun FileBrowserTab(
     var pendingProps by remember { mutableStateOf<FileTreeNode?>(null) }
     // 多选批量删除二次确认弹窗可见性（复用设置页 BatchDeleteConfirmDialog 模式）
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
+    // 批量删除时是否连带删除「子项全选、目录本身未勾选」的父文件夹，默认不勾选。
+    var deleteParentFolders by remember { mutableStateOf(false) }
     val hScroll = rememberScrollState()
     val browseNodes = (state as? FileBrowseState.Success)?.nodes.orEmpty()
     fun isSelected(path: String): Boolean =
@@ -1343,6 +1391,18 @@ private fun FileBrowserTab(
         .map { it.path }.toSet()
     fun directChildrenOf(path: String, depth: Int): List<FileTreeNode> = browseNodes
         .filter { it.depth == depth + 1 && it.path.startsWith("$path/") }
+    // 嵌套去重：祖先与后代同时显式选中时只保留祖先，避免重复删除。
+    fun collapseNested(paths: Set<String>): Set<String> =
+        paths.filter { p -> paths.none { q -> q != p && p.startsWith("$q/") } }.toSet()
+    // 子项全部选中、但目录本身未显式勾选的父文件夹：默认保留，确认弹窗可勾选连带删除。
+    fun fullySelectedParents(): List<FileTreeNode> =
+        browseNodes.filter { node ->
+            node.entry.isDirectory &&
+                node.path !in selectedPaths &&
+                directChildrenOf(node.path, node.depth).let { kids ->
+                    kids.isNotEmpty() && kids.all { isSelected(it.path) }
+                }
+        }
     // 选择态：0 未选 / 1 全选 / 2 部分（仅文件夹）
     fun selectionStateOf(node: FileTreeNode): Int {
         if (!node.entry.isDirectory) return if (isSelected(node.path)) 1 else 0
@@ -1830,18 +1890,70 @@ private fun FileBrowserTab(
                 }
             }
         }
-        // 多选批量删除二次确认：确认后逐条删除并清空选择（与设置页 BatchDeleteConfirmDialog 同款）。
+        // 多选批量删除二次确认：默认只删显式勾选的项；子项全选的父文件夹默认保留，
+        // 仅在弹窗里明确勾选后才连带删除（#320）。
         if (showBatchDeleteConfirm) {
-            BatchDeleteConfirmDialog(
-                title = stringResource(R.string.file_browser_batch_delete_title),
-                message = stringResource(R.string.file_browser_batch_delete_confirm, selectedPaths.size),
-                onConfirm = {
+            val parentTargets = fullySelectedParents()
+            AlertDialog(
+                onDismissRequest = {
                     showBatchDeleteConfirm = false
-                    selectedPaths.forEach { onBatchDelete(it) }
-                    selectedPaths = emptySet()
-                    unselectedFromFolders = emptySet()
+                    deleteParentFolders = false
                 },
-                onDismiss = { showBatchDeleteConfirm = false }
+                title = { Text(stringResource(R.string.file_browser_batch_delete_title)) },
+                text = {
+                    Column {
+                        Text(
+                            stringResource(R.string.file_browser_batch_delete_confirm, selectedPaths.size)
+                        )
+                        if (parentTargets.isNotEmpty()) {
+                            Spacer(Modifier.height(Spacing.sm))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = deleteParentFolders,
+                                    onCheckedChange = { deleteParentFolders = it },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = MaterialTheme.colorScheme.primary,
+                                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                                Spacer(Modifier.width(Spacing.sm))
+                                Text(
+                                    stringResource(
+                                        R.string.file_browser_batch_delete_parent_checkbox,
+                                        parentTargets.size
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showBatchDeleteConfirm = false
+                        val extra = if (deleteParentFolders) {
+                            parentTargets.map { it.path }.toSet()
+                        } else emptySet()
+                        collapseNested(selectedPaths + extra).forEach { onBatchDelete(it) }
+                        selectedPaths = emptySet()
+                        unselectedFromFolders = emptySet()
+                        deleteParentFolders = false
+                    }) {
+                        Text(
+                            stringResource(R.string.common_delete),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showBatchDeleteConfirm = false
+                        deleteParentFolders = false
+                    }) {
+                        Text(stringResource(R.string.common_cancel))
+                    }
+                }
             )
         }
         // 批量移动：有 batchCut 时底部提示点击目标目录粘贴
@@ -2027,7 +2139,9 @@ private fun FileBrowserTab(
 
     pendingProps?.let { node ->
         FilePropertiesSheet(
-            node = node,
+            entry = node.entry,
+            path = node.path,
+            displayName = node.displayName,
             onDismiss = { pendingProps = null },
             onLoadDirectoryInfo = onLoadDirectoryInfo
         )
@@ -2701,25 +2815,28 @@ private fun SheetActionRow(
     }
 }
 
-/** 文件树「属性」抽屉：类型 / 大小 / 位置 / 修改时间 / 权限。文件夹大小由父层在 IO 后台递归统计后回填。 */
+/** 文件「属性」抽屉：类型 / 大小 / 位置 / 修改时间 / 权限。文件夹大小由父层在 IO 后台递归统计后回填。
+ *  与具体树节点解耦：文件树长按菜单与全屏查看器菜单共用同一套展示。 */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun FilePropertiesSheet(
-    node: FileTreeNode,
+internal fun FilePropertiesSheet(
+    entry: FileEntry,
+    path: String,
+    displayName: String,
     onDismiss: () -> Unit,
     onLoadDirectoryInfo: (String, (DirectoryInfo?) -> Unit) -> Unit
 ) {
-    var dirInfo by remember(node.path) { mutableStateOf<DirectoryInfo?>(null) }
-    var dirLoaded by remember(node.path) { mutableStateOf(false) }
-    LaunchedEffect(node.path) {
-        if (node.entry.isDirectory) {
-            onLoadDirectoryInfo(node.path) { info ->
+    var dirInfo by remember(path) { mutableStateOf<DirectoryInfo?>(null) }
+    var dirLoaded by remember(path) { mutableStateOf(false) }
+    LaunchedEffect(path) {
+        if (entry.isDirectory) {
+            onLoadDirectoryInfo(path) { info ->
                 dirInfo = info
                 dirLoaded = true
             }
         }
     }
-    val sizeText = if (node.entry.isDirectory) {
+    val sizeText = if (entry.isDirectory) {
         val info = dirInfo
         when {
             info != null -> stringResource(
@@ -2731,12 +2848,12 @@ private fun FilePropertiesSheet(
             else -> stringResource(R.string.file_properties_size_calculating)
         }
     } else {
-        formatFileSize(node.entry.size)
+        formatFileSize(entry.size)
     }
-    val typeText = if (node.entry.isDirectory) {
+    val typeText = if (entry.isDirectory) {
         stringResource(R.string.file_properties_type_directory)
     } else {
-        val name = node.entry.name
+        val name = entry.name
         // 纯文本类扩展名刻意不收进 EXT_MIME_TYPES，这里按属性「类型」语义归成 text/plain。
         if (name.substringAfterLast('.') in TEXT_EXTS) "text/plain"
         else extToMimeType(name) ?: "application/octet-stream"
@@ -2752,7 +2869,7 @@ private fun FilePropertiesSheet(
                 .padding(bottom = Spacing.xl)
         ) {
             Text(
-                text = node.displayName,
+                text = displayName,
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -2771,21 +2888,21 @@ private fun FilePropertiesSheet(
             )
             PropertyRow(
                 label = stringResource(R.string.file_properties_location),
-                value = node.path
+                value = path
             )
             val modifiedPattern = stringResource(R.string.file_properties_modified_format)
             // 格式化器只依赖 lastModified 与格式字符串，重组不重复 new SimpleDateFormat。
-            val modifiedText = remember(node.entry.lastModified, modifiedPattern) {
-                SimpleDateFormat(modifiedPattern, Locale.getDefault()).format(Date(node.entry.lastModified))
+            val modifiedText = remember(entry.lastModified, modifiedPattern) {
+                SimpleDateFormat(modifiedPattern, Locale.getDefault()).format(Date(entry.lastModified))
             }
             PropertyRow(
                 label = stringResource(R.string.file_properties_modified),
                 value = modifiedText
             )
-            if (node.entry.permissions.isNotBlank()) {
+            if (entry.permissions.isNotBlank()) {
                 PropertyRow(
                     label = stringResource(R.string.file_properties_permissions),
-                    value = node.entry.permissions
+                    value = entry.permissions
                 )
             }
         }
