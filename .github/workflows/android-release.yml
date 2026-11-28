@@ -205,12 +205,16 @@ jobs:
         env:
           VER: ${{ needs.prepare.outputs.full }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp apk/app-universal-release.apk "dist/AiVerse-universal-v${VER}.apk" || true
-          cp apk/app-armsolo-release.apk   "dist/AiVerse-arm64-v${VER}.apk"    || true
-          cp apk/app-x86solo-release.apk   "dist/AiVerse-x86_64-v${VER}.apk"   || true
+          # 严格三包：任一缺失直接失败，不允许发出残缺版本
+          cp apk/app-universal-release.apk "dist/AiVerse-universal-v${VER}.apk"
+          cp apk/app-armsolo-release.apk   "dist/AiVerse-arm64-v${VER}.apk"
+          cp apk/app-x86solo-release.apk   "dist/AiVerse-x86_64-v${VER}.apk"
+          for f in "dist/AiVerse-universal-v${VER}.apk" "dist/AiVerse-arm64-v${VER}.apk" "dist/AiVerse-x86_64-v${VER}.apk"; do
+            test -s "$f" || { echo "缺少产物: $f"; exit 1; }
+          done
           ls -la dist/
-          test -n "$(ls dist/*.apk 2>/dev/null)"
 
       - name: 输出版本号到运行摘要（versionName + versionCode）
         env:
@@ -244,6 +248,34 @@ jobs:
             echo "| AiVerse-universal-v$FULL.apk | arm64-v8a + x86_64 | 通用包：同时含两套镜像，兼容所有设备，体积约为单架构包两倍 |"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "versionName=$FULL versionCode=$VC"
+
+      # 分发 API 入桶：必须在发布 Release 之前执行 —— 上传失败就不该对外发版。
+      # 上传用带版本号的文件名（AiVerse-<abi>-v<ver>.apk），后端按文件名落到
+      # 1.0/<ver>/ 目录，历史版本永不被覆盖（同名才覆盖）。
+      - name: 上传三架构 APK 到分发 API（入桶 1.0/<ver>/）
+        env:
+          APK_UPLOAD_KEY: ${{ secrets.APK_UPLOAD_KEY }}
+          FULL: ${{ needs.prepare.outputs.full }}
+        run: |
+          set -euo pipefail
+          test -n "$APK_UPLOAD_KEY" || { echo "缺少 APK_UPLOAD_KEY secret"; exit 1; }
+
+          UNIVERSAL="dist/AiVerse-universal-v${FULL}.apk"
+          ARM64="dist/AiVerse-arm64-v${FULL}.apk"
+          X86_64="dist/AiVerse-x86_64-v${FULL}.apk"
+          for f in "$UNIVERSAL" "$ARM64" "$X86_64"; do
+            test -s "$f" || { echo "缺少 APK: $f"; exit 1; }
+          done
+
+          # /apk/ 前缀被 CDN UrlAuth 规则拦截（会 401），上传入口固定走 /apkup/upload
+          curl --fail-with-body --retry 5 --retry-delay 10 --retry-all-errors --max-time 3600 \
+            -X POST "https://api.aivapp.cn/apkup/upload" \
+            -H "X-Apk-Key: ${APK_UPLOAD_KEY}" \
+            -F "files[]=@${UNIVERSAL};type=application/vnd.android.package-archive" \
+            -F "files[]=@${ARM64};type=application/vnd.android.package-archive" \
+            -F "files[]=@${X86_64};type=application/vnd.android.package-archive"
+
+          echo "三架构 APK 已入桶（1.0/${FULL}/）：${FULL}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 清理旧 Release（避免重复累积）
         env:
@@ -297,35 +329,3 @@ jobs:
           prerelease: ${{ needs.prepare.outputs.prerelease }}
           name: "v${{ needs.prepare.outputs.full }}"
           tag_name: "v${{ needs.prepare.outputs.full }}"
-      # 正式版与 RC（prerelease=true）共用本工作流：GitHub Release 发布成功后再把三架构 APK
-      # 推送到分发 API。密钥只从仓库 Secret 读取，不落到日志/代码里。
-      - name: 上传三架构 APK 到分发 API
-        env:
-          APK_UPLOAD_KEY: ${{ secrets.APK_UPLOAD_KEY }}
-          FULL: ${{ needs.prepare.outputs.full }}
-        run: |
-          set -euo pipefail
-          test -n "$APK_UPLOAD_KEY" || { echo "缺少 APK_UPLOAD_KEY secret"; exit 1; }
-
-          UNIVERSAL="dist/AiVerse-universal-v${FULL}.apk"
-          ARM64="dist/AiVerse-arm64-v${FULL}.apk"
-          X86_64="dist/AiVerse-x86_64-v${FULL}.apk"
-          for f in "$UNIVERSAL" "$ARM64" "$X86_64"; do
-            test -s "$f" || { echo "缺少 APK: $f"; exit 1; }
-          done
-
-          # 上传接口按示例使用固定的三个文件名；Release 资产仍保留带版本号的文件名。
-          mkdir -p upload
-          cp "$UNIVERSAL" upload/app-universal.apk
-          cp "$ARM64" upload/app-arm64.apk
-          cp "$X86_64" upload/app-x86_64.apk
-
-          curl --fail-with-body --retry 3 --retry-delay 5 --max-time 600 \
-            -X POST "https://api.aivapp.cn/apk/upload" \
-            -H "X-Apk-Key: ${APK_UPLOAD_KEY}" \
-            -F "files[]=@upload/app-universal.apk;type=application/vnd.android.package-archive" \
-            -F "files[]=@upload/app-arm64.apk;type=application/vnd.android.package-archive" \
-            -F "files[]=@upload/app-x86_64.apk;type=application/vnd.android.package-archive"
-
-          echo "三架构 APK 已上传：$FULL" >> "$GITHUB_STEP_SUMMARY"
-
