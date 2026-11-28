@@ -42,6 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.webkit.Profile
 import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewFeature
 import compose.icons.feathericons.X
 import com.aiverse.R
 import com.aiverse.core.theme.AIEditorTheme
@@ -91,6 +92,9 @@ class PluginLoginActivity : ComponentActivity() {
     /** 登录页专用 cookie jar；null 表示旧设备走默认 CookieManager。 */
     private var loginProfile: LoginProfile? = null
 
+    /** 当前登录 WebView 实际使用的 CookieManager，必须和 WebView 所绑定的 profile 一致。 */
+    private var loginCookieManager: CookieManager? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -134,7 +138,8 @@ class PluginLoginActivity : ComponentActivity() {
         loginProfile = profile
         loginWebView = PluginWebViewFactory.createLoginWebView(
             context = this,
-            cookieManager = profile?.cookieManager ?: CookieManager.getInstance(),
+            profile = profile?.platformProfile,
+            onCookieManagerResolved = { loginCookieManager = it },
             onNavigation = ::onNavigation,
             onMainFrameError = { reject("INTERNAL", "sign-in page failed to load") },
             onLoadingChanged = { loading = it }
@@ -149,7 +154,7 @@ class PluginLoginActivity : ComponentActivity() {
         if (finished || url.isNullOrBlank()) return
         val host = runCatching { Uri.parse(url).host?.lowercase() }.getOrNull() ?: return
         if (!(host == targetDomain || host.endsWith(".$targetDomain"))) return
-        val cookieManager = loginProfile?.cookieManager ?: CookieManager.getInstance()
+        val cookieManager = loginCookieManager ?: CookieManager.getInstance()
         val raw = runCatching { cookieManager.getCookie(url) }.getOrNull()
         if (raw.isNullOrBlank()) return
         if (cookieName != null && parseCookies(raw).none { it.first == cookieName }) return
@@ -201,11 +206,11 @@ class PluginLoginActivity : ComponentActivity() {
     }
 
     /**
-     * 拆掉登录 WebView 并清空 cookie jar。
+     * 拆掉登录 WebView 并清空本次登录的隔离 cookie jar。
      *
-     * 爆炸半径提示：`ProfileStore` 不可用（旧 WebView / 旧设备）时回退默认 `CookieManager`，
-     * 那条路径 `removeAllCookies(null)` 清的是**全局默认 jar**，会连带清掉浏览器/其它 WebView
-     * 的登录态——这是降级路径的已知代价，仅在没有独立 profile 能力时才会走到。
+     * `ProfileStore` 不可用（旧 WebView / 旧设备）时会回退默认 `CookieManager`；这条降级路径
+     * 不能 `removeAllCookies(null)`，否则会连带清掉浏览器/其它 WebView 的登录态。只有 WebView
+     * 确实绑定了独立 profile 时，才清空并删除该 profile。
      */
     private fun cleanupWebView() {
         loginWebView?.let { view ->
@@ -213,12 +218,40 @@ class PluginLoginActivity : ComponentActivity() {
             runCatching { view.destroy() }
         }
         loginWebView = null
-        loginProfile?.let { profile ->
-            runCatching { profile.cookieManager.removeAllCookies(null) }
-            runCatching { profile.cookieManager.flush() }
+        val profile = loginProfile
+        if (profile != null) {
+            // 只有 WebView 确实绑上了独立 profile，才清这个隔离 jar；回退默认 jar 时不能 removeAllCookies，
+            // 否则会把浏览器/其它 WebView 的登录态一起清掉。
+            val profileCookieManager = runCatching { profile.cookieManager }.getOrNull()
+            if (profileCookieManager != null && loginCookieManager === profileCookieManager) {
+                runCatching { profileCookieManager.removeAllCookies(null) }
+                runCatching { profileCookieManager.flush() }
+            } else {
+                loginCookieManager?.let(::clearCookiesForLogin)
+            }
             profile.release()
+        } else {
+            loginCookieManager?.let(::clearCookiesForLogin)
         }
+        loginCookieManager = null
         loginProfile = null
+    }
+
+    /** 降级到默认 jar 时，只清登录页与目标域名的 Cookie，不动整个全局 jar。 */
+    private fun clearCookiesForLogin(cookieManager: CookieManager) {
+        val urls = listOfNotNull(
+            loginUrl.takeIf { it.isNotBlank() },
+            "https://$targetDomain/"
+        )
+        urls.forEach { url ->
+            val names = runCatching {
+                parseCookies(cookieManager.getCookie(url).orEmpty()).map { it.first }
+            }.getOrDefault(emptyList())
+            names.forEach { name ->
+                runCatching { cookieManager.setCookie(url, "$name=; Max-Age=0; Path=/") }
+            }
+        }
+        runCatching { cookieManager.flush() }
     }
 
     @Composable
@@ -387,9 +420,10 @@ class PluginLoginActivity : ComponentActivity() {
 /**
  * 登录页专用 cookie jar。`ProfileStore` 提供完全独立于默认 profile（插件页 WebView 所用）的
  * 专属 CookieManager，可读到 HttpOnly Cookie；不可用时回退 null，由调用方走默认 jar
- * （见 [PluginLoginActivity.cleanupWebView] 的爆炸半径注释）。
+ * （见 [PluginLoginActivity.cleanupWebView] 的降级清理说明）。
  */
 internal class LoginProfile private constructor(private val profile: Profile) {
+    val platformProfile: Profile get() = profile
     val cookieManager: CookieManager get() = profile.cookieManager
 
     /** 删除该 profile，拆掉隔离 jar。 */
@@ -402,8 +436,10 @@ internal class LoginProfile private constructor(private val profile: Profile) {
 
         /** 取或建独立 profile；WebView/Profile 能力缺失时返回 null（走默认 jar 降级）。 */
         fun create(): LoginProfile? = runCatching {
-            // ProfileStore.getOrCreateProfile 需 API 28+（MULTI_PROFILE 特性）；更低版本回退默认 jar（见 cleanupWebView 爆炸半径）。
+            // ProfileStore.getOrCreateProfile 需 API 28+ 且当前 WebView 支持 MULTI_PROFILE；
+            // 只判 SDK 会把「旧 WebView 跑在新系统」误当成可用，后续 setProfile 失败、jar 对不上。
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+            if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return null
             val store = ProfileStore.getInstance()
             val profile = store.getOrCreateProfile(PROFILE_NAME)
             LoginProfile(profile)
